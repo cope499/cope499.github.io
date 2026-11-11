@@ -1296,6 +1296,27 @@ body{height:var(--app-h,100dvh)}
 body.navlock #view-nav{height:var(--app-h,100dvh)}
 #previewPane{height:var(--app-h,100dvh)}
 
+/* ===== v54: 上端がステータスバーに隠れる不具合の修正 ===== */
+/* v53 でシェルを物理画面の高さまで伸ばした結果、レイアウト領域が画面上端
+   （ステータスバーの裏）まで広がり、保存ルート／設定タブの先頭カードが
+   ステータスバーに重なって隠れるようになった。これらのタブのスクロール
+   領域（.wrap）には上部のセーフエリア余白が無かったのが原因。
+   実効セーフエリア --sat は、env(safe-area-inset-top) と、JS が算出する
+   「物理画面高 − ビューポート高」（--app-top）の大きい方を取る。
+   ビューポートが全画面に広がった環境では env 側が効き、広がらずに
+   ズレだけが残る環境では --app-top 側が効く。通常ブラウザ／埋め込み表示
+   ではどちらも 0 で従来どおり。 */
+:root{--sat:max(env(safe-area-inset-top,0px),var(--app-top,0px))}
+.wrap{padding-top:var(--sat)}
+.home-top-search{top:calc(10px + var(--sat))}
+.mappick-banner{top:calc(12px + var(--sat))}
+.dlg-card{top:calc(var(--sat) + 10px);
+  max-height:calc(100dvh - var(--sat) - env(safe-area-inset-bottom,0px) - 118px)}
+#routeChoice{top:calc(var(--sat) + 12px)}
+#busyPill{top:calc(var(--sat) + 10px)}
+.pv-head{padding-top:calc(12px + var(--sat))}
+.nav-inner{padding-top:calc(10px + var(--sat))}
+
 </style>
 <script>
 /* 背景の初期適用：保存済みの背景を最初の描画前に反映し、チラつきを防ぐ（v45） */
@@ -1342,8 +1363,13 @@ body.navlock #view-nav{height:var(--app-h,100dvh)}
       var full = landscape ? Math.min(sw, sh) : Math.max(sw, sh);
       if(full > window.innerHeight){
         document.documentElement.style.setProperty("--app-h", full + "px");
+        /* v54: 物理画面との差分は上端（ステータスバー）側の未収領域でもある。
+           CSS の --sat が env(safe-area-inset-top) との大きい方を取るため、
+           ビューポートが全画面に広がり env が効く環境では二重に数えない。 */
+        document.documentElement.style.setProperty("--app-top", (full - window.innerHeight) + "px");
       } else {
         document.documentElement.style.removeProperty("--app-h");
+        document.documentElement.style.removeProperty("--app-top");
       }
     }catch(e){}
   }
