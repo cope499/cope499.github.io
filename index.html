@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="カーナビ" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%231c1c1e'/%3E%3Ctext x='50' y='68' font-size='52' text-anchor='middle' fill='white'%3E%E2%86%97%3C/text%3E%3C/svg%3E" />
-<link rel="apple-touch-icon" sizes="180x180" href="icon-180.png" />
+<link rel="apple-touch-icon" href="icon-180.png">
 <link rel="manifest" href="data:application/octet-stream;base64,eyJiYWNrZ3JvdW5kX2NvbG9yIjoiIzE0MTQxNiIsImRpc3BsYXkiOiJzdGFuZGFsb25lIiwiaWNvbnMiOlt7InB1cnBvc2UiOiJhbnkiLCJzaXplcyI6IjE5MngxOTIiLCJzcmMiOiJpY29uLTE5Mi5wbmciLCJ0eXBlIjoiaW1hZ2UvcG5nIn0seyJwdXJwb3NlIjoiYW55Iiwic2l6ZXMiOiI1MTJ4NTEyIiwic3JjIjoiaWNvbi01MTIucG5nIiwidHlwZSI6ImltYWdlL3BuZyJ9LHsicHVycG9zZSI6Im1hc2thYmxlIiwic2l6ZXMiOiI1MTJ4NTEyIiwic3JjIjoiaWNvbi01MTIucG5nIiwidHlwZSI6ImltYWdlL3BuZyJ9XSwibGFuZyI6ImphIiwibmFtZSI6IuOCq+ODvOODiuODkyIsInNjb3BlIjoiLi4vIiwic2hvcnRfbmFtZSI6IuOCq+ODvOODiuODkyIsInN0YXJ0X3VybCI6Ii4uL2luZGV4Lmh0bWwiLCJ0aGVtZV9jb2xvciI6IiMxNDE0MTYifQ==" />
 <title>カーナビ — 関東・分岐ナビ（首都高・圏央道）</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1279,6 +1279,23 @@ html,body{touch-action:manipulation}
 /* ダイアログのIC確定ボタンも主アクションとして右寄せに揃える */
 #dlgPaneIc .ic-apply{justify-content:flex-end}
 
+/* ===== v53: スタンドアロン起動時にシェルと地図を物理画面の下端まで届かせる ===== */
+/* 実機（ホーム画面から起動した単体版）では、レイアウトビューポートの高さが
+   物理画面より短く算出され（実測で約58pt）、100dvh／inset:0 の全面レイヤーが
+   その分だけ画面下端に届かず、地図の下に地色（--bg）の帯が出ていた。
+   帰属表示も地図コンテナの下端に付くため、帯の上で終わって見える。
+   vh 系の単位は全て同じビューポート基準で揃って短くなるため、CSS だけでは
+   物理下端に届かない。そこで真の画面高さは JS が window.screen から求めて
+   --app-h に入れる（スタンドアロン時のみ・</head> 直前の初期化スクリプト）。
+   --app-h が無い環境（通常ブラウザ表示など）では従来どおり 100dvh で不変。
+   タブバーは body 基準の絶対配置のまま（bottom の指定は変更なし）で、
+   シェルが下端まで伸びることで本来の位置（下端＋セーフエリア）に収まる。 */
+body{height:var(--app-h,100dvh)}
+.bglayer,#bgShade{height:var(--app-h,100dvh)}
+#view-home{height:var(--app-h,100dvh)}
+body.navlock #view-nav{height:var(--app-h,100dvh)}
+#previewPane{height:var(--app-h,100dvh)}
+
 </style>
 <script>
 /* 背景の初期適用：保存済みの背景を最初の描画前に反映し、チラつきを防ぐ（v45） */
@@ -1303,6 +1320,37 @@ html,body{touch-action:manipulation}
       root.setAttribute("data-bg", "standard");
     }
   }catch(e){}
+})();
+</script>
+<script>
+/* 実画面の高さを --app-h に反映する（v53）。
+   ホーム画面から起動した単体版では、レイアウトビューポートの高さが物理画面より
+   短く算出されることがあり（実機で約58pt）、100dvh では画面下端まで届かない。
+   window.screen は物理画面の論理サイズを返すため、向きに応じた辺を真の高さとし、
+   ビューポートより大きい場合だけ採用する（縮む方向には決して上書きしない）。
+   スタンドアロンでない通常表示では何もせず、CSS 側の 100dvh フォールバックが効く。
+   初回描画前に効かせるため、この時点（head 内）で一度実行し、回転・復帰時にも追随する。 */
+(function(){
+  function applyAppH(){
+    try{
+      var standalone = (window.navigator && window.navigator.standalone === true) ||
+        (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+      if(!standalone) return;
+      var sw = window.screen && window.screen.width, sh = window.screen && window.screen.height;
+      if(!sw || !sh) return;
+      var landscape = window.innerWidth > window.innerHeight;
+      var full = landscape ? Math.min(sw, sh) : Math.max(sw, sh);
+      if(full > window.innerHeight){
+        document.documentElement.style.setProperty("--app-h", full + "px");
+      } else {
+        document.documentElement.style.removeProperty("--app-h");
+      }
+    }catch(e){}
+  }
+  applyAppH();
+  window.addEventListener("resize", applyAppH);
+  window.addEventListener("orientationchange", function(){ applyAppH(); setTimeout(applyAppH, 350); });
+  window.addEventListener("pageshow", applyAppH);
 })();
 </script>
 </head>
@@ -11619,6 +11667,10 @@ syncDestDisplay();
     }).observe(vh, { attributes: true, attributeFilter: ["class"] });
   }
   initHomeMap();
+  /* シェル高さ（--app-h の補正・回転など）で地図コンテナが伸縮したら、タイルと
+     帰属表示の位置を新しい下端へ追随させる（v53） */
+  window.addEventListener("resize", function(){ if(homeMap){ try{ homeMap.invalidateSize(); }catch(e){} } });
+  window.addEventListener("orientationchange", function(){ setTimeout(function(){ if(homeMap){ try{ homeMap.invalidateSize(); }catch(e){} } }, 350); });
   /* ピッカーの「地図から選ぶ」がホーム地図を使うための橋渡し */
   window.__homeMapApi = { getMap: function(){ return homeMap; } };
   setInterval(function(){ syncHomePos(true); }, 1500);
