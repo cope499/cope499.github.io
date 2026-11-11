@@ -1235,6 +1235,9 @@ html,body{touch-action:manipulation}
 .htb-btns .btn{flex:1 1 auto;padding:10px 8px;font-size:13.5px;white-space:nowrap}
 .htb-btns #btnHtbClose{flex:0 0 auto}
 .htb-msg{margin:9px 0 0;font-size:13px;font-weight:800;color:var(--ink)}
+/* --- 地図で目的地を決めた直後の一般道プレビューバー --- */
+.qr-sum{margin-top:4px;font-size:14px;font-weight:800;color:var(--ink)}
+.qr-tag{font-size:11.5px;font-weight:900;color:#fff;background:#1a73e8;border-radius:999px;padding:2px 9px}
 /* --- 地図から選ぶ：上部バナー --- */
 .mappick-banner{position:absolute;top:calc(12px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:1250;
   background:var(--glass-3);-webkit-backdrop-filter:var(--glass-blur);backdrop-filter:var(--glass-blur);
@@ -1412,6 +1415,14 @@ body.navlock #view-nav{height:var(--app-h,100dvh)}
       <div class="htb-btns">
         <button type="button" class="btn ghost" id="btnMapPickCancel">キャンセル</button>
         <button type="button" class="btn" id="btnMapPickSet" disabled>この地点に設定</button>
+      </div>
+    </div>
+    <div class="home-tapbar hidden" id="quickRouteBar">
+      <div class="htb-info"><b id="qrDest">目的地</b><span class="qr-tag">一般道</span></div>
+      <div class="qr-sum" id="qrSum">ルートを計算中…</div>
+      <div class="htb-btns">
+        <button type="button" class="btn ghost" id="btnQrClose" aria-label="閉じる">×</button>
+        <button type="button" class="btn" id="btnQrRoutes">他のルート・案内へ</button>
       </div>
     </div>
     <div class="home-sheet hidden" id="homeSheet">
@@ -7844,8 +7855,19 @@ function pickSlotNode(node, label){
   }
   syncHiddenFromSlots();
   closeSlotDialog();
-  /* v51：地点が決まったらホームのルート設定シートを開くためのフック */
-  if(typeof window.onSlotPicked === "function"){ try{ window.onSlotPicked(); }catch(e){} }
+  /* v51：地点が決まったらホームのルート設定シートを開くためのフック。
+     地図（ホーム地図タップ／ピッカーの「地図から選ぶ」）から目的地を
+     決めた場合は fromMap=true が渡り、シートの代わりに一般道ルートの
+     先行プレビューを出す分岐（v40側 onSlotPicked）に使われる */
+  var pickedFromMap = !!window.__slotPickFromMap;
+  window.__slotPickFromMap = false;
+  /* pickSlotPoint 経由の場合はここでは発火せず保留する：呼び出し元が
+     タップした正確な座標へ destCoord 等を上書きした後に発火させる。
+     ここで先に発火すると、先行プレビューが最寄り登録地点の座標で
+     終点・quickDestKey を計算してしまい、上書き後の座標とキーが
+     食い違って追随チェックに自己消去されるため */
+  if(window.__deferSlotPicked){ window.__slotPickedPending = pickedFromMap; return; }
+  if(typeof window.onSlotPicked === "function"){ try{ window.onSlotPicked(pickedFromMap); }catch(e){} }
 }
 /* 住所表記：都道府県＋市区町村＋町名＋道路＋番地の順に組む */
 function shortAddress(a, display){
@@ -7864,11 +7886,23 @@ function shortAddress(a, display){
 function pickSlotPoint(lat, lng, addrText, fallbackLabel){
   var node = nearestNode(lat, lng).node;
   var target = { kind: dlgTarget.kind, index: dlgTarget.index };
+  /* フック（onSlotPicked→先行プレビュー）は座標の上書き後に発火させる。
+     pickSlotNode が保留した fromMap を受け取り、最終座標が入った状態で
+     呼ぶことで、プレビューの終点・quickDestKey・追随チェック・GPS待ち
+     経路の判定がすべて最終座標のキーで統一される */
+  window.__deferSlotPicked = true;
+  window.__slotPickedPending = null;
   pickSlotNode(node, addrText || fallbackLabel || node);
+  window.__deferSlotPicked = false;
   /* 地図・検索で選んだ地点は、登録地点ではなくタップした正確な座標を保持する */
   if(target.kind === "to") destCoord = [lat, lng];
   else if(target.kind === "from") fromCoord = [lat, lng];
   else viaCoords[target.index] = [lat, lng];
+  var pendingFromMap = window.__slotPickedPending;
+  window.__slotPickedPending = null;
+  if(pendingFromMap !== null && pendingFromMap !== undefined && typeof window.onSlotPicked === "function"){
+    try{ window.onSlotPicked(pendingFromMap); }catch(e){}
+  }
   if(addrText) return;
   fetch("https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=" + lat + "&lon=" + lng + "&zoom=18&addressdetails=1&accept-language=ja")
     .then(function(r){ return r.json(); })
@@ -7980,6 +8014,8 @@ $("btnMapPickSet").addEventListener("click", function(){
   if(!mapPick || !mapPick.picked) return; /* 未選択のうちは確定できない */
   var lat = mapPick.lat, lng = mapPick.lng;
   var addr = mapPick.addr || null, nm = mapPick.name || "地点";
+  /* 目的地を地図から決めた印（pickSlotNode が消費して onSlotPicked へ渡す） */
+  window.__slotPickFromMap = (dlgTarget.kind === "to");
   endMapPick();
   pickSlotPoint(lat, lng, addr, nm);
 });
@@ -11588,8 +11624,101 @@ syncDestDisplay();
     }
     syncTopBar();
   });
-  /* ピッカーや地図タップで地点が決まったら、ルート設定シートを開く */
-  window.onSlotPicked = function(){ setSheet(true); };
+  /* ---- 地図で目的地を決めた直後：一般道ルートの先行プレビュー ----
+     ルート設定シートの「決定」を待たず、出発地（変更済みならその地点、
+     既定は現在地）から目的地までの一般道ルート（有料道路回避・料金0円）を
+     計算し、ホーム地図上に青いガイド線＋距離・所要時間の要約で出す。
+     経由地が設定されている場合は対象外で、従来どおりシートを開く。
+     一般道ルートが取得できない場合もシートへフォールバックする。
+     推奨・有料・距離優先など他候補へは「他のルート・案内へ」から従来の
+     ルート設定→決定→ルート選択フローで引き続き切り替えられる。 */
+  var quickLayer = null, quickSeq = 0, quickDestKey = null, quickWaitingGps = false;
+  function hasViaSet(){
+    try{ return typeof viaSlots !== "undefined" && !!viaSlots && viaSlots.some(function(v){ return !!v; }); }catch(e){ return false; }
+  }
+  function clearQuickPreview(){
+    quickSeq++; quickWaitingGps = false; quickDestKey = null;
+    if(quickLayer && homeMap){ try{ homeMap.removeLayer(quickLayer); }catch(e){} }
+    quickLayer = null;
+    var b = $id("quickRouteBar"); if(b) b.classList.add("hidden");
+  }
+  function quickOrigin(){
+    try{
+      if(typeof fromCoord !== "undefined" && fromCoord)
+        return { coord: fromCoord, label: (typeof fromLabel !== "undefined" && fromLabel) || "出発地" };
+      if(typeof fromNode !== "undefined" && fromNode && typeof NODE_COORDS !== "undefined" && NODE_COORDS[fromNode])
+        return { coord: NODE_COORDS[fromNode], label: (typeof fromLabel !== "undefined" && fromLabel) || fromNode };
+      if(typeof state !== "undefined" && state.gps && state.gps.lat != null)
+        return { coord: [state.gps.lat, state.gps.lng], label: "現在地" };
+    }catch(e){}
+    return null;
+  }
+  function drawQuickRoute(route){
+    if(!homeMap || typeof L === "undefined") return;
+    if(quickLayer){ try{ homeMap.removeLayer(quickLayer); }catch(e){} quickLayer = null; }
+    var pts = route.geomPts;
+    quickLayer = L.layerGroup();
+    L.polyline(pts, { color:"#ffffff", weight:10, opacity:0.85, smoothFactor:0 }).addTo(quickLayer);
+    L.polyline(pts, { color:"#1a73e8", weight:6, opacity:1, smoothFactor:0 }).addTo(quickLayer);
+    L.circleMarker(pts[pts.length - 1], { radius:8, color:"#1c1c1e", weight:2, fillColor:"#1c1c1e", fillOpacity:0.95 }).addTo(quickLayer);
+    quickLayer.addTo(homeMap);
+    try{
+      homeMap.fitBounds(L.latLngBounds(pts), { paddingTopLeft: L.point(30, 100), paddingBottomRight: L.point(30, 250) });
+    }catch(e){}
+  }
+  function tryQuickPreview(){
+    var bar = $id("quickRouteBar"); if(!bar) return;
+    var dc = null, destName = "目的地";
+    try{
+      dc = (typeof destCoord !== "undefined") ? destCoord : null;
+      destName = (typeof destLabel !== "undefined" && destLabel) || (typeof destNode !== "undefined" && destNode) || "目的地";
+    }catch(e){}
+    if(!dc || hasViaSet()){ setSheet(true); return; }
+    var key = dc[0].toFixed(5) + "," + dc[1].toFixed(5);
+    $id("qrDest").textContent = destName;
+    bar.classList.remove("hidden");
+    var org = quickOrigin();
+    if(!org){
+      /* 出発地＝現在地でGPS未取得：位置が取れ次第、定期チェック側で描く */
+      quickWaitingGps = true; quickDestKey = key;
+      $id("qrSum").textContent = "現在地を取得中…";
+      return;
+    }
+    quickWaitingGps = false;
+    $id("qrSum").textContent = "一般道ルートを計算中…";
+    var seq = ++quickSeq; quickDestKey = key;
+    buildOsrmRouteForCoords(org.label, destName, [org.coord, dc], "quick", function(route){
+      if(seq !== quickSeq) return; /* その間に目的地変更／プレビュー終了 */
+      if(!route || !route.geomPts || route.geomPts.length < 2 || route.toll > 0){
+        /* 一般道ルートが取れなければ従来フロー（ルート設定シート）へ */
+        clearQuickPreview();
+        setSheet(true);
+        return;
+      }
+      drawQuickRoute(route);
+      var mins = Math.max(1, Math.round(route.min || 0));
+      var tstr = mins >= 60 ? ("約" + Math.floor(mins / 60) + "時間" + (mins % 60 ? (mins % 60) + "分" : "")) : ("約" + mins + "分");
+      $id("qrSum").textContent = "約" + (Math.round((route.km || 0) * 10) / 10).toFixed(1) + " km ・ " + tstr + " ・ 料金 0円";
+    });
+  }
+  var btnQrClose = $id("btnQrClose");
+  if(btnQrClose) btnQrClose.addEventListener("click", function(){ clearQuickPreview(); });
+  var btnQrRoutes = $id("btnQrRoutes");
+  if(btnQrRoutes) btnQrRoutes.addEventListener("click", function(){
+    clearQuickPreview();
+    setSheet(true); /* 従来のルート設定→決定→候補選択フローへ */
+  });
+
+  /* ピッカーや地図タップで地点が決まったら、ルート設定シートを開く。
+     ただし地図から目的地を決めた場合（fromMap）で経由地が無ければ、
+     シートの代わりに一般道ルートの先行プレビューを出す */
+  window.onSlotPicked = function(fromMap){
+    var dc = null;
+    try{ dc = (typeof destCoord !== "undefined") ? destCoord : null; }catch(e){}
+    if(fromMap && dc && !hasViaSet()){ tryQuickPreview(); return; }
+    clearQuickPreview();
+    setSheet(true);
+  };
   setInterval(syncTopBar, 500);
   syncTopBar();
 
@@ -11606,6 +11735,8 @@ syncDestDisplay();
     homeTap = [e.latlng.lat, e.latlng.lng];
     if(homeTapMarker){ try{ homeMap.removeLayer(homeTapMarker); }catch(err){} }
     homeTapMarker = L.marker(homeTap).addTo(homeMap);
+    /* 一般道プレビューのバーとは重ねない（線は残し、バーだけ引っ込める） */
+    var qb = $id("quickRouteBar"); if(qb) qb.classList.add("hidden");
     var bar = $id("homeTapBar"); if(bar) bar.classList.remove("hidden");
     $id("htbName").textContent = "地点";
     $id("htbAddr").textContent = "";
@@ -11663,6 +11794,8 @@ syncDestDisplay();
     } else {
       dlgTarget = { kind: kind, index: -1 };
     }
+    /* 目的地を地図から決めた印（pickSlotNode が消費して onSlotPicked へ渡す） */
+    window.__slotPickFromMap = (kind === "to");
     pickSlotPoint(homeTap[0], homeTap[1], addr, nm);
     var bar = $id("homeTapBar"); if(bar) bar.classList.add("hidden");
     syncTopBar();
@@ -11682,6 +11815,8 @@ syncDestDisplay();
   if(bC) bC.addEventListener("click", function(){
     homeTap = null;
     var bar = $id("homeTapBar"); if(bar) bar.classList.add("hidden");
+    /* 一般道プレビューの線が残っていれば、そのバーを戻す */
+    if(quickLayer){ var qb2 = $id("quickRouteBar"); if(qb2) qb2.classList.remove("hidden"); }
     syncTopBar();
     if(homeTapMarker && homeMap){ try{ homeMap.removeLayer(homeTapMarker); }catch(e){} homeTapMarker = null; }
   });
@@ -11699,7 +11834,17 @@ syncDestDisplay();
   window.addEventListener("orientationchange", function(){ setTimeout(function(){ if(homeMap){ try{ homeMap.invalidateSize(); }catch(e){} } }, 350); });
   /* ピッカーの「地図から選ぶ」がホーム地図を使うための橋渡し */
   window.__homeMapApi = { getMap: function(){ return homeMap; } };
-  setInterval(function(){ syncHomePos(true); }, 1500);
+  setInterval(function(){
+    syncHomePos(true);
+    /* 一般道プレビューの追随：GPS待ちなら取得でき次第描く。
+       目的地がクリア／変更されたら線とバーを消す */
+    if(quickDestKey){
+      var dc = null;
+      try{ dc = (typeof destCoord !== "undefined") ? destCoord : null; }catch(e){}
+      if(!dc || (dc[0].toFixed(5) + "," + dc[1].toFixed(5)) !== quickDestKey) clearQuickPreview();
+      else if(quickWaitingGps && quickOrigin()) tryQuickPreview();
+    }
+  }, 1500);
 })();
 </script>
 </body>
