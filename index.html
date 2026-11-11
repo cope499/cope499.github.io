@@ -1235,9 +1235,10 @@ html,body{touch-action:manipulation}
 .htb-btns .btn{flex:1 1 auto;padding:10px 8px;font-size:13.5px;white-space:nowrap}
 .htb-btns #btnHtbClose{flex:0 0 auto}
 .htb-msg{margin:9px 0 0;font-size:13px;font-weight:800;color:var(--ink)}
-/* --- 地図で目的地を決めた直後の一般道プレビューバー --- */
-.qr-sum{margin-top:4px;font-size:14px;font-weight:800;color:var(--ink)}
-.qr-tag{font-size:11.5px;font-weight:900;color:#fff;background:#1a73e8;border-radius:999px;padding:2px 9px}
+/* --- 地図タップカード内の一般道プレビュー表示（ピンが刺さった瞬間に出す） --- */
+.htb-route{display:flex;align-items:center;gap:8px;margin-top:9px}
+.htb-route #htbRouteSum{font-size:14px;font-weight:800;color:var(--ink)}
+.qr-tag{font-size:11.5px;font-weight:900;color:#fff;background:#1a73e8;border-radius:999px;padding:2px 9px;flex:none}
 /* --- 地図から選ぶ：上部バナー --- */
 .mappick-banner{position:absolute;top:calc(12px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:1250;
   background:var(--glass-3);-webkit-backdrop-filter:var(--glass-blur);backdrop-filter:var(--glass-blur);
@@ -1320,6 +1321,36 @@ body.navlock #view-nav{height:var(--app-h,100dvh)}
 .pv-head{padding-top:calc(12px + var(--sat))}
 .nav-inner{padding-top:calc(10px + var(--sat))}
 
+/* ===== v55: 地点カードの×を右上へ統一／検索バー直下のカテゴリチップ行 ===== */
+/* 地点カード（ピン刺し時）の閉じるボタンはカード右上隅に置く。
+   他のダイアログ類（ルート設定シート／地点ピッカー）は既に右上の
+   .dlg-close で統一済み。タイトル行は×と重ならないよう右に余白を確保 */
+.htb-close{position:absolute;top:10px;right:10px;width:36px;height:36px;font-size:16px;border-radius:10px;z-index:2}
+#homeTapBar .htb-info{padding-right:44px}
+#homeTapBar .htb-route{padding-right:44px}
+/* --- 検索バーのすぐ下・左寄せのカテゴリチップ行（フロストガラス調ピル） --- */
+.home-cat-chips{position:absolute;top:calc(70px + var(--sat));left:12px;right:12px;z-index:1200;
+  display:flex;gap:7px;overflow-x:auto;overflow-y:hidden;padding:2px 2px 5px;
+  scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.home-cat-chips::-webkit-scrollbar{display:none}
+.cat-chip{flex:none;display:inline-flex;align-items:center;padding:8px 14px;border-radius:999px;
+  border:1.5px solid var(--line);background:var(--glass-3);
+  -webkit-backdrop-filter:var(--glass-blur);backdrop-filter:var(--glass-blur);
+  box-shadow:0 6px 18px rgba(0,0,0,.16);color:var(--ink);font-family:inherit;
+  font-size:13.5px;font-weight:800;line-height:1.2;cursor:pointer;-webkit-tap-highlight-color:transparent;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.cat-chip:active{transform:scale(.97)}
+/* --- カテゴリ検索の候補パネル（チップ行の下に重ねて出す） --- */
+.home-cat-panel{position:absolute;top:calc(116px + var(--sat));left:12px;right:12px;z-index:1190;
+  max-height:46%;display:flex;flex-direction:column;overflow:hidden;
+  background:var(--glass-3);-webkit-backdrop-filter:var(--glass-blur);backdrop-filter:var(--glass-blur);
+  border:1.5px solid var(--line);border-radius:16px;box-shadow:0 14px 34px rgba(0,0,0,.22)}
+.hcp-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 8px 6px 14px}
+.hcp-head b{font-size:14.5px}
+.hcp-close{flex:none;width:32px;height:32px;font-size:14px;border-radius:9px}
+.hcp-list{overflow-y:auto;overscroll-behavior:contain;padding:0 8px 8px}
+.hcp-list .dlg-item{border-radius:10px;padding:11px 8px}
+
 </style>
 <script>
 /* 背景の初期適用：保存済みの背景を最初の描画前に反映し、チラつきを防ぐ（v45） */
@@ -1397,11 +1428,23 @@ body.navlock #view-nav{height:var(--app-h,100dvh)}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></svg>
       <span id="homeTopSearchText">住所・店名・地名を検索</span>
     </button>
+    <div class="home-cat-chips" id="homeCatChips" aria-label="カテゴリ検索">
+      <button type="button" class="cat-chip" id="catChipHome">自宅</button>
+      <button type="button" class="cat-chip" data-cat="restaurant">レストラン</button>
+      <button type="button" class="cat-chip" data-cat="convenience">コンビニ</button>
+      <button type="button" class="cat-chip" data-cat="shopping">ショッピング</button>
+      <button type="button" class="cat-chip" data-cat="gas">ガソリン</button>
+    </div>
+    <div class="home-cat-panel hidden" id="homeCatPanel">
+      <div class="hcp-head"><b id="homeCatPanelTitle">近くのスポット</b><button type="button" class="dlg-close hcp-close" id="btnHomeCatClose" aria-label="閉じる">×</button></div>
+      <div class="hcp-list" id="homeCatList"></div>
+    </div>
     <div class="home-tapbar hidden" id="homeTapBar">
+      <button type="button" class="dlg-close htb-close" id="btnHtbClose" aria-label="閉じる">×</button>
       <div class="htb-info"><b id="htbName">地点</b><span id="htbAddr"></span></div>
+      <div class="htb-route"><span class="qr-tag">一般道</span><span id="htbRouteSum">ルートを計算中…</span></div>
       <div class="htb-regrow"><input id="htbRegName" type="text" placeholder="地点名（マイ地点登録用）" aria-label="マイ地点に登録する名前"></div>
       <div class="htb-btns">
-        <button type="button" class="btn ghost" id="btnHtbClose" aria-label="閉じる">×</button>
         <button type="button" class="btn ghost" id="btnHtbReg">マイ地点に登録</button>
         <button type="button" class="btn ghost" id="btnHtbFrom">出発地に設定</button>
         <button type="button" class="btn ghost" id="btnHtbVia">経由地に追加</button>
@@ -1415,14 +1458,6 @@ body.navlock #view-nav{height:var(--app-h,100dvh)}
       <div class="htb-btns">
         <button type="button" class="btn ghost" id="btnMapPickCancel">キャンセル</button>
         <button type="button" class="btn" id="btnMapPickSet" disabled>この地点に設定</button>
-      </div>
-    </div>
-    <div class="home-tapbar hidden" id="quickRouteBar">
-      <div class="htb-info"><b id="qrDest">目的地</b><span class="qr-tag">一般道</span></div>
-      <div class="qr-sum" id="qrSum">ルートを計算中…</div>
-      <div class="htb-btns">
-        <button type="button" class="btn ghost" id="btnQrClose" aria-label="閉じる">×</button>
-        <button type="button" class="btn" id="btnQrRoutes">他のルート・案内へ</button>
       </div>
     </div>
     <div class="home-sheet hidden" id="homeSheet">
@@ -7839,6 +7874,14 @@ $("dlgBg").addEventListener("click", closeSlotDialog);
 
 function pickSlotNode(node, label){
   if(!node) return;
+  /* カテゴリチップ「自宅」の登録用ピッカー：スロットには入れず自宅として保存 */
+  if(dlgTarget && dlgTarget.kind === "home"){
+    var hc = (typeof NODE_COORDS !== "undefined" && NODE_COORDS[node]) ? NODE_COORDS[node] : null;
+    if(hc && typeof window.saveHomePlace === "function")
+      window.saveHomePlace({ name: label || node, addr: "", lat: hc[0], lng: hc[1] });
+    closeSlotDialog();
+    return;
+  }
   var c = (typeof NODE_COORDS !== "undefined" && NODE_COORDS[node]) ? NODE_COORDS[node].slice() : null;
   if(dlgTarget.kind === "from"){
     fromNode = node; fromLabel = label || node; fromCoord = c;
@@ -7856,16 +7899,14 @@ function pickSlotNode(node, label){
   syncHiddenFromSlots();
   closeSlotDialog();
   /* v51：地点が決まったらホームのルート設定シートを開くためのフック。
-     地図（ホーム地図タップ／ピッカーの「地図から選ぶ」）から目的地を
-     決めた場合は fromMap=true が渡り、シートの代わりに一般道ルートの
-     先行プレビューを出す分岐（v40側 onSlotPicked）に使われる */
+     地図（ホーム地図タップ／ピッカーの「地図から選ぶ」）から決めた場合は
+     fromMap=true が渡る（現在は v51 側 onSlotPicked が一律シートを開く） */
   var pickedFromMap = !!window.__slotPickFromMap;
   window.__slotPickFromMap = false;
   /* pickSlotPoint 経由の場合はここでは発火せず保留する：呼び出し元が
      タップした正確な座標へ destCoord 等を上書きした後に発火させる。
-     ここで先に発火すると、先行プレビューが最寄り登録地点の座標で
-     終点・quickDestKey を計算してしまい、上書き後の座標とキーが
-     食い違って追随チェックに自己消去されるため */
+     ここで先に発火すると、シート側が最寄り登録地点の座標のままの
+     状態で開いてしまうため */
   if(window.__deferSlotPicked){ window.__slotPickedPending = pickedFromMap; return; }
   if(typeof window.onSlotPicked === "function"){ try{ window.onSlotPicked(pickedFromMap); }catch(e){} }
 }
@@ -7884,12 +7925,18 @@ function shortAddress(a, display){
 /* 地図タップ・店検索で選んだ地点は、スロットには地名ではなく住所で表示する。
    計算には従来どおり最寄りの登録地点を使う。 */
 function pickSlotPoint(lat, lng, addrText, fallbackLabel){
+  /* カテゴリチップ「自宅」の登録用ピッカー：選んだ地点を自宅として保存する */
+  if(dlgTarget && dlgTarget.kind === "home"){
+    if(typeof window.saveHomePlace === "function")
+      window.saveHomePlace({ name: fallbackLabel || addrText || "自宅", addr: addrText || "", lat: lat, lng: lng });
+    closeSlotDialog();
+    return;
+  }
   var node = nearestNode(lat, lng).node;
   var target = { kind: dlgTarget.kind, index: dlgTarget.index };
-  /* フック（onSlotPicked→先行プレビュー）は座標の上書き後に発火させる。
+  /* フック（onSlotPicked）は座標の上書き後に発火させる。
      pickSlotNode が保留した fromMap を受け取り、最終座標が入った状態で
-     呼ぶことで、プレビューの終点・quickDestKey・追随チェック・GPS待ち
-     経路の判定がすべて最終座標のキーで統一される */
+     呼ぶことで、シート側の判定がすべて最終座標で統一される */
   window.__deferSlotPicked = true;
   window.__slotPickedPending = null;
   pickSlotNode(node, addrText || fallbackLabel || node);
@@ -7931,6 +7978,7 @@ function slotCoordForPick(){
   return viaCoords[dlgTarget.index] || null;
 }
 function mapPickTitleText(){
+  if(dlgTarget.kind === "home") return "自宅を地図で選択";
   if(dlgTarget.kind === "to") return "目的地を地図で選択";
   if(dlgTarget.kind === "from") return "出発地を地図で選択";
   return "経由地" + (dlgTarget.index + 1) + "を地図で選択";
@@ -11596,7 +11644,15 @@ syncDestDisplay();
     var pickOpen = !!(mpb && !mpb.classList.contains("hidden"));
     var dlg = $id("slotDialog");
     var dlgOpen = !!(dlg && !dlg.classList.contains("hidden"));
-    topBar.classList.toggle("hidden", !(homeActive && !sheetOpen && !pickOpen && !dlgOpen));
+    var showTop = homeActive && !sheetOpen && !pickOpen && !dlgOpen;
+    topBar.classList.toggle("hidden", !showTop);
+    /* カテゴリチップ行と候補パネルは検索ボックスと表示タイミングを連動させる */
+    var chips = $id("homeCatChips");
+    if(chips) chips.classList.toggle("hidden", !showTop);
+    if(!showTop){
+      var cp = $id("homeCatPanel");
+      if(cp) cp.classList.add("hidden");
+    }
     if(topText){
       var dn = "";
       try{ dn = (typeof destLabel !== "undefined" && destLabel) ? destLabel : ((typeof destNode !== "undefined" && destNode) ? destNode : ""); }catch(e){}
@@ -11624,25 +11680,68 @@ syncDestDisplay();
     }
     syncTopBar();
   });
-  /* ---- 地図で目的地を決めた直後：一般道ルートの先行プレビュー ----
-     ルート設定シートの「決定」を待たず、出発地（変更済みならその地点、
-     既定は現在地）から目的地までの一般道ルート（有料道路回避・料金0円）を
-     計算し、ホーム地図上に青いガイド線＋距離・所要時間の要約で出す。
-     経由地が設定されている場合は対象外で、従来どおりシートを開く。
-     一般道ルートが取得できない場合もシートへフォールバックする。
-     推奨・有料・距離優先など他候補へは「他のルート・案内へ」から従来の
-     ルート設定→決定→ルート選択フローで引き続き切り替えられる。 */
-  var quickLayer = null, quickSeq = 0, quickDestKey = null, quickWaitingGps = false;
-  function hasViaSet(){
-    try{ return typeof viaSlots !== "undefined" && !!viaSlots && viaSlots.some(function(v){ return !!v; }); }catch(e){ return false; }
+  /* ---- 地図にピンが刺さった瞬間：一般道ルートの即時プレビュー ----
+     ホーム地図をタップして地点カード（homeTapBar）が出た時点で、
+     「目的地に設定」を押す前から、出発地（変更済みならその地点、既定は
+     現在地）からピンの座標までの一般道ルート（有料回避・料金0円）を
+     計算し、ホーム地図に線を描いて、所要時間・距離をカード内に表示する。
+     ピンをドラッグで動かす／別の場所をタップし直すと、その瞬間に新しい
+     位置で再計算する（連番ガードで古い結果が新しい線を上書きしない）。
+     中間の要約バーは置かない。カードを×で閉じたら線と表示を消す。
+     「目的地に設定」等を押した後は従来フロー（ルート設定シート→候補
+     選択）に戻る。一般道ルートが取れない場合は線を出さず、カードの
+     ボタンからの従来フローは妨げない。
+     経由地ピッカーや「地図から選ぶ」モードは対象外（従来どおり）。 */
+  var pinLayer = null, pinSeq = 0, pinKey = null, pinWaitingGps = false;
+  var pinGpsRequested = false, pinGpsFailed = false, pinGpsLastTry = 0;
+  /* 現在地が未取得のままピンが刺さったときの取得キック。
+     従来は「取得中…」と表示するだけで、GPS取得を開始する処理が
+     どこにも無く（ウォッチ開始は案内開始ボタン等からしか走らない）、
+     現在地が永遠に取れずルートも描かれなかった。ピン設置はタップの
+     流れの中なので、その場でウォッチ開始＋単発取得を行う。
+     許可されていない場合は待ち続けず、カードに理由を表示する。 */
+  function kickPinGps(){
+    if(pinOrigin()) return;
+    if(pinGpsFailed || pinGpsRequested) return;
+    if(Date.now() - pinGpsLastTry < 8000) return;
+    if(!("geolocation" in navigator)){
+      pinGpsFailed = true; pinWaitingGps = false;
+      setPinRouteSum("この端末では現在地を取得できません");
+      return;
+    }
+    pinGpsLastTry = Date.now();
+    /* ウォッチも開始する（GPSカード側の状態表示と現在地マーカーが連動する） */
+    if(typeof ensureGpsWatch === "function"){ try{ ensureGpsWatch(); }catch(e){} }
+    pinGpsRequested = true;
+    navigator.geolocation.getCurrentPosition(function(pos){
+      pinGpsRequested = false; pinGpsFailed = false;
+      try{
+        if(typeof state !== "undefined" && state.gps){
+          state.gps.lat = pos.coords.latitude; state.gps.lng = pos.coords.longitude;
+          state.gps.acc = pos.coords.accuracy; state.gps.t = pos.timestamp || Date.now();
+        }
+      }catch(e){}
+      if(pinWaitingGps && homeTap) startPinPreview();
+    }, function(err){
+      pinGpsRequested = false;
+      if(pinOrigin()){ if(pinWaitingGps && homeTap) startPinPreview(); return; }
+      if(err && err.code === 1){
+        /* 許可なし：待ち続けても取れないので明示して止める（次のピン操作で再試行） */
+        pinGpsFailed = true; pinWaitingGps = false;
+        setPinRouteSum("現在地を取得できませんでした（位置情報が許可されていません）");
+      }
+      /* タイムアウト・測位不可はウォッチ側の結果を待ち、間隔を空けて再試行する */
+    }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 });
   }
-  function clearQuickPreview(){
-    quickSeq++; quickWaitingGps = false; quickDestKey = null;
-    if(quickLayer && homeMap){ try{ homeMap.removeLayer(quickLayer); }catch(e){} }
-    quickLayer = null;
-    var b = $id("quickRouteBar"); if(b) b.classList.add("hidden");
+  function setPinRouteSum(text){
+    var el = $id("htbRouteSum"); if(el) el.textContent = text;
   }
-  function quickOrigin(){
+  function clearPinPreview(){
+    pinSeq++; pinWaitingGps = false; pinKey = null;
+    if(pinLayer && homeMap){ try{ homeMap.removeLayer(pinLayer); }catch(e){} }
+    pinLayer = null;
+  }
+  function pinOrigin(){
     try{
       if(typeof fromCoord !== "undefined" && fromCoord)
         return { coord: fromCoord, label: (typeof fromLabel !== "undefined" && fromLabel) || "出発地" };
@@ -11653,70 +11752,58 @@ syncDestDisplay();
     }catch(e){}
     return null;
   }
-  function drawQuickRoute(route){
+  function drawPinRoute(route){
     if(!homeMap || typeof L === "undefined") return;
-    if(quickLayer){ try{ homeMap.removeLayer(quickLayer); }catch(e){} quickLayer = null; }
+    if(pinLayer){ try{ homeMap.removeLayer(pinLayer); }catch(e){} pinLayer = null; }
     var pts = route.geomPts;
-    quickLayer = L.layerGroup();
-    L.polyline(pts, { color:"#ffffff", weight:10, opacity:0.85, smoothFactor:0 }).addTo(quickLayer);
-    L.polyline(pts, { color:"#1a73e8", weight:6, opacity:1, smoothFactor:0 }).addTo(quickLayer);
-    L.circleMarker(pts[pts.length - 1], { radius:8, color:"#1c1c1e", weight:2, fillColor:"#1c1c1e", fillOpacity:0.95 }).addTo(quickLayer);
-    quickLayer.addTo(homeMap);
+    pinLayer = L.layerGroup();
+    L.polyline(pts, { color:"#ffffff", weight:10, opacity:0.85, smoothFactor:0 }).addTo(pinLayer);
+    L.polyline(pts, { color:"#1a73e8", weight:6, opacity:1, smoothFactor:0 }).addTo(pinLayer);
+    pinLayer.addTo(homeMap);
     try{
-      homeMap.fitBounds(L.latLngBounds(pts), { paddingTopLeft: L.point(30, 100), paddingBottomRight: L.point(30, 250) });
+      homeMap.fitBounds(L.latLngBounds(pts), { paddingTopLeft: L.point(30, 100), paddingBottomRight: L.point(30, 370) });
     }catch(e){}
   }
-  function tryQuickPreview(){
-    var bar = $id("quickRouteBar"); if(!bar) return;
-    var dc = null, destName = "目的地";
-    try{
-      dc = (typeof destCoord !== "undefined") ? destCoord : null;
-      destName = (typeof destLabel !== "undefined" && destLabel) || (typeof destNode !== "undefined" && destNode) || "目的地";
-    }catch(e){}
-    if(!dc || hasViaSet()){ setSheet(true); return; }
-    var key = dc[0].toFixed(5) + "," + dc[1].toFixed(5);
-    $id("qrDest").textContent = destName;
-    bar.classList.remove("hidden");
-    var org = quickOrigin();
+  function startPinPreview(){
+    if(!homeTap) return;
+    var pin = [homeTap[0], homeTap[1]];
+    var key = pin[0].toFixed(5) + "," + pin[1].toFixed(5);
+    pinKey = key;
+    var org = pinOrigin();
     if(!org){
-      /* 出発地＝現在地でGPS未取得：位置が取れ次第、定期チェック側で描く */
-      quickWaitingGps = true; quickDestKey = key;
-      $id("qrSum").textContent = "現在地を取得中…";
-      return;
-    }
-    quickWaitingGps = false;
-    $id("qrSum").textContent = "一般道ルートを計算中…";
-    var seq = ++quickSeq; quickDestKey = key;
-    buildOsrmRouteForCoords(org.label, destName, [org.coord, dc], "quick", function(route){
-      if(seq !== quickSeq) return; /* その間に目的地変更／プレビュー終了 */
-      if(!route || !route.geomPts || route.geomPts.length < 2 || route.toll > 0){
-        /* 一般道ルートが取れなければ従来フロー（ルート設定シート）へ */
-        clearQuickPreview();
-        setSheet(true);
+      /* 出発地＝現在地でGPS未取得：この場で取得を開始し、位置が取れ次第
+         定期チェック側で描く。許可が無い場合は理由を表示して止める */
+      if(pinGpsFailed){
+        pinWaitingGps = false;
+        setPinRouteSum("現在地を取得できませんでした（位置情報が許可されていません）");
         return;
       }
-      drawQuickRoute(route);
+      pinWaitingGps = true;
+      setPinRouteSum("現在地を取得中…");
+      kickPinGps();
+      return;
+    }
+    pinWaitingGps = false;
+    setPinRouteSum("一般道ルートを計算中…");
+    var seq = ++pinSeq;
+    buildOsrmRouteForCoords(org.label, "ピン地点", [org.coord, pin], "pin", function(route){
+      if(seq !== pinSeq) return; /* その間にピン移動／カードを閉じた */
+      if(!homeTap || (homeTap[0].toFixed(5) + "," + homeTap[1].toFixed(5)) !== key) return;
+      if(!route || !route.geomPts || route.geomPts.length < 2 || route.toll > 0){
+        /* 一般道ルートが取れなければ線は出さず、カードはそのまま使える */
+        setPinRouteSum("一般道ルートを取得できませんでした");
+        return;
+      }
+      drawPinRoute(route);
       var mins = Math.max(1, Math.round(route.min || 0));
       var tstr = mins >= 60 ? ("約" + Math.floor(mins / 60) + "時間" + (mins % 60 ? (mins % 60) + "分" : "")) : ("約" + mins + "分");
-      $id("qrSum").textContent = "約" + (Math.round((route.km || 0) * 10) / 10).toFixed(1) + " km ・ " + tstr + " ・ 料金 0円";
+      setPinRouteSum("約" + (Math.round((route.km || 0) * 10) / 10).toFixed(1) + " km ・ " + tstr + " ・ 料金 0円");
     });
   }
-  var btnQrClose = $id("btnQrClose");
-  if(btnQrClose) btnQrClose.addEventListener("click", function(){ clearQuickPreview(); });
-  var btnQrRoutes = $id("btnQrRoutes");
-  if(btnQrRoutes) btnQrRoutes.addEventListener("click", function(){
-    clearQuickPreview();
-    setSheet(true); /* 従来のルート設定→決定→候補選択フローへ */
-  });
 
-  /* ピッカーや地図タップで地点が決まったら、ルート設定シートを開く。
-     ただし地図から目的地を決めた場合（fromMap）で経由地が無ければ、
-     シートの代わりに一般道ルートの先行プレビューを出す */
-  window.onSlotPicked = function(fromMap){
-    var dc = null;
-    try{ dc = (typeof destCoord !== "undefined") ? destCoord : null; }catch(e){}
-    if(fromMap && dc && !hasViaSet()){ tryQuickPreview(); return; }
-    clearQuickPreview();
+  /* ピッカーや地図タップで地点が確定したら、従来どおりルート設定
+     シートを開く（中間画面は挟まない） */
+  window.onSlotPicked = function(){
     setSheet(true);
   };
   setInterval(syncTopBar, 500);
@@ -11732,21 +11819,40 @@ syncDestDisplay();
   function onHomeTap(e){
     /* ピッカーの「地図から選ぶ」選択モード中は、タップをそちらへ渡す */
     if(typeof window.__mapPickClick === "function"){ window.__mapPickClick(e.latlng); return; }
-    homeTap = [e.latlng.lat, e.latlng.lng];
+    setHomeTap([e.latlng.lat, e.latlng.lng]);
+  }
+  function setHomeTap(latlng, preset){
+    homeTap = [latlng[0], latlng[1]];
     if(homeTapMarker){ try{ homeMap.removeLayer(homeTapMarker); }catch(err){} }
-    homeTapMarker = L.marker(homeTap).addTo(homeMap);
-    /* 一般道プレビューのバーとは重ねない（線は残し、バーだけ引っ込める） */
-    var qb = $id("quickRouteBar"); if(qb) qb.classList.add("hidden");
+    homeTapMarker = L.marker(homeTap, { draggable: true }).addTo(homeMap);
+    homeTapMarker.on("dragend", function(){
+      var ll = homeTapMarker.getLatLng();
+      setHomeTap([ll.lat, ll.lng]);
+    });
     var bar = $id("homeTapBar"); if(bar) bar.classList.remove("hidden");
     $id("htbName").textContent = "地点";
     $id("htbAddr").textContent = "";
     var reg = $id("htbRegName");
     reg.value = ""; reg.placeholder = "地点名を取得中…";
     hideHtbMsg();
-    fetch("https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=" + homeTap[0] + "&lon=" + homeTap[1] + "&zoom=18&addressdetails=1&accept-language=ja")
+    /* ピンが刺さった瞬間に一般道プレビューを開始する（住所取得は待たない）。
+       新しいピン操作では、前回の許可失敗フラグをリセットして再試行する */
+    pinGpsFailed = false;
+    startPinPreview();
+    /* カテゴリ検索・自宅など、名前と住所が既知の地点は逆ジオコーディングで
+       上書きせず、そのままカードに出す（プレビュー計算は同じく即時開始） */
+    if(preset && (preset.name || preset.addr)){
+      $id("htbName").textContent = preset.name || "地点";
+      $id("htbAddr").textContent = preset.addr || "";
+      reg.value = (preset.name && preset.name !== "地点") ? preset.name : "";
+      reg.placeholder = "地点名（マイ地点登録用）";
+      return;
+    }
+    var lat = homeTap[0], lng = homeTap[1];
+    fetch("https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=" + lat + "&lon=" + lng + "&zoom=18&addressdetails=1&accept-language=ja")
       .then(function(r){ return r.json(); })
       .then(function(d){
-        if(!homeTap) return;
+        if(!homeTap || homeTap[0] !== lat || homeTap[1] !== lng) return;
         var addr = (typeof shortAddress === "function") ? (shortAddress(d && d.address, d && d.display_name) || "") : "";
         var nm = (d && d.name) ? d.name : (addr || "地点");
         $id("htbName").textContent = nm;
@@ -11754,7 +11860,7 @@ syncDestDisplay();
         reg.value = nm === "地点" ? "" : nm;
         reg.placeholder = "地点名（マイ地点登録用）";
       })
-      .catch(function(){ reg.placeholder = "地点名（マイ地点登録用）"; });
+      .catch(function(){ if(homeTap && homeTap[0] === lat && homeTap[1] === lng) reg.placeholder = "地点名（マイ地点登録用）"; });
   }
   function syncHomePos(center){
     if(!homeMap || typeof state === "undefined" || !state.gps || state.gps.lat == null) return;
@@ -11785,6 +11891,7 @@ syncDestDisplay();
   }
   function htbPick(kind){
     if(!homeTap) return;
+    var tapLat = homeTap[0], tapLng = homeTap[1];
     var addr = $id("htbAddr").textContent || null;
     var nm = $id("htbName").textContent || "地点";
     if(kind === "via"){
@@ -11796,7 +11903,9 @@ syncDestDisplay();
     }
     /* 目的地を地図から決めた印（pickSlotNode が消費して onSlotPicked へ渡す） */
     window.__slotPickFromMap = (kind === "to");
-    pickSlotPoint(homeTap[0], homeTap[1], addr, nm);
+    /* ピンプレビューはここまで。以後は従来フロー（ルート設定シートへ） */
+    clearPinPreview();
+    pickSlotPoint(tapLat, tapLng, addr, nm);
     var bar = $id("homeTapBar"); if(bar) bar.classList.add("hidden");
     syncTopBar();
   }
@@ -11814,9 +11923,10 @@ syncDestDisplay();
   var bC = $id("btnHtbClose");
   if(bC) bC.addEventListener("click", function(){
     homeTap = null;
+    /* カードを閉じたらプレビューの線と表示も消す */
+    clearPinPreview();
+    setPinRouteSum("ルートを計算中…");
     var bar = $id("homeTapBar"); if(bar) bar.classList.add("hidden");
-    /* 一般道プレビューの線が残っていれば、そのバーを戻す */
-    if(quickLayer){ var qb2 = $id("quickRouteBar"); if(qb2) qb2.classList.remove("hidden"); }
     syncTopBar();
     if(homeTapMarker && homeMap){ try{ homeMap.removeLayer(homeTapMarker); }catch(e){} homeTapMarker = null; }
   });
@@ -11834,17 +11944,196 @@ syncDestDisplay();
   window.addEventListener("orientationchange", function(){ setTimeout(function(){ if(homeMap){ try{ homeMap.invalidateSize(); }catch(e){} } }, 350); });
   /* ピッカーの「地図から選ぶ」がホーム地図を使うための橋渡し */
   window.__homeMapApi = { getMap: function(){ return homeMap; } };
+  /* カテゴリチップ（自宅／近くのスポット）から、地図タップと同じ地点カードを
+     出すための橋渡し。名前・住所が既知ならそれを使い、一般道プレビューの
+     即時計算（GPS取得キック含む）も地図タップ時と全く同じに走る */
+  window.__homeShowPlace = function(lat, lng, name, addr, pan){
+    if(!homeMap) initHomeMap();
+    if(pan && homeMap){ try{ homeMap.setView([lat, lng], Math.max(homeMap.getZoom(), 14)); }catch(e){} }
+    setHomeTap([lat, lng], { name: name || "", addr: addr || "" });
+    syncTopBar();
+  };
   setInterval(function(){
     syncHomePos(true);
-    /* 一般道プレビューの追随：GPS待ちなら取得でき次第描く。
-       目的地がクリア／変更されたら線とバーを消す */
-    if(quickDestKey){
-      var dc = null;
-      try{ dc = (typeof destCoord !== "undefined") ? destCoord : null; }catch(e){}
-      if(!dc || (dc[0].toFixed(5) + "," + dc[1].toFixed(5)) !== quickDestKey) clearQuickPreview();
-      else if(quickWaitingGps && quickOrigin()) tryQuickPreview();
-    }
+    /* ピンプレビューのGPS待ち追随：カード表示中に現在地が取れたら、
+       そのピンの位置で計算して描く */
+    if(pinWaitingGps && homeTap){ if(pinOrigin()) startPinPreview(); else kickPinGps(); }
   }, 1500);
+})();
+</script>
+<script>
+/* ================= v55: 検索バー直下のカテゴリチップ（自宅／近くのスポット） =================
+   - 自宅：登録済みならタップでその地点を地図タップと同じ扱いにする
+     （ピン＋地点カード＋一般道ルートの即時プレビュー）。未登録なら
+     地点ピッカー（検索／マイ地点／IC／地図から選ぶ）を開いて自宅として
+     端末内に保存する。登録済みの場合は長押しで登録し直せる。
+   - レストラン／コンビニ／ショッピング／ガソリン：現在の地図表示エリアを
+     対象に、既存のスポット検索と同じ仕組み（Nominatim 検索）で探し、
+     候補を近い順にパネルへ出す。候補を選ぶと地図タップと同じ状態になる。
+     検索中の表示は既存の応答中ピル（fetch ラッパー）が担う。 */
+(function(){
+  var $id = function(id){ return document.getElementById(id); };
+  var HOME_KEY = "kanabi.home.v1";
+
+  function loadHomePlace(){
+    try{
+      var v = JSON.parse(localStorage.getItem(HOME_KEY) || "null");
+      if(v && isFinite(v.lat) && isFinite(v.lng))
+        return { name: String(v.name || "自宅"), addr: String(v.addr || ""), lat: Number(v.lat), lng: Number(v.lng) };
+    }catch(e){}
+    return null;
+  }
+  window.saveHomePlace = function(p){
+    if(!p || !isFinite(p.lat) || !isFinite(p.lng)) return;
+    var rec = { name: p.name || "自宅", addr: p.addr || "", lat: Number(p.lat), lng: Number(p.lng) };
+    try{ localStorage.setItem(HOME_KEY, JSON.stringify(rec)); }catch(e){}
+  };
+
+  function openHomePicker(){
+    if(typeof openSlotDialog !== "function") return;
+    openSlotDialog("to", -1);
+    dlgTarget = { kind: "home", index: -1 };
+    var t = $id("dlgTitle"); if(t) t.textContent = "自宅を登録";
+    if(typeof setDlgMode === "function") setDlgMode("search");
+  }
+
+  /* ---- 自宅チップ：タップ＝自宅を表示／未登録なら登録ピッカー、長押し＝登録し直し ---- */
+  var homeChip = $id("catChipHome");
+  if(homeChip){
+    var pressTimer = null, longPressed = false;
+    homeChip.addEventListener("pointerdown", function(){
+      longPressed = false;
+      pressTimer = setTimeout(function(){
+        longPressed = true;
+        if(loadHomePlace()) openHomePicker(); /* 登録済みのときだけ長押しで登録し直し */
+      }, 600);
+    });
+    ["pointerup", "pointerleave", "pointercancel"].forEach(function(ev){
+      homeChip.addEventListener(ev, function(){ if(pressTimer){ clearTimeout(pressTimer); pressTimer = null; } });
+    });
+    homeChip.addEventListener("contextmenu", function(e){ e.preventDefault(); });
+    homeChip.addEventListener("click", function(){
+      if(longPressed){ longPressed = false; return; } /* 長押し後のクリックは無効化 */
+      var h = loadHomePlace();
+      if(h){
+        if(typeof window.__homeShowPlace === "function") window.__homeShowPlace(h.lat, h.lng, h.name || "自宅", h.addr || "", true);
+      } else {
+        openHomePicker();
+      }
+    });
+  }
+
+  /* ---- カテゴリ検索 ---- */
+  var CATS = {
+    restaurant:  { label: "レストラン",   queries: ["レストラン"] },
+    convenience: { label: "コンビニ",     queries: ["コンビニエンスストア", "コンビニ"] },
+    shopping:    { label: "ショッピング", queries: ["ショッピングモール", "スーパー"] },
+    gas:         { label: "ガソリン",     queries: ["ガソリンスタンド"] }
+  };
+  var catSeq = 0;
+
+  function homeMapObj(){
+    var api = window.__homeMapApi;
+    if(!api || typeof api.getMap !== "function") return null;
+    try{ return api.getMap(); }catch(e){ return null; }
+  }
+  function refPoint(map){
+    if(map){ try{ var c = map.getCenter(); return [c.lat, c.lng]; }catch(e){} }
+    try{
+      if(typeof state !== "undefined" && state.gps && state.gps.lat != null) return [state.gps.lat, state.gps.lng];
+    }catch(e){}
+    return [35.68, 139.69];
+  }
+  function fmtDist(m){
+    if(!isFinite(m)) return "";
+    if(m < 1000) return Math.round(m) + "m";
+    return (Math.round(m / 100) / 10).toFixed(1) + "km";
+  }
+  function showCatPanel(title){
+    var p = $id("homeCatPanel"), t = $id("homeCatPanelTitle");
+    if(t) t.textContent = title;
+    if(p) p.classList.remove("hidden");
+  }
+  function hideCatPanel(){
+    var p = $id("homeCatPanel"); if(p) p.classList.add("hidden");
+  }
+  function renderCatMessage(text){
+    var box = $id("homeCatList"); if(!box) return;
+    box.innerHTML = "";
+    var d = document.createElement("div"); d.className = "dlg-item"; d.textContent = text;
+    box.appendChild(d);
+  }
+  function nominatimCat(query, viewbox){
+    var url = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=15&countrycodes=jp&addressdetails=1&accept-language=ja"
+      + "&viewbox=" + encodeURIComponent(viewbox) + "&bounded=1&q=" + encodeURIComponent(query);
+    return fetch(url).then(function(r){ return r.json(); }).catch(function(){ return []; });
+  }
+  function runCatSearch(key){
+    var cat = CATS[key]; if(!cat) return;
+    var seq = ++catSeq;
+    var map = homeMapObj();
+    var ref = refPoint(map);
+    var viewbox = null;
+    if(map){
+      try{
+        var b = map.getBounds();
+        viewbox = [b.getWest(), b.getNorth(), b.getEast(), b.getSouth()].join(",");
+      }catch(e){}
+    }
+    if(!viewbox){
+      /* 地図の表示範囲が取れない場合は現在地（基準点）周辺で探す */
+      var d = 0.09;
+      viewbox = [ref[1] - d, ref[0] + d, ref[1] + d, ref[0] - d].join(",");
+    }
+    showCatPanel(cat.label);
+    renderCatMessage("検索中…");
+    Promise.all(cat.queries.map(function(q){ return nominatimCat(q, viewbox); })).then(function(lists){
+      if(seq !== catSeq) return;
+      var merged = [], seen = {};
+      lists.forEach(function(list){
+        (list || []).forEach(function(it){
+          var lat = parseFloat(it.lat), lng = parseFloat(it.lon);
+          if(!isFinite(lat) || !isFinite(lng)) return;
+          var nm = it.name || (it.display_name || "").split(",")[0];
+          if(!nm) return;
+          var k = nm + "@" + lat.toFixed(4) + "," + lng.toFixed(4);
+          if(seen[k]) return; seen[k] = 1;
+          merged.push({
+            name: nm, lat: lat, lng: lng,
+            addr: (typeof shortAddress === "function") ? (shortAddress(it.address, it.display_name) || "") : (it.display_name || ""),
+            dist: (typeof haversine === "function") ? haversine(ref[0], ref[1], lat, lng) : NaN
+          });
+        });
+      });
+      merged.sort(function(a, b){ return (a.dist || 0) - (b.dist || 0); });
+      merged = merged.slice(0, 12);
+      if(!merged.length){ renderCatMessage("この周辺では見つかりませんでした"); return; }
+      var box = $id("homeCatList"); if(!box) return;
+      box.innerHTML = "";
+      merged.forEach(function(r){
+        var b = document.createElement("button"); b.type = "button"; b.className = "dlg-item";
+        b.appendChild(document.createTextNode(r.name));
+        var sp = document.createElement("span");
+        sp.textContent = [r.addr, fmtDist(r.dist)].filter(function(s){ return !!s; }).join(" ・ ");
+        b.appendChild(sp);
+        b.addEventListener("click", function(){
+          catSeq++; /* 進行中の検索結果で再描画しない */
+          hideCatPanel();
+          if(typeof window.__homeShowPlace === "function")
+            window.__homeShowPlace(r.lat, r.lng, r.name, r.addr, false);
+        });
+        box.appendChild(b);
+      });
+    }).catch(function(){
+      if(seq !== catSeq) return;
+      renderCatMessage("検索できませんでした");
+    });
+  }
+  document.querySelectorAll(".cat-chip[data-cat]").forEach(function(chip){
+    chip.addEventListener("click", function(){ runCatSearch(chip.getAttribute("data-cat")); });
+  });
+  var cpClose = $id("btnHomeCatClose");
+  if(cpClose) cpClose.addEventListener("click", function(){ catSeq++; hideCatPanel(); });
 })();
 </script>
 </body>
