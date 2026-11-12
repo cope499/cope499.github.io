@@ -1384,6 +1384,74 @@ body.navlock #view-nav{height:var(--app-h,100dvh)}
 .hcp-list{overflow-y:auto;overscroll-behavior:contain;padding:0 8px 8px}
 .hcp-list .dlg-item{border-radius:10px;padding:11px 8px}
 
+/* ===== v59: タブバーだけをリキッドガラス化（乱反射・屈折＋縁の光） ===== */
+/* 対象は .tabbar のみ。位置・大きさ・角丸・3タブ構成は従来どおり。
+   選択ハイライト（.tab-ind の滑るグレーのピル＋選択アイコンの軽い拡大＋
+   指追随ドラッグ）は一切変更しない。
+   屈折は SVG 変位フィルタ（#tabGlass）を backdrop-filter に重ねて表現する。
+   url() 参照の backdrop-filter が効かない環境（iOS Safari 等）では、その
+   宣言ごと無効になって直前の通常のすりガラス宣言がそのまま効く
+   （自動フォールバック）。その場合も、縁のハイライトと内側のグローで
+   リキッドガラスの質感に寄せる。
+   濃さは参照イメージ（濃い半透明カプセル）に寄せつつ、テーマに追随：
+   ライト＝白系の濃いめ半透明／ダーク＝黒系の濃い半透明。 */
+.tabbar{
+  background:rgba(246,246,249,.46);
+  -webkit-backdrop-filter:blur(22px) saturate(1.85) brightness(1.05);
+  backdrop-filter:blur(22px) saturate(1.85) brightness(1.05);
+  backdrop-filter:url(#tabGlass) blur(1.6px) saturate(1.7) brightness(1.04);
+  border:1px solid rgba(255,255,255,.55);
+  box-shadow:
+    0 16px 40px rgba(0,0,0,.24),
+    inset 0 1px 1px rgba(255,255,255,.75),
+    inset 0 -1px 1px rgba(255,255,255,.22),
+    inset 1px 0 1px rgba(255,255,255,.30),
+    inset -1px 0 1px rgba(255,255,255,.30),
+    inset 0 0 22px rgba(255,255,255,.14);
+}
+/* 上端を走る光の帯＋斜めの反射筋。ボタン（z-index:1）とピルの下に敷き、
+   クリックは通す。ピルは DOM 順で ::before より後に描かれるため、
+   ::before がピルを覆うことはない */
+.tabbar::before{content:"";position:absolute;inset:0;border-radius:inherit;z-index:0;pointer-events:none;
+  background:
+    linear-gradient(180deg,rgba(255,255,255,.42) 0%,rgba(255,255,255,.10) 34%,rgba(255,255,255,0) 55%),
+    linear-gradient(112deg,rgba(255,255,255,0) 30%,rgba(255,255,255,.16) 46%,rgba(255,255,255,0) 62%);}
+@media (prefers-color-scheme: dark){
+  .tabbar{background:rgba(16,16,20,.44);border-color:rgba(255,255,255,.26);
+    box-shadow:
+      0 16px 44px rgba(0,0,0,.55),
+      inset 0 1px 1px rgba(255,255,255,.42),
+      inset 0 -1px 1px rgba(255,255,255,.10),
+      inset 1px 0 1px rgba(255,255,255,.16),
+      inset -1px 0 1px rgba(255,255,255,.16),
+      inset 0 0 22px rgba(255,255,255,.07);}
+  .tabbar::before{background:
+    linear-gradient(180deg,rgba(255,255,255,.26) 0%,rgba(255,255,255,.06) 34%,rgba(255,255,255,0) 55%),
+    linear-gradient(112deg,rgba(255,255,255,0) 30%,rgba(255,255,255,.10) 46%,rgba(255,255,255,0) 62%);}
+}
+:root[data-theme="dark"] .tabbar{background:rgba(16,16,20,.44);border-color:rgba(255,255,255,.26);
+  box-shadow:
+    0 16px 44px rgba(0,0,0,.55),
+    inset 0 1px 1px rgba(255,255,255,.42),
+    inset 0 -1px 1px rgba(255,255,255,.10),
+    inset 1px 0 1px rgba(255,255,255,.16),
+    inset -1px 0 1px rgba(255,255,255,.16),
+    inset 0 0 22px rgba(255,255,255,.07);}
+:root[data-theme="dark"] .tabbar::before{background:
+  linear-gradient(180deg,rgba(255,255,255,.26) 0%,rgba(255,255,255,.06) 34%,rgba(255,255,255,0) 55%),
+  linear-gradient(112deg,rgba(255,255,255,0) 30%,rgba(255,255,255,.10) 46%,rgba(255,255,255,0) 62%);}
+:root[data-theme="light"] .tabbar{background:rgba(246,246,249,.46);border-color:rgba(255,255,255,.55);
+  box-shadow:
+    0 16px 40px rgba(0,0,0,.24),
+    inset 0 1px 1px rgba(255,255,255,.75),
+    inset 0 -1px 1px rgba(255,255,255,.22),
+    inset 1px 0 1px rgba(255,255,255,.30),
+    inset -1px 0 1px rgba(255,255,255,.30),
+    inset 0 0 22px rgba(255,255,255,.14);}
+:root[data-theme="light"] .tabbar::before{background:
+  linear-gradient(180deg,rgba(255,255,255,.42) 0%,rgba(255,255,255,.10) 34%,rgba(255,255,255,0) 55%),
+  linear-gradient(112deg,rgba(255,255,255,0) 30%,rgba(255,255,255,.16) 46%,rgba(255,255,255,0) 62%);}
+
 </style>
 <script>
 /* 背景の初期適用：保存済みの背景を最初の描画前に反映し、チラつきを防ぐ（v45） */
@@ -1863,6 +1931,17 @@ body.navlock #view-nav{height:var(--app-h,100dvh)}
   </div>
 
   <!-- ============ iOS-style bottom tab bar ============ -->
+  <!-- タブバーの屈折表現用 SVG 変位フィルタ（v59）。backdrop-filter の
+       url(#tabGlass) から参照される。対応しない環境では参照ごと無効になり、
+       通常のすりガラスにフォールバックする。本体は表示しない -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <defs>
+      <filter id="tabGlass" x="-10%" y="-80%" width="120%" height="260%" color-interpolation-filters="sRGB">
+        <feTurbulence type="fractalNoise" baseFrequency="0.011 0.085" numOctaves="2" seed="7" result="noise"/>
+        <feDisplacementMap in="SourceGraphic" in2="noise" scale="17" xChannelSelector="R" yChannelSelector="G"/>
+      </filter>
+    </defs>
+  </svg>
   <nav class="tabbar" aria-label="メインタブ">
     <span class="tab-ind" id="tabInd" aria-hidden="true"></span>
     <button type="button" class="tabbtn" data-tab="home" aria-selected="true">
