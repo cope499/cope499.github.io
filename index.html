@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="カーナビ" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%231c1c1e'/%3E%3Ctext x='50' y='68' font-size='52' text-anchor='middle' fill='white'%3E%E2%86%97%3C/text%3E%3C/svg%3E" />
-<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
 <link rel="manifest" href="data:application/octet-stream;base64,eyJiYWNrZ3JvdW5kX2NvbG9yIjoiIzE0MTQxNiIsImRpc3BsYXkiOiJzdGFuZGFsb25lIiwiaWNvbnMiOlt7InB1cnBvc2UiOiJhbnkiLCJzaXplcyI6IjE5MngxOTIiLCJzcmMiOiJpY29uLTE5Mi5wbmciLCJ0eXBlIjoiaW1hZ2UvcG5nIn0seyJwdXJwb3NlIjoiYW55Iiwic2l6ZXMiOiI1MTJ4NTEyIiwic3JjIjoiaWNvbi01MTIucG5nIiwidHlwZSI6ImltYWdlL3BuZyJ9LHsicHVycG9zZSI6Im1hc2thYmxlIiwic2l6ZXMiOiI1MTJ4NTEyIiwic3JjIjoiaWNvbi01MTIucG5nIiwidHlwZSI6ImltYWdlL3BuZyJ9XSwibGFuZyI6ImphIiwibmFtZSI6IuOCq+ODvOODiuODkyIsInNjb3BlIjoiLi4vIiwic2hvcnRfbmFtZSI6IuOCq+ODvOODiuODkyIsInN0YXJ0X3VybCI6Ii4uL2luZGV4Lmh0bWwiLCJ0aGVtZV9jb2xvciI6IiMxNDE0MTYifQ==" />
 <title>カーナビ — 関東・分岐ナビ（首都高・圏央道）</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -403,9 +403,13 @@ body.previewing #previewPane{transform:translateY(0)}
 #previewMap{flex:1 1 auto;min-height:96px;background:var(--surface2);position:relative;z-index:1}
 #previewMap .mapfallback{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:18px;font-size:13px;line-height:1.7;color:var(--ink2)}
 #previewMap .pv-ic-pinwrap{background:transparent;border:none}
-.pv-foot{display:flex;flex-direction:column;gap:8px;padding:10px 14px calc(10px + env(safe-area-inset-bottom));flex:none}
+.pv-foot{display:flex;flex-direction:column;gap:7px;padding:9px 14px calc(9px + env(safe-area-inset-bottom));flex:none}
 .pv-foot .btn{width:100%;padding:13px}
-.pv-foot #btnPvStart{padding:16px;font-size:17px}
+.pv-foot #btnPvStart{padding:12px;font-size:16.5px}
+/* 保存／戻るは主ボタン（案内開始）より小さく横並びにし、縦に積んで
+   候補リストのスクロール領域を圧迫しない */
+.pv-foot-sub{display:flex;gap:8px}
+.pv-foot-sub .btn{flex:1;width:auto;padding:9px;font-size:13.5px}
 /* ルート選択後の操作カードも、目的地ダイアログと同様に下部ではなく上部に寄せて出す */
 #routeChoice{position:fixed;left:12px;right:12px;top:calc(env(safe-area-inset-top,0px) + 12px);z-index:56;max-width:540px;margin:0 auto;
   background:var(--surface);color:var(--ink);border:1.5px solid var(--line);border-radius:14px;padding:12px 14px;
@@ -564,9 +568,13 @@ select,.dm-row input{border-radius:10px}
 #pvCandidates{flex:0 1 auto;min-height:0;max-height:38dvh;overflow-y:auto;padding:8px 14px 4px;display:flex;flex-direction:column;gap:8px}
 .pv-cand{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);border-radius:12px;padding:12px 14px;font-family:inherit;cursor:pointer}
 .pv-cand .cl{font-weight:900;font-size:15px;flex:none}
-.pv-cand .cm{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--ink2)}
+/* 主情報（距離・時間・到着時刻）は大きく濃く、比較注記（cd）や補足（cn）は
+   従として小さく薄く出す。文節は .seg 単位で折り返し、文節の途中で
+   不自然に改行しない（「5分遅／い」のような折れ方を防ぐ） */
+.pv-cand .cm{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--ink);line-height:1.5}
+.pv-cand .seg{display:inline-block;white-space:nowrap}
 .pv-cand .cp{margin-left:auto;font-family:var(--mono);font-weight:700;font-size:19px;color:var(--sign);flex:none}
-.pv-cand .cmid{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.pv-cand .cmid{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .pv-cand .cn{font-size:11.5px;font-weight:700;color:var(--ink2);line-height:1.45}
 .pv-cand-h{font-size:12px;font-weight:900;color:var(--ink2);letter-spacing:.04em}
 .pv-cand.sel{border-color:var(--ink);background:var(--surface2);box-shadow:0 0 0 1.5px var(--ink) inset}
@@ -1239,6 +1247,21 @@ html,body{touch-action:manipulation}
 .htb-route{display:flex;align-items:center;gap:8px;margin-top:9px}
 .htb-route #htbRouteSum{font-size:14px;font-weight:800;color:var(--ink)}
 .qr-tag{font-size:11.5px;font-weight:900;color:#fff;background:#1a73e8;border-radius:999px;padding:2px 9px;flex:none}
+/* --- v57: ピン設置時点の候補チップ（簡易選択） ---
+   候補が揃うとラベルチップで切り替えられる。有料など表示要素が多い
+   候補の詳細はカード内の専用スクロール領域に出し、カード全体が
+   画面を圧迫しないようにする */
+.htb-cands{margin-top:9px}
+.htb-chips{display:flex;gap:6px;overflow-x:auto;overflow-y:hidden;padding:2px 2px 4px;
+  scrollbar-width:none;-webkit-overflow-scrolling:touch;touch-action:pan-x;overscroll-behavior-x:contain}
+.htb-chips::-webkit-scrollbar{display:none}
+.htb-chip{flex:none;border:1.5px solid var(--line);background:var(--glass-2);color:var(--ink);
+  border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:800;font-family:inherit;
+  cursor:pointer;-webkit-tap-highlight-color:transparent}
+.htb-chip[aria-pressed="true"]{background:#1a73e8;border-color:#1a73e8;color:#fff}
+.htb-cand-detail{max-height:96px;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.htb-cand-detail:empty{display:none}
+.htb-cd-line{font-size:12px;font-weight:700;color:var(--ink2);line-height:1.55}
 /* --- 地図から選ぶ：上部バナー --- */
 .mappick-banner{position:absolute;top:calc(12px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:1250;
   background:var(--glass-3);-webkit-backdrop-filter:var(--glass-blur);backdrop-filter:var(--glass-blur);
@@ -1446,7 +1469,11 @@ body.navlock #view-nav{height:var(--app-h,100dvh)}
     <div class="home-tapbar hidden" id="homeTapBar">
       <button type="button" class="dlg-close htb-close" id="btnHtbClose" aria-label="閉じる">×</button>
       <div class="htb-info"><b id="htbName">地点</b><span id="htbAddr"></span></div>
-      <div class="htb-route"><span class="qr-tag">一般道</span><span id="htbRouteSum">ルートを計算中…</span></div>
+      <div class="htb-route"><span class="qr-tag" id="htbRouteTag">一般道</span><span id="htbRouteSum">ルートを計算中…</span></div>
+      <div class="htb-cands hidden" id="htbCands">
+        <div class="htb-chips" id="htbCandChips"></div>
+        <div class="htb-cand-detail" id="htbCandDetail"></div>
+      </div>
       <div class="htb-regrow"><input id="htbRegName" type="text" placeholder="地点名（マイ地点登録用）" aria-label="マイ地点に登録する名前"></div>
       <div class="htb-btns">
         <button type="button" class="btn ghost" id="btnHtbReg">マイ地点に登録</button>
@@ -1810,9 +1837,11 @@ body.navlock #view-nav{height:var(--app-h,100dvh)}
     </div>
     <div class="pv-foot">
       <button class="btn" id="btnPvStart">案内開始</button>
-      <button class="btn ghost" id="btnPvSaveRoute">このルートを保存</button>
+      <div class="pv-foot-sub">
+        <button class="btn ghost" id="btnPvSaveRoute">このルートを保存</button>
+        <button class="btn ghost" id="btnPvBack">戻る</button>
+      </div>
       <div class="pv-save-msg" id="pvSaveMsg"></div>
-      <button class="btn ghost" id="btnPvBack">戻る</button>
     </div>
   </div>
 
@@ -3470,6 +3499,50 @@ function icGateOf(road, ic){
   var g = IC_GATE[road.road + "|" + ic[0]];
   return g ? [g[0], g[1]] : null;
 }
+/* ICピッカーで明示的に選ばれた点（本線点）の記録。一般道用の座標列で
+   だけ料金所点へ置き換えるための目印で、通常のGPS・検索地点が偶然
+   ICの近くにある場合にまで置換が及ばないようにする */
+var icPickedPts = [];
+function noteIcPicked(pt){
+  if(!pt) return;
+  icPickedPts.push([pt[0], pt[1]]);
+  if(icPickedPts.length > 12) icPickedPts.shift();
+}
+/* 座標の至近にあるICの料金所点（一般道側出入口）を返す。料金所が
+   無いIC、本線点とほぼ同位置のICでは null（置換しない） */
+function icGateNearPoint(p){
+  if(!p) return null;
+  for(var ri = 0; ri < IC_ROADS.length; ri++){
+    var road = IC_ROADS[ri];
+    for(var ii = 0; ii < road.ics.length; ii++){
+      var ic = road.ics[ii];
+      if(ic[1] == null) continue;
+      if(haversine(p[0], p[1], ic[1], ic[2]) <= 120){
+        var g = icGateOf(road, ic);
+        return (g && haversine(g[0], g[1], ic[1], ic[2]) > 30) ? g : null;
+      }
+    }
+  }
+  return null;
+}
+/* 一般道（有料回避）リクエスト用の座標列を作る。経由地・目的地として
+   ICピッカーで選ばれた点は本線上の点であり、そのままでは有料回避と
+   両立しない（本線点へは高速でしか辿り着けず、ルートが成立しないか
+   手前のICから乗る大迂回になる）。ICピッカー由来の点だけ、そのICの
+   料金所点（一般道側）に置き換えて「そのICの出入口を経由地にする」
+   という意味に揃える。有料系リクエストでは元の本線点のまま使う */
+function surfaceChainFor(chain){
+  if(!chain || chain.length < 2 || !icPickedPts.length) return chain;
+  return chain.map(function(p){
+    for(var i = 0; i < icPickedPts.length; i++){
+      if(haversine(p[0], p[1], icPickedPts[i][0], icPickedPts[i][1]) <= 30){
+        var g = icGateNearPoint(p);
+        if(g) return g;
+      }
+    }
+    return p;
+  });
+}
 function icAccessWord(code){
   if(code==="io") return "入口・出口可";
   if(code==="i") return "入口のみ";
@@ -3643,6 +3716,58 @@ function effectiveDark(){
    要求されない。縮小下限は5。 */
 function mapZoomCap(){ return 20; }
 function mapZoomMin(){ return 5; }
+/* ===== ピンチ離指後のズーム慣性（v56） =====
+   ピンチを広げる／縮める速度（ズーム段／秒）を離す瞬間まで保持し、
+   指を離した後もその勢いで短く滑らかに減速して止める。減衰は
+   時定数 約0.22秒の指数減衰で「短い慣性」に抑える。ズーム範囲
+   （最小5／最大20）の外へは抵抗付きで最大0.35段だけ行き過ぎを許し、
+   止まる前に範囲内へイーズで戻す（柔らかいクランプ。カクつきや
+   飛びは出さない）。中心はピンチ重心の地点（回転表示の地図では
+   座標変換がずれるため呼び出し側が地図中心を渡す）。
+   onFrame は毎フレーム呼ばれる任意コールバック（プレビュー地図の
+   保持ズーム同期などに使う）。 */
+function stopZoomInertia(map){
+  if(map && map._zi){
+    try{ cancelAnimationFrame(map._zi.raf); }catch(e){}
+    map._zi = null;
+  }
+}
+function startZoomInertia(map, centerLatLng, v0, onFrame){
+  if(!map || !centerLatLng || !isFinite(v0)) return;
+  stopZoomInertia(map);
+  if(Math.abs(v0) < 0.9) return; /* ゆっくり離したら慣性なし（従来どおり） */
+  var st = { v: v0, last: performance.now(), raf: 0, center: centerLatLng };
+  map._zi = st;
+  function step(now){
+    if(map._zi !== st) return;
+    var dt = Math.min(0.05, Math.max(0.001, (now - st.last) / 1000));
+    st.last = now;
+    var minZ = mapZoomMin(), maxZ = mapZoomCap();
+    var z = map.getZoom();
+    var nz = z + st.v * dt;
+    if(nz > maxZ) nz = maxZ + (nz - maxZ) * 0.22; /* 範囲外は強く抵抗 */
+    if(nz < minZ) nz = minZ + (nz - minZ) * 0.22;
+    try{ map.setZoomAround(st.center, nz, { animate: false }); }
+    catch(e){ try{ map.setZoom(nz, { animate: false }); }catch(e2){} }
+    st.v *= Math.exp(-dt / 0.22);
+    var cz = map.getZoom();
+    if(cz > maxZ + 0.005 || cz < minZ - 0.005){
+      /* 行き過ぎ分は範囲内へなだらかに寄せ、届いたら速度も消す */
+      var target = Math.max(minZ, Math.min(maxZ, cz));
+      var back = cz + (target - cz) * Math.min(1, dt * 9);
+      try{ map.setZoomAround(st.center, back, { animate: false }); }
+      catch(e){ try{ map.setZoom(back, { animate: false }); }catch(e2){} }
+      if(Math.abs(map.getZoom() - target) < 0.01){
+        try{ map.setZoom(target, { animate: false }); }catch(e){}
+        st.v = 0;
+      }
+    }
+    if(onFrame){ try{ onFrame(map); }catch(e){} }
+    if(Math.abs(st.v) > 0.12){ st.raf = requestAnimationFrame(step); }
+    else if(map._zi === st){ map._zi = null; }
+  }
+  st.raf = requestAnimationFrame(step);
+}
 var baseLayerRecs = [];
 function attachBaseLayer(map, rec){
   /* 帰属表記はライセンス上必要なため消さず、「Leaflet」接頭辞を外し、
@@ -4077,6 +4202,11 @@ function setupPreviewGestures(){
   var mc = previewMap.getContainer();
   var ptrs = {}, pinchDPrev = 0, pinchAngLast = null;
   var pendDx = 0, pendDy = 0, panQueued = false;
+  /* v56: ピンチ速度（ズーム段／秒）の追跡と、離指後の慣性ズーム用スタッシュ。
+     2本→1本になった時点の速度を保持し、残りの指がほぼ動かず短時間で
+     離れたときだけ startZoomInertia へ渡す（パンへ移行したら破棄）。 */
+  var pinchVel = 0, pinchVelT = 0, pinchStash = null;
+  var downRec = {}, lastTap = null;
   function flushPan(){
     panQueued = false;
     if(!previewMap || (!pendDx && !pendDy)) return;
@@ -4099,19 +4229,26 @@ function setupPreviewGestures(){
   mc.addEventListener("pointerdown", function(e){
     if(e.target && e.target.closest && e.target.closest(".leaflet-control")) return;
     try{ mc.setPointerCapture(e.pointerId); }catch(err){}
+    stopZoomInertia(previewMap);
     ptrs[e.pointerId] = {x:e.clientX, y:e.clientY};
+    downRec[e.pointerId] = {x:e.clientX, y:e.clientY, t:performance.now(), moved:false};
     var t = twoPtrs();
     if(t){
       pinchDPrev = Math.hypot(t[0].x - t[1].x, t[0].y - t[1].y);
       pinchAngLast = Math.atan2(t[1].y - t[0].y, t[1].x - t[0].x) * 180 / Math.PI;
+      pinchVel = 0; pinchVelT = performance.now(); pinchStash = null;
     }
   });
   mc.addEventListener("pointermove", function(e){
     var p = ptrs[e.pointerId]; if(!p) return;
     var dx = e.clientX - p.x, dy = e.clientY - p.y;
     p.x = e.clientX; p.y = e.clientY;
+    var dr = downRec[e.pointerId];
+    if(dr && Math.hypot(e.clientX - dr.x, e.clientY - dr.y) > 10) dr.moved = true;
     var ids = Object.keys(ptrs);
     if(ids.length === 1){
+      /* 慣性スタッシュ後に残りの指がパンへ動いたらスタッシュを破棄 */
+      if(pinchStash && Math.hypot(p.x - pinchStash.ax, p.y - pinchStash.ay) > 6) pinchStash = null;
       if(dx || dy) panDelta(dx, dy);
     } else if(ids.length === 2){
       /* 2本指：指の間隔の変化＝ズーム、ひねり＝回転、重心の移動＝パンを、
@@ -4127,6 +4264,13 @@ function setupPreviewGestures(){
         if(dz){
           previewMap.setZoom(Math.max(mapZoomMin(), Math.min(mapZoomCap(), previewMap.getZoom() + dz)), {animate:false});
           pvKeepZoom = previewMap.getZoom(); /* 指で変えた拡大率を保持する */
+          /* 瞬時速度を平滑化して保持（離指後の慣性の初速になる） */
+          var vNow = performance.now(), vDt = (vNow - pinchVelT) / 1000;
+          if(vDt >= 0.008){
+            var instV = dz / vDt;
+            if(isFinite(instV)) pinchVel = pinchVel * 0.55 + instV * 0.45;
+            pinchVelT = vNow;
+          }
         }
       }
       pinchDPrev = d;
@@ -4139,13 +4283,46 @@ function setupPreviewGestures(){
     }
   });
   function ptrEnd(e){
+    var dr = downRec[e.pointerId]; delete downRec[e.pointerId];
+    var nBefore = Object.keys(ptrs).length;
     delete ptrs[e.pointerId];
+    var ids = Object.keys(ptrs);
+    if(nBefore === 2 && ids.length === 1){
+      /* ピンチ終了：速度をスタッシュし、残りの指の位置をアンカーにする */
+      var rp = ptrs[ids[0]];
+      pinchStash = { v: pinchVel, t: performance.now(), ax: rp.x, ay: rp.y };
+    }
+    if(!ids.length){
+      if(pinchStash){
+        var age = performance.now() - pinchStash.t;
+        if(age < 250){
+          startZoomInertia(previewMap, previewMap.getCenter(),
+            pinchStash.v * Math.exp(-age / 250),
+            function(m){ pvKeepZoom = m.getZoom(); });
+        }
+        pinchStash = null;
+      }
+      /* ダブルタップで1段拡大（中心は地図中心：要素がCSS回転しているため
+         タップ地点の座標変換は行わない）。単発タップは従来どおり無動作 */
+      if(e.type === "pointerup" && dr && !dr.moved && performance.now() - dr.t < 400){
+        var nowT = performance.now();
+        if(lastTap && nowT - lastTap.t < 320 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 48){
+          lastTap = null;
+          var nz = Math.min(mapZoomCap(), previewMap.getZoom() + 1);
+          previewMap.setZoom(nz, {animate:true});
+          pvKeepZoom = nz;
+        } else {
+          lastTap = { x: e.clientX, y: e.clientY, t: nowT };
+        }
+      }
+    }
     if(Object.keys(ptrs).length < 2){ pinchDPrev = 0; pinchAngLast = null; }
   }
   mc.addEventListener("pointerup", ptrEnd);
   mc.addEventListener("pointercancel", ptrEnd);
   mc.addEventListener("wheel", function(e){
     e.preventDefault();
+    stopZoomInertia(previewMap);
     var z = previewMap.getZoom() + (e.deltaY < 0 ? 1 : -1);
     previewMap.setZoom(Math.max(mapZoomMin(), Math.min(mapZoomCap(), z)), {animate:false});
     pvKeepZoom = previewMap.getZoom(); /* ホイールで変えた拡大率も保持する */
@@ -5868,6 +6045,42 @@ function ttOverlapRatio(altPts, recPts){
   });
   return a.length ? near / a.length : 1;
 }
+/* 有料候補として提示する価値があるかの判定基準。有料区間の「割合」
+   だけで切ると、短い高速区間だけを使う実用的な有料候補（例：全12km中
+   1.5kmだけ首都高に乗って渋滞区間を抜ける案、割合0.125）が落ち、
+   逆に割合は高いが有料区間そのものが数百mしかない案が残る。そこで
+   「割合0.10以上」かつ「有料区間0.8km以上」の両方を基準に統一する */
+function tollWorthy(share, tollKm){
+  return share >= 0.10 && tollKm >= 0.8;
+}
+/* 進行順の座標列 chain（出発地→経由地→目的地）に、同じく進行順の
+   内部点列 inner（グラフ有料経路のIC列など）を、順序を保ったまま
+   合体させる。各内部点は、前回挿入した位置より後ろの区間の中で
+   最も近い区間へ挿入する。chain の両端から250m以内の内部点と、
+   既存点から150m以内の内部点は落とす。経由地がある場合に有料経路を
+   APIへ引き直す際、従来は経由地を落として両端＋IC列だけで引いて
+   いたため、経由地を通らない有料候補になっていた */
+function mergeChainInner(chain, inner){
+  var out = chain.slice();
+  if(!inner || !inner.length || out.length < 2) return out;
+  var minSeg = 0;
+  inner.forEach(function(p){
+    if(haversine(p[0], p[1], out[0][0], out[0][1]) < 250) return;
+    if(haversine(p[0], p[1], out[out.length - 1][0], out[out.length - 1][1]) < 250) return;
+    var dup = false;
+    out.forEach(function(q){ if(haversine(p[0], p[1], q[0], q[1]) < 150) dup = true; });
+    if(dup) return;
+    var bestSeg = -1, bestD = Infinity;
+    for(var si = minSeg; si < out.length - 1; si++){
+      var d = distToSegM(p, out[si], out[si + 1]);
+      if(d < bestD){ bestD = d; bestSeg = si; }
+    }
+    if(bestSeg < 0) bestSeg = out.length - 2;
+    out.splice(bestSeg + 1, 0, p);
+    minSeg = bestSeg + 1;
+  });
+  return out;
+}
 function ttMakeCandidate(kind, label, parsed, graphCand, tollYen, fromDisp, destName, chain, driveNote){
   var isHw = parsed.tollShare >= 0.15;
   var gates = (graphCand && graphCand.fare && graphCand.fare.gates) ||
@@ -5943,7 +6156,7 @@ function ttBuildKindRoutes(chain, byKind, fromDisp, destName, cb){
       if(byKind.toll){
         var tp = null;
         routes.forEach(function(r){
-          if(r.tollShare >= 0.15 && geomShapeSane(r.pts, r.km) && (!tp || r.min < tp.min)) tp = r;
+          if(tollWorthy(r.tollShare, r.km * r.tollShare) && geomShapeSane(r.pts, r.km) && (!tp || r.min < tp.min)) tp = r;
         });
         if(tp)
           scavToll = ttMakeCandidate("toll", "有料", tp, byKind.toll, byKind.toll.res.toll,
@@ -5954,15 +6167,19 @@ function ttBuildKindRoutes(chain, byKind, fromDisp, destName, cb){
   });
   /* 一般道（有料道路・高速道路を回避）。先頭の結果が形状ゲートで
      落ちても、後続の結果が健全なら一般道候補を出す（先頭だけを見て
-     候補ごと捨てると、一般道の選択肢が消えることがあった） */
-  ttFetchRouteSet(chain, { routeType: "fastest", avoid: ["tollRoads", "motorways"] }, function(routes){
+     候補ごと捨てると、一般道の選択肢が消えることがあった）。
+     経由地・目的地がICピッカー由来の本線点の場合は、料金所点
+     （一般道側）に置き換えた座標列で引く：本線点は有料回避と両立
+     せず、首都高を経由地にした一般道が成立しなかった */
+  var sChain = surfaceChainFor(chain);
+  ttFetchRouteSet(sChain, { routeType: "fastest", avoid: ["tollRoads", "motorways"] }, function(routes){
     var sp = null;
     if(routes) for(var si = 0; si < routes.length; si++){
       if(geomShapeSane(routes[si].pts, routes[si].km)){ sp = routes[si]; break; }
     }
     if(sp)
       out.surface = ttMakeCandidate("surface", "一般道", sp, byKind.surface || byKind.rec, 0,
-        fromDisp, destName, chain, "一般道のみ（有料道路回避）");
+        fromDisp, destName, sChain, "一般道のみ（有料道路回避）");
     fin();
   });
   /* 距離優先（最短） */
@@ -5983,11 +6200,14 @@ function ttBuildKindRoutes(chain, byKind, fromDisp, destName, cb){
      有料優先の指定が無く、最速セットの代替から拾う旧方式では「有料道路を
      含むだけの遠回り代替」が選ばれて形が崩れ、一般道より遅い有料候補に
      なっていた。経由点をIC列に固定すれば、形も所要時間も実際の高速
-     経路のものが返る。経由地がある場合は座標列の順序が崩れる恐れが
-     あるため専用リクエストは使わず、従来の予備・グラフ候補に任せる。 */
+     経路のものが返る。経由地がある場合は、経由地を落とさずIC列と
+     進行順を保って合体させてから引き直す（mergeChainInner）。以前は
+     経由地があると専用リクエスト自体を諦めていたため、経由地ありの
+     有料候補は予備の拾い物だけになり、実用的な有料が出ないことが
+     あった */
   (function(){
     var gc = byKind.toll;
-    if(!gc || !gc.route || !gc.res || !gc.res.edges || chain.length !== 2){ fin(); return; }
+    if(!gc || !gc.route || !gc.res || !gc.res.edges){ fin(); return; }
     /* 経由点はグラフ有料経路の「ステップ座標（入口IC・JCT・出口IC）」だけを
        使う。routeWaypoints は両端に登録地点の座標（駅前など一般道上の点）を
        足すため、それを経由点にすると目的地でない登録地点（例：渋谷目的地に
@@ -6011,7 +6231,9 @@ function ttBuildKindRoutes(chain, byKind, fromDisp, destName, cb){
       inner = thinned;
     }
     if(!inner.length){ fin(); return; }
-    var tollChain = [chain[0]].concat(inner, [chain[chain.length - 1]]);
+    var tollChain = chain.length === 2
+      ? [chain[0]].concat(inner, [chain[chain.length - 1]])
+      : mergeChainInner(chain, inner);
     ttFetchRouteSet(tollChain, { routeType: "fastest", classifyToll: true }, function(routes){
       if(routes && routes.length){
         var dp = routes[0];
@@ -6023,7 +6245,7 @@ function ttBuildKindRoutes(chain, byKind, fromDisp, destName, cb){
         gc.res.edges.forEach(function(e){ if(e.toll > 0) tKm += e.km || 0; });
         var gShare = gc.res.km > 0 ? tKm / gc.res.km : 0;
         var share = Math.max(dp.tollShare, gShare);
-        if(geomShapeSane(dp.pts, dp.km) && share >= 0.15){
+        if(geomShapeSane(dp.pts, dp.km) && tollWorthy(share, dp.km * share)){
           dp.tollShare = share;
           out.toll = ttMakeCandidate("toll", "有料", dp, gc, gc.res.toll,
             fromDisp, destName, chain, "高速・有料道路中心");
@@ -6169,7 +6391,7 @@ function osrmRawToRoute(r0, fromName, toName, coords, idSuffix){
   var tm = trafficModel();
   var rt = osrmRealisticMin(r0); /* 一般道は実勢速度で補正（上のコメント参照） */
   var pa = analyzeOsrmRoute(r0);
-  return { id: "osrm-api-" + (idSuffix || "route"), type: tollShare >= 0.15 ? "hw" : "surface",
+  return { id: "osrm-api-" + (idSuffix || "route"), type: tollWorthy(tollShare, tollKm) ? "hw" : "surface",
     name: fromName + " → " + toName, from: fromName, to: toName,
     km: km, min: rt.min, baseMin: rt.baseMin,
     traffic: tm.active ? tm.label : null, drive: pa, driveNote: driveNoteOf(pa),
@@ -6201,7 +6423,7 @@ function osrmMakeCandidate(kind, label, raw, byKind, fromDisp, destName, coords,
   if(!route) return null;
   var toll = 0, gates = route.gates, tollUnknown = false;
   if(forcedToll){ toll = forcedToll.toll; gates = forcedToll.gates; }
-  else if(route.tollShareOsrm >= 0.15){
+  else if(tollWorthy(route.tollShareOsrm, route.tollKmOsrm)){
     if(byKind.toll){ toll = byKind.toll.res.toll; gates = byKind.toll.fare.gates; }
     else tollUnknown = true; /* 有料区間を含むのにグラフに料金目安が無い */
   }
@@ -6220,7 +6442,7 @@ function osrmMakeCandidate(kind, label, raw, byKind, fromDisp, destName, coords,
     res.edges = byKind.toll.res.edges || null;
   }
   var driveNote;
-  if(route.tollShareOsrm >= 0.15) driveNote = "高速・有料道路中心";
+  if(tollWorthy(route.tollShareOsrm, route.tollKmOsrm)) driveNote = "高速・有料道路中心";
   else if(kind === "dist") driveNote = "一番短い距離";
   else if(kind === "alt") driveNote = "推奨と一部違う道";
   else driveNote = route.driveNote || "主要な一般道中心";
@@ -6250,13 +6472,13 @@ function osrmFallbackCandidates(chain, byKind, fromDisp, destName, need, cb){
           var fastestTollRaw = null;
           routes.forEach(function(r){
             var k = Math.round((r.distance || 0) / 100) / 10;
-            if(k > 0 && osrmTollKm(r) / k < 0.15) return;
+            if(k > 0 && !tollWorthy(osrmTollKm(r) / k, osrmTollKm(r))) return;
             if(!fastestTollRaw || (r.duration || Infinity) < (fastestTollRaw.duration || Infinity)) fastestTollRaw = r;
           });
           if(fastestTollRaw){
             var ftc = osrmMakeCandidate("toll", "有料", fastestTollRaw, byKind, fromDisp, destName, chain,
               (byKind.toll && byKind.toll.res) ? { toll: byKind.toll.res.toll, gates: byKind.toll.fare.gates } : null);
-            if(ftc && ftc.route.tollShareOsrm >= 0.15) out.toll = ftc;
+            if(ftc && tollWorthy(ftc.route.tollShareOsrm, ftc.route.tollKmOsrm)) out.toll = ftc;
           }
         }
         if(need.dist){
@@ -6290,7 +6512,9 @@ function osrmFallbackCandidates(chain, byKind, fromDisp, destName, need, cb){
   }
   if(need.surface){
     tasks++;
-    buildOsrmRouteForCoords(fromDisp, destName, chain, "api-surface", function(osrmRoute){
+    /* 経由地・目的地がICピッカー由来の本線点の場合、一般道では料金所点
+       （一般道側）に置き換えた座標列で引く（surfaceChainFor 参照） */
+    buildOsrmRouteForCoords(fromDisp, destName, surfaceChainFor(chain), "api-surface", function(osrmRoute){
       if(osrmRoute){
         /* 一般道は buildOsrmSurfaceRoute で有料区間ゼロが保証される */
         if(fromDisp === "現在地") osrmRoute.fromLabel = "現在地";
@@ -6315,16 +6539,12 @@ function osrmFallbackCandidates(chain, byKind, fromDisp, destName, need, cb){
     (function(){
       var icPts = [];
       (byKind.toll.route.steps || []).forEach(function(s){ if(s.lat != null) icPts.push([s.lat, s.lng]); });
-      var tollCoords = [chain[0]];
-      icPts.forEach(function(p){
-        var last = tollCoords[tollCoords.length - 1];
-        if(haversine(last[0], last[1], p[0], p[1]) >= 300) tollCoords.push(p);
-      });
       var destC = chain[chain.length - 1];
-      while(tollCoords.length > 1 &&
-            haversine(tollCoords[tollCoords.length - 1][0], tollCoords[tollCoords.length - 1][1], destC[0], destC[1]) < 300)
-        tollCoords.pop();
-      tollCoords.push(destC);
+      /* 経由地がある場合も経由地を落とさず、IC列と進行順を保って
+         合体させる。従来は [出発点, IC列, 目的地] だけで組み立てて
+         いたため、経由地を通らない有料候補になるか、経由地の前後で
+         座標列の順序が崩れて取得自体が失敗していた */
+      var tollCoords = mergeChainInner(chain, icPts);
       if(tollCoords.length < 3){ fin(); return; }
       if(tollCoords.length > 25){
         var mid = tollCoords.slice(1, -1), thinned = [tollCoords[0]], stepI = (mid.length - 1) / 22;
@@ -6344,7 +6564,7 @@ function osrmFallbackCandidates(chain, byKind, fromDisp, destName, need, cb){
             if(endOk){
               var tc = osrmMakeCandidate("toll", "有料", fastest, byKind, fromDisp, destName, chain,
                 { toll: byKind.toll.res.toll, gates: byKind.toll.fare.gates });
-              if(tc && tc.route.tollShareOsrm >= 0.10) out.toll = tc;
+              if(tc && tollWorthy(tc.route.tollShareOsrm, tc.route.tollKmOsrm)) out.toll = tc;
             }
           }
         }
@@ -6819,10 +7039,38 @@ function buildOsrmSurfaceRoute(baseRoute, coords, cb){
       })(li);
     }
   }
-  function finishWithPool(pool){
+  function finishWithPool(pool, foldTried){
     /* 代替ルートの中から、細い道を避けた通りやすいルートを選ぶ */
     var pa = pickDrivableRoute(pool);
     var r0 = pa.chosen;
+    /* 折り返し（行って戻るジグザグ）の残る形状は、そのまま採用しない。
+       直接引き（代替から1本選ぶ経路）は細粒度方式と違って継ぎ目修復を
+       通らないため、ここで初めて検出できる折り返しがある（単区間の
+       形状だけ見ても分からず、全体を通して初めて「途中でグチャる」
+       形になる）。プール内に折り返しの無い別候補があれば差し替え、
+       無ければ細粒度方式（継ぎ目修復あり）で引き直す。それでも
+       取れなければ折り返し付きのまま出す（候補ごと消すより、
+       一般道そのものを出す方がよい） */
+    if(baseRoute.toll === 0 && !foldTried && r0){
+      var foldsOf = function(r){
+        var g = (r.geometry && r.geometry.coordinates) || [];
+        if(g.length < 6) return 0;
+        return geomFoldSpans(g.map(function(c){ return [c[1], c[0]]; })).length;
+      };
+      if(foldsOf(r0) > 0){
+        var cleanAlt = null;
+        pool.slice().sort(function(a, b){ return analyzeOsrmRoute(a).cost - analyzeOsrmRoute(b).cost; })
+          .forEach(function(r){ if(!cleanAlt && r !== r0 && foldsOf(r) === 0) cleanAlt = r; });
+        if(cleanAlt){ pa = analyzeOsrmRoute(cleanAlt); r0 = cleanAlt; }
+        else {
+          fetchSurfaceFine(coords).then(function(fr){
+            if(fr) finishWithPool([fr], true);
+            else finishWithPool(pool, true);
+          });
+          return;
+        }
+      }
+    }
     var raw = [];
     var legCount = (r0.legs || []).length;
     (r0.legs || []).forEach(function(leg, li){ (leg.steps || []).forEach(function(st){ st.__leg = li; raw.push(st); }); });
@@ -7154,6 +7402,10 @@ function initNavMap(){
   navMapLayer = L.layerGroup().addTo(navMap);
   var mc = navMap.getContainer();
   var ptrs = {}, pinchDPrev = 0, pinchAngLast = null;
+  /* v56: ピンチ速度の追跡と離指後の慣性ズーム（プレビュー地図と同じ方式。
+     2本→1本でスタッシュし、残りの指がほぼ動かず短時間で離れたら発動） */
+  var pinchVel = 0, pinchVelT = 0, pinchStash = null;
+  var downRec = {}, lastTap = null;
   /* 指の移動はその場で panBy せず、1フレーム分を貯めてから一度だけ動かす。
      イベント毎に再描画すると指と地図がずれて小刻みに震えるため。 */
   var pendDx = 0, pendDy = 0, panQueued = false;
@@ -7186,13 +7438,16 @@ function initNavMap(){
   }
   mc.addEventListener("pointerdown", function(e){
     try{ mc.setPointerCapture(e.pointerId); }catch(err){}
+    stopZoomInertia(navMap);
     ptrs[e.pointerId] = {x:e.clientX, y:e.clientY};
+    downRec[e.pointerId] = {x:e.clientX, y:e.clientY, t:performance.now(), moved:false};
     navPtrActive = true;
     var ids = Object.keys(ptrs);
     if(ids.length === 2){
       var a = ptrs[ids[0]], b = ptrs[ids[1]];
       pinchDPrev = Math.hypot(a.x - b.x, a.y - b.y);
       pinchAngLast = Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
+      pinchVel = 0; pinchVelT = performance.now(); pinchStash = null;
     }
     navUserTouched();
   });
@@ -7200,8 +7455,11 @@ function initNavMap(){
     var p = ptrs[e.pointerId]; if(!p) return;
     var dx = e.clientX - p.x, dy = e.clientY - p.y;
     p.x = e.clientX; p.y = e.clientY;
+    var dr = downRec[e.pointerId];
+    if(dr && Math.hypot(e.clientX - dr.x, e.clientY - dr.y) > 10) dr.moved = true;
     var ids = Object.keys(ptrs);
     if(ids.length === 1){
+      if(pinchStash && Math.hypot(p.x - pinchStash.ax, p.y - pinchStash.ay) > 6) pinchStash = null;
       if(dx || dy) panScreenDelta(dx, dy);
     } else if(ids.length === 2){
       /* 2本指：指の間隔の変化＝ズーム、ひねり＝回転、重心の縦移動＝傾き、
@@ -7215,7 +7473,15 @@ function initNavMap(){
       var angNow = Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
       if(pinchDPrev > 0 && d > 0){
         var dz = Math.log2(d / pinchDPrev);
-        if(dz) navMap.setZoom(Math.max(mapZoomMin(), Math.min(mapZoomCap(), navMap.getZoom() + dz)), {animate:false});
+        if(dz){
+          navMap.setZoom(Math.max(mapZoomMin(), Math.min(mapZoomCap(), navMap.getZoom() + dz)), {animate:false});
+          var vNow = performance.now(), vDt = (vNow - pinchVelT) / 1000;
+          if(vDt >= 0.008){
+            var instV = dz / vDt;
+            if(isFinite(instV)) pinchVel = pinchVel * 0.55 + instV * 0.45;
+            pinchVelT = vNow;
+          }
+        }
       }
       pinchDPrev = d;
       if(pinchAngLast != null){
@@ -7228,7 +7494,32 @@ function initNavMap(){
     }
   });
   function ptrEnd(e){
+    var dr = downRec[e.pointerId]; delete downRec[e.pointerId];
+    var nBefore = Object.keys(ptrs).length;
     delete ptrs[e.pointerId];
+    var ids = Object.keys(ptrs);
+    if(nBefore === 2 && ids.length === 1){
+      var rp = ptrs[ids[0]];
+      pinchStash = { v: pinchVel, t: performance.now(), ax: rp.x, ay: rp.y };
+    }
+    if(!ids.length){
+      if(pinchStash){
+        var age = performance.now() - pinchStash.t;
+        if(age < 250) startZoomInertia(navMap, navMap.getCenter(), pinchStash.v * Math.exp(-age / 250));
+        pinchStash = null;
+      }
+      /* ダブルタップで1段拡大（要素がCSS回転しているため中心は地図中心。
+         追従復帰時に既定倍率へ戻るのはピンチ時と同じ既存挙動） */
+      if(e.type === "pointerup" && dr && !dr.moved && performance.now() - dr.t < 400){
+        var nowT = performance.now();
+        if(lastTap && nowT - lastTap.t < 320 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 48){
+          lastTap = null;
+          navMap.setZoom(Math.min(mapZoomCap(), navMap.getZoom() + 1), {animate:true});
+        } else {
+          lastTap = { x: e.clientX, y: e.clientY, t: nowT };
+        }
+      }
+    }
     if(Object.keys(ptrs).length < 2){ pinchDPrev = 0; pinchAngLast = null; }
     if(!Object.keys(ptrs).length){ navPtrActive = false; applyNavHeading(); scheduleNavRecenter(); }
   }
@@ -7236,6 +7527,7 @@ function initNavMap(){
   mc.addEventListener("pointercancel", ptrEnd);
   mc.addEventListener("wheel", function(e){
     e.preventDefault(); navUserTouched();
+    stopZoomInertia(navMap);
     var z = navMap.getZoom() + (e.deltaY < 0 ? 1 : -1);
     navMap.setZoom(Math.max(mapZoomMin(), Math.min(mapZoomCap(), z)), {animate:false});
   }, {passive:false});
@@ -7932,6 +8224,41 @@ function shortAddress(a, display){
   if(display) return display.replace(/,\s*日本\s*$/, "");
   return "";
 }
+/* ===== v58: 表示テキストの重複排除ヘルパー =====
+   1つのカード／行の中で同じ文字列を二度出さないための共通判定。
+   正規化は空白・区切り記号を除き、漢数字を算用数字へ寄せて行う
+   （「松山一丁目」と「松山1丁目」を同じものとして扱う） */
+function normCmpText(s){
+  var map = { "一": "1", "二": "2", "三": "3", "四": "4", "五": "5", "六": "6", "七": "7", "八": "8", "九": "9" };
+  /* 空白・区切り・ハイフンと、住所の構造語（丁目・番・地・号）を除いて
+     比較する。「44-3」と「44番3号」のような表記違いも同一とみなす */
+  return String(s || "").replace(/[\s　,、・:：〒\-－―–—]/g, "").replace(/[丁目番地号]/g, "")
+    .replace(/[一二三四五六七八九]/g, function(c){ return map[c]; });
+}
+/* a と b が実質同じ文字列か（正規化後の一致、または一方が他方を含む） */
+function sameTextLoose(a, b){
+  var na = normCmpText(a), nb = normCmpText(b);
+  if(!na || !nb) return false;
+  if(na === nb) return true;
+  return (na.length >= 4 && nb.indexOf(na) >= 0) || (nb.length >= 4 && na.indexOf(nb) >= 0);
+}
+/* display_name のうち、タイトルと重ならない部分だけを返す。
+   候補行のサブ行は「タイトルに無い追加情報」だけにするためのもの */
+function addrExtraInfo(title, displayName){
+  if(!displayName) return "";
+  var nt = normCmpText(title);
+  var rest = [];
+  String(displayName).split(/[,、]/).forEach(function(seg){
+    var s = seg.trim(); if(!s) return;
+    if(s === "日本" || s === "Japan") return;
+    var ns = normCmpText(s);
+    if(!ns) return;
+    if(nt && (nt.indexOf(ns) >= 0 || ns.indexOf(nt) >= 0)) return; /* タイトルと重なる部分は出さない */
+    if(/^\d{3}-\d{4}$/.test(s)) s = "〒" + s; /* 郵便番号は記号を補って出す */
+    rest.push(s);
+  });
+  return rest.join("、");
+}
 /* 地図タップ・店検索で選んだ地点は、スロットには地名ではなく住所で表示する。
    計算には従来どおり最寄りの登録地点を使う。 */
 function pickSlotPoint(lat, lng, addrText, fallbackLabel){
@@ -8017,7 +8344,10 @@ function setMapPickPoint(lat, lng){
       var nm = (d && d.name) ? d.name : (addr || "地点");
       mapPick.name = nm; mapPick.addr = addr;
       $("mpName").textContent = nm;
-      $("mpAddr").textContent = addr;
+      /* 見出しと住所が実質同じなら住所のサブ表示を畳む（地点カードと同じ整理） */
+      var mpA = $("mpAddr");
+      mpA.textContent = addr;
+      mpA.style.display = (addr && nm && normCmpText(nm) === normCmpText(addr)) ? "none" : "";
     })
     .catch(function(){});
 }
@@ -8194,7 +8524,8 @@ function dlgSearch(){
         var row = document.createElement("div"); row.className = "dlg-srow";
         var b = document.createElement("button"); b.type = "button"; b.className = "dlg-item";
         b.textContent = nm;
-        var sp = document.createElement("span"); sp.textContent = it.display_name || "";
+        /* サブ行はタイトル（店名）と重ならない追加情報だけにする */
+        var sp = document.createElement("span"); sp.textContent = addrExtraInfo(nm, it.display_name);
         b.appendChild(sp);
         b.addEventListener("click", function(){
           openDlgCandidate(parseFloat(it.lat), parseFloat(it.lon), nm, shortAddress(it.address, it.display_name), "search");
@@ -8281,7 +8612,7 @@ function dlgUnifiedSearch(){
         (list || []).forEach(function(it){
           var nm = it.name || (it.display_name || "").split(",")[0];
           var lat = parseFloat(it.lat), lng = parseFloat(it.lon);
-          rows.push(uniMakeRow(nm, it.display_name || "", "スポット", function(){
+          rows.push(uniMakeRow(nm, addrExtraInfo(nm, it.display_name), "スポット", function(){
             openDlgCandidate(lat, lng, nm, shortAddress(it.address, it.display_name), "search");
           }, function(addBtn){
             addMyPlace(nm, lat, lng);
@@ -8331,7 +8662,9 @@ function dlgUnifiedSearch(){
         var lat = parseFloat(it.lat), lng = parseFloat(it.lon);
         var addrText = shortAddress(it.address, it.display_name) || pp.canonical;
         var label = pp.bldg ? (pp.bldg + "（" + addrText + "）") : addrText;
-        return uniMakeRow(addrText + (pp.bldg ? "　" + pp.bldg : ""), addrPrecision(it) + " ・ " + (it.display_name || ""), "住所", function(){
+        /* サブ行は精度＋タイトルと重ならない追加情報だけ（住所の繰り返しは出さない） */
+        var extra = addrExtraInfo(addrText, it.display_name);
+        return uniMakeRow(addrText + (pp.bldg ? "　" + pp.bldg : ""), addrPrecision(it) + (extra ? " ・ " + extra : ""), "住所", function(){
           openDlgCandidate(lat, lng, label, addrText, "search");
         }, function(addBtn){
           addMyPlace(label, lat, lng);
@@ -8341,6 +8674,14 @@ function dlgUnifiedSearch(){
         });
       });
       finish(rows);
+      /* 「住所として読み取り」が最上位候補と実質同じ住所なら、二重表示に
+         なるので畳む（曖昧さの注記があるときは追加情報として残す） */
+      if(merged.length && !addrAmbNote(pp)){
+        var topAddr = shortAddress(merged[0].address, merged[0].display_name) || pp.canonical;
+        if(sameTextLoose(addrInterpretText(pp), topAddr)){
+          var ub = $("uniParse"); if(ub){ ub.classList.add("hidden"); ub.innerHTML = ""; }
+        }
+      }
     }).catch(fail);
   }
   if(p.zip && !p.city){
@@ -8572,7 +8913,9 @@ function renderAddrResults(list, p){
     var b = document.createElement("button"); b.type = "button"; b.className = "dlg-item";
     b.textContent = addrText + (p.bldg ? "　" + p.bldg : "");
     var sp = document.createElement("span");
-    sp.textContent = addrPrecision(it) + " ・ " + (it.display_name || "");
+    /* サブ行は精度＋タイトルと重ならない追加情報だけ（住所の繰り返しは出さない） */
+    var extra = addrExtraInfo(addrText, it.display_name);
+    sp.textContent = addrPrecision(it) + (extra ? " ・ " + extra : "");
     b.appendChild(sp);
     b.addEventListener("click", function(){
       openDlgCandidate(lat, lng, label, addrText, "address");
@@ -8589,6 +8932,14 @@ function renderAddrResults(list, p){
     row.appendChild(b); row.appendChild(add);
     box.appendChild(row);
   });
+  /* 「読み取り」が最上位候補と実質同じ住所なら、二重表示になるので畳む
+     （曖昧さの注記があるときは追加情報として残す） */
+  if(list.length && !addrAmbNote(p)){
+    var topAddr2 = shortAddress(list[0].address, list[0].display_name) || p.canonical;
+    if(sameTextLoose(addrInterpretText(p), topAddr2)){
+      var ab = $("addrParse"); if(ab){ ab.classList.add("hidden"); ab.innerHTML = ""; }
+    }
+  }
 }
 var addrSeq = 0, addrTimer = null;
 function dlgAddrSearch(){
@@ -8694,7 +9045,13 @@ function openDlgCandidate(lat, lng, name, addrText, fromMode){
   setDlgMode("search"); /* hideDlgConfirm が走るため、候補の保持はこの後に行う */
   dlgConfirm = { lat: lat, lng: lng, name: name || "", addr: addrText || "" };
   $("dlgConfirmName").textContent = dlgConfirm.name || dlgConfirm.addr || "地点";
-  $("dlgConfirmAddr").textContent = dlgConfirm.addr || "";
+  /* 見出しと住所が実質同じなら、住所のサブ表示は出さない（見出し＋サブ＋
+     名前入力欄で同じ住所が3重に出るのを解消）。名前入力欄に住所が初期値
+     として入るのは、登録名として編集できる機能として残す */
+  var dcAddr = $("dlgConfirmAddr");
+  var dcDup = !!(dlgConfirm.addr && dlgConfirm.name && sameTextLoose(dlgConfirm.name, dlgConfirm.addr));
+  dcAddr.textContent = dcDup ? "" : (dlgConfirm.addr || "");
+  dcAddr.style.display = (dcDup || !dlgConfirm.addr) ? "none" : "";
   $("dlgConfirmPlaceName").value = dlgConfirm.name || "";
   $("dlgConfirmBar").classList.remove("hidden");
   var bar = $("dlgConfirmBar");
@@ -8733,6 +9090,7 @@ $("btnDlgConfirmBack").addEventListener("click", function(){
     var ic = r.ics[Number(icSel.value || 0)];
     var t = { kind: dlgTarget.kind, index: dlgTarget.index };
     pickSlotNode(nearestNode(ic[1], ic[2]).node);
+    noteIcPicked([ic[1], ic[2]]); /* 一般道側の処理で料金所点へ置換できるよう記録する */
     if(t.kind === "to") destCoord = [ic[1], ic[2]];
     else if(t.kind === "from") fromCoord = [ic[1], ic[2]];
     else viaCoords[t.index] = [ic[1], ic[2]];
@@ -9219,7 +9577,7 @@ function detectIcPairFromGeom(cand, plan){
       var nIx = cur + stepIx;
       if(nIx < 0 || nIx >= road.ics.length) break;
       var np = projOf(road, nIx);
-      if(!np || np.d > 900) break;
+      if(!np || np.d > 600) break; /* 形状が近くを通らないICまでペアを広げない（遠くのICへずれる検出の防止） */
       var gLen = Math.abs(np.chain - curChain);
       var iLen = icLineLen(road, cur, nIx);
       if(iLen > 0){ var ratio = gLen / iLen; if(ratio < 0.7 || ratio > 1.5) break; }
@@ -9257,10 +9615,11 @@ function detectIcPairFromGeom(cand, plan){
      pickSide 系は「形状が通るICが無い」とき既定ペアへ倒れるため、
      そのままだと形状が推奨ペアを通らない候補（北側を大きく回る
      別ルート等）にも推奨ペアの料金とピンが付いてしまう。閾値は
-     walkSide の通過判定（900m）に合わせる。呼び出し側は null の
+     形状が本線を辿る場合の実測ずれより十分大きく、かつ並行する
+     別路線のICを拾わない 700m に置く。呼び出し側は null の
      とき料金を「料金不明」に倒し、IC表示自体を出さない */
   var ve = projOf(plan.entryRoad, e), vx = projOf(plan.exitRoad, x);
-  if(!ve || ve.d > 900 || !vx || vx.d > 900) return null;
+  if(!ve || ve.d > 700 || !vx || vx.d > 700) return null;
   return { e: e, x: x };
 }
 
@@ -10093,8 +10452,32 @@ function reoptimizeIcRoute(cand, plan, seq){
     else if(pX && pv && pv.chain > pX.chain + 200) postVias.push(v);
     else midVias.push(v);
   });
+  /* 有料区間の内側に落ちた経由地のうち、プランの路線上のICそのもの
+     （首都高のICを経由地にした場合など）は、有料区間の一部として
+     扱う。従来は一律に「降りた後の一般道区間」へ回していたため、
+     経由地のICを通らない順序の再計算になっていた。それ以外の
+     経由地（一般道上の地点）は従来どおり降り口以降の区間へ回す */
+  var tollMidVias = [], surfMidVias = [];
+  midVias.forEach(function(v){
+    var onPlan = false;
+    plan.chain.segs.forEach(function(sg){
+      sg.road.ics.forEach(function(ic){
+        if(ic[1] != null && haversine(v[0], v[1], ic[1], ic[2]) <= 150) onPlan = true;
+      });
+    });
+    if(onPlan) tollMidVias.push(v); else surfMidVias.push(v);
+  });
   var entryPt = [eIc[1], eIc[2]], exitPt = [xIc[1], xIc[2]];
   var segBPts = tollSegPoints(plan, e, x);
+  if(tollMidVias.length){
+    /* 有料区間内の経由地ICを、旧形状への射影順に有料区間の経由点列へ
+       挟む（入口ICと出口ICの間に来るよう並べる） */
+    tollMidVias.sort(function(a, b){
+      var pa2 = projOnGeom(geom, a), pb2 = projOnGeom(geom, b);
+      return (pa2 ? pa2.chain : 0) - (pb2 ? pb2.chain : 0);
+    });
+    segBPts = [segBPts[0]].concat(tollMidVias, segBPts.slice(1));
+  }
   if(segBPts.length < 2){ setIcReoptStatus(cand, ""); return; }
   /* 表示・保存用の全経由点列（従来どおり間のICも含む） */
   var icPts = icChainPoints(plan, e, x);
@@ -10118,7 +10501,7 @@ function reoptimizeIcRoute(cand, plan, seq){
   Promise.all([
     fetchSurfaceToIc([origin].concat(preVias), entryPt, eGate, inDeg),
     fetchTollSegDeep(plan, e, x, segBPts, plan.alongKm(e, x), geom, route),
-    fetchSurfaceFromIc(xGate, exitPt, midVias.concat(postVias, [dest]), outDeg)
+    fetchSurfaceFromIc(xGate, exitPt, surfMidVias.concat(postVias, [dest]), outDeg)
   ]).then(function(rs){
     if(seq !== cand._icReoptSeq) return; /* 後からの変更が優先。古い結果は捨てる */
     if(!pendingCandidates || pendingCandidates.indexOf(cand) < 0) return;
@@ -10188,22 +10571,31 @@ function renderCandidates(){
     var ck = document.createElement("span"); ck.className = "ck"; ck.textContent = "✓";
     var cl = document.createElement("span"); cl.className = "cl"; cl.textContent = c.label;
     var mid = document.createElement("span"); mid.className = "cmid";
+    /* 文節ごとに .seg（折り返し不可の単位）で組み、改行は文節の境目でだけ
+       起こるようにする */
+    function segLine(el, parts){
+      parts.forEach(function(p, pi){
+        if(pi > 0) el.appendChild(document.createTextNode(" ・ "));
+        var s = document.createElement("span"); s.className = "seg"; s.textContent = p;
+        el.appendChild(s);
+      });
+    }
     var cm = document.createElement("span"); cm.className = "cm";
-    cm.textContent = "約" + c.res.km.toFixed(0) + "km ・ 約" + candMin(c) + "分 ・ 到着 " + arrivalClock(candMin(c)) + "頃";
+    segLine(cm, ["約" + c.res.km.toFixed(0) + "km", "約" + candMin(c) + "分", "到着 " + arrivalClock(candMin(c)) + "頃"]);
     mid.appendChild(cm);
     /* 推奨との差分（料金のプラスマイナスと到着時間の差）を出す */
     if(recBase && c.res){
       var cd = document.createElement("span"); cd.className = "cd";
       if(c === recBase){
-        cd.textContent = "推奨ルート";
+        segLine(cd, ["推奨ルート"]);
       } else if(c.tollUnknown || recBase.tollUnknown){
         /* 料金不明の候補（および推奨が料金不明の場合）は、借り物の
            料金で差分を出さず時間差だけを表示する */
-        cd.textContent = fmtMinDelta(candMin(c) - candMin(recBase));
+        segLine(cd, [fmtMinDelta(candMin(c) - candMin(recBase))]);
       } else {
         var recT = (recBase.icToll != null) ? recBase.icToll : recBase.res.toll;
         var myT = (c.icToll != null) ? c.icToll : c.res.toll;
-        cd.textContent = fmtTollDelta(myT - recT) + " ・ " + fmtMinDelta(candMin(c) - candMin(recBase));
+        segLine(cd, [fmtTollDelta(myT - recT), fmtMinDelta(candMin(c) - candMin(recBase))]);
       }
       mid.appendChild(cd);
     }
@@ -10214,7 +10606,7 @@ function renderCandidates(){
     else if(c.trafficNote) notes.push(c.trafficNote);
     if(notes.length){
       var cn = document.createElement("span"); cn.className = "cn";
-      cn.textContent = notes.join(" ・ ");
+      segLine(cn, notes);
       mid.appendChild(cn);
     }
     var cp = document.createElement("span"); cp.className = "cp";
@@ -10668,6 +11060,122 @@ function buildCandidates(from, vias, to, fromLabel){
   });
   return out;
 }
+/* 候補リストの最終整形（proceedDecide と、ピン設置時の簡易候補選択で共用）：
+   IC・料金と形状の整合ゲート、推奨の付け替え、距離優先の不変条件を適用する */
+function finalizeCandidateList(cands){
+  /* IC・料金と形状の整合ゲート：料金が付いている候補は、実形状から
+     乗り口・降り口ICのペアを検出できた場合だけ、その料金とIC表示を
+     採用する。検出できない候補（形状が推奨ペアを通らない大きく回る
+     別ルート等）に、料金グラフから借りた推奨ペアの料金・ピンを付け
+     ると、地図の線と無関係なIC表示（線から外れた帯・通っていない
+     ICのピン）になるため、「有料区間あり（料金不明）」に倒して
+     ICパネル・ピンも出さない。品質ゲート（時間・距離・重なり）を
+     通っていても、料金・IC表示と形状が一致しない候補はここで
+     「破綻」として表示前に止める */
+  cands.forEach(function(c){
+    if(c.kind === "custom" || !c.res || !(c.res.toll > 0) || c.tollUnknown) return;
+    if(!c.route || !c.route.geomPts || c.route.geomPts.length < 2) return;
+    var plan = null;
+    try{ plan = tollPlanFor(c.res); }catch(err){ plan = null; }
+    if(!plan) return;
+    var sel = detectIcPairFromGeom(c, plan);
+    if(sel){ c.icPlan = plan; if(!c.icSel) c.icSel = sel; }
+    else {
+      c._icNone = true;
+      c.tollUnknown = true;
+      c.priceText = "有料区間あり";
+      if(c.fare){ c.fare.toll = 0; c.fare.gates = [["有料道路を含む（料金不明）", 0]]; }
+      c.baseGates = [["有料道路を含む（料金不明）", 0]];
+    }
+  });
+  /* 推奨の整合性チェック：全候補を同じ物差し（時間×4＋料金×0.005）で
+     評価し、最も良い候補に「推奨」を付け替える。料金の重みは僅差の
+     ときだけ効く程度に抑える（旧×0.6では¥1,840が約276分相当になり、
+     有料候補がどれだけ速くても推奨になれず、長距離でも推奨が一般道に
+     固定されていた）。グラフ候補だけで推奨を決めると、
+     OSRMの実経路である一般道（無料）の方が推奨より速い、という矛盾が
+     起きるため、出典の違う候補も含めて必ず横並びで比較する。
+     外れた旧推奨は、品質が新推奨に近い場合だけ別ルートとして残す。
+     区間設定のカスタム候補はユーザーの明示設定なので付け替え対象外。 */
+  (function(){
+    function tollOf(c){ return (c.icToll != null) ? c.icToll : (c.res && c.res.toll != null ? c.res.toll : (c.fare ? c.fare.toll : 0)); }
+    function scoreOf(c){ return c.res.min * 4 + tollOf(c) * 0.005; }
+    var rec = null, best = null;
+    cands.forEach(function(c){
+      if(c.kind === "rec") rec = c;
+      if(c.kind === "custom" || !c.res) return;
+      if(!best || scoreOf(c) < scoreOf(best)) best = c;
+    });
+    if(best && best !== rec && (!rec || scoreOf(best) < scoreOf(rec))){
+      var wasOsrm = !!(best.route && best.route.osrmBuilt);
+      if(rec){
+        var hasAlt = cands.some(function(c){ return c.kind === "alt"; });
+        /* 別ルートは「推奨と少しだけ違う、もう一つの推奨」という整理なので、
+           外れた旧推奨を別ルートとして残すのは、新推奨と品質が近い
+           （スコア差が新推奨の25%＋10分相当以内）ときだけ。それ以外は
+           おかしな別ルートを見せないよう、候補から外す。 */
+        var altWorthy = scoreOf(rec) <= scoreOf(best) * 1.25 + 40;
+        if(hasAlt || !altWorthy) cands.splice(cands.indexOf(rec), 1);
+        else { rec.kind = "alt"; rec.label = "別ルート"; rec.driveNote = "推奨と一部違う道"; }
+      }
+      best.kind = "rec"; best.label = "推奨";
+      if(!wasOsrm || !best.driveNote) best.driveNote = tollOf(best) > 0 ? "高速・有料道路中心" : "主要な一般道中心";
+      rec = best;
+    }
+    /* 推奨を先頭へ並べ替える（カスタム候補がある場合はその次）。
+       初期選択は先頭なので、開いた時点で推奨が選ばれた状態になる。 */
+    if(rec && cands.indexOf(rec) > 0){
+      cands.splice(cands.indexOf(rec), 1);
+      var ins = (cands.length && cands[0].kind === "custom") ? 1 : 0;
+      cands.splice(ins, 0, rec);
+    }
+  })();
+  /* 距離優先の最終不変条件：距離優先は、全候補（推奨自身・有料を
+     含む）の中で実距離が最小の経路でなければならない。出典ごとに
+     「最短」の物差しが違う（TomTomの routeType=shortest とOSRM
+     代替案の最短では道路の選び方が違う）ため、方針別の生成だけでは
+     「推奨47kmより長い49kmが距離優先」「有料と完全同一の複製が
+     距離優先」という表示になっていた。表示直前に横並びで検査し、
+     距離優先が最短でなければ、最短候補の経路を共有して距離優先を
+     作り直す（グラフ候補側の共有と同じ考え方）。距離優先が無い
+     場合は、最短候補の共有として補う。有料と同一形状になるのは、
+     その形状が本当に最短のときに限られる */
+  (function(){
+    var pool = cands.filter(function(c){ return c.kind !== "custom" && c.res && c.res.km > 0; });
+    if(!pool.length) return;
+    var minKm = Infinity, holder = null;
+    pool.forEach(function(c){ if(c.res.km < minKm){ minKm = c.res.km; holder = c; } });
+    if(!holder) return;
+    var di = -1;
+    cands.forEach(function(c, i){ if(c.kind === "dist") di = i; });
+    function distClone(src){
+      var nc = {}, k;
+      for(k in src) nc[k] = src[k];
+      var rs = {}; for(k in src.res) rs[k] = src.res[k];
+      var rt = {}; for(k in src.route) rt[k] = src.route[k];
+      nc.res = rs; nc.route = rt;
+      nc.fare = { toll: src.fare ? src.fare.toll : src.res.toll,
+        gates: src.fare ? src.fare.gates : src.route.gates,
+        label: (src.route.fromLabel || src.route.from) + " → " + src.route.to + "（距離優先）" };
+      nc.kind = "dist"; nc.label = "距離優先"; nc.driveNote = "一番短い距離";
+      /* IC選択の状態は共有元のものを引き継がず、距離優先自身として
+         検出し直す（形状は同じなので検出結果も同じになる） */
+      delete nc.icSel; delete nc.icPlan; delete nc.icToll; delete nc._icNone;
+      delete nc._icEls; delete nc._icGeomPair; delete nc._icHomePair;
+      delete nc._icBaseSnap; delete nc._icOpt; delete nc._icReoptTimer; delete nc._icReoptSeq;
+      return nc;
+    }
+    if(di >= 0){
+      if(cands[di] !== holder && cands[di].res.km > minKm + 0.05)
+        cands[di] = distClone(holder);
+    } else if(pool.length > 1){
+      var ai = -1;
+      cands.forEach(function(c, i){ if(c.kind === "alt") ai = i; });
+      if(ai >= 0) cands.splice(ai, 0, distClone(holder));
+      else cands.push(distClone(holder));
+    }
+  })();
+}
 function proceedDecide(from){
   /* 出発地が変更されている場合はGPSではなくその地点を起点にする（変更時のみ） */
   var customOrigin = !!(fromCoord || fromNode);
@@ -10717,119 +11225,7 @@ function proceedDecide(from){
       note.textContent = "ルートを取得できませんでした。通信状態を確認してください。";
       return;
     }
-    function finishCands(){
-    /* IC・料金と形状の整合ゲート：料金が付いている候補は、実形状から
-       乗り口・降り口ICのペアを検出できた場合だけ、その料金とIC表示を
-       採用する。検出できない候補（形状が推奨ペアを通らない大きく回る
-       別ルート等）に、料金グラフから借りた推奨ペアの料金・ピンを付け
-       ると、地図の線と無関係なIC表示（線から外れた帯・通っていない
-       ICのピン）になるため、「有料区間あり（料金不明）」に倒して
-       ICパネル・ピンも出さない。品質ゲート（時間・距離・重なり）を
-       通っていても、料金・IC表示と形状が一致しない候補はここで
-       「破綻」として表示前に止める */
-    cands.forEach(function(c){
-      if(c.kind === "custom" || !c.res || !(c.res.toll > 0) || c.tollUnknown) return;
-      if(!c.route || !c.route.geomPts || c.route.geomPts.length < 2) return;
-      var plan = null;
-      try{ plan = tollPlanFor(c.res); }catch(err){ plan = null; }
-      if(!plan) return;
-      var sel = detectIcPairFromGeom(c, plan);
-      if(sel){ c.icPlan = plan; if(!c.icSel) c.icSel = sel; }
-      else {
-        c._icNone = true;
-        c.tollUnknown = true;
-        c.priceText = "有料区間あり";
-        if(c.fare){ c.fare.toll = 0; c.fare.gates = [["有料道路を含む（料金不明）", 0]]; }
-        c.baseGates = [["有料道路を含む（料金不明）", 0]];
-      }
-    });
-    /* 推奨の整合性チェック：全候補を同じ物差し（時間×4＋料金×0.005）で
-       評価し、最も良い候補に「推奨」を付け替える。料金の重みは僅差の
-       ときだけ効く程度に抑える（旧×0.6では¥1,840が約276分相当になり、
-       有料候補がどれだけ速くても推奨になれず、長距離でも推奨が一般道に
-       固定されていた）。グラフ候補だけで推奨を決めると、
-       OSRMの実経路である一般道（無料）の方が推奨より速い、という矛盾が
-       起きるため、出典の違う候補も含めて必ず横並びで比較する。
-       外れた旧推奨は、品質が新推奨に近い場合だけ別ルートとして残す。
-       区間設定のカスタム候補はユーザーの明示設定なので付け替え対象外。 */
-    (function(){
-      function tollOf(c){ return (c.icToll != null) ? c.icToll : (c.res && c.res.toll != null ? c.res.toll : (c.fare ? c.fare.toll : 0)); }
-      function scoreOf(c){ return c.res.min * 4 + tollOf(c) * 0.005; }
-      var rec = null, best = null;
-      cands.forEach(function(c){
-        if(c.kind === "rec") rec = c;
-        if(c.kind === "custom" || !c.res) return;
-        if(!best || scoreOf(c) < scoreOf(best)) best = c;
-      });
-      if(best && best !== rec && (!rec || scoreOf(best) < scoreOf(rec))){
-        var wasOsrm = !!(best.route && best.route.osrmBuilt);
-        if(rec){
-          var hasAlt = cands.some(function(c){ return c.kind === "alt"; });
-          /* 別ルートは「推奨と少しだけ違う、もう一つの推奨」という整理なので、
-             外れた旧推奨を別ルートとして残すのは、新推奨と品質が近い
-             （スコア差が新推奨の25%＋10分相当以内）ときだけ。それ以外は
-             おかしな別ルートを見せないよう、候補から外す。 */
-          var altWorthy = scoreOf(rec) <= scoreOf(best) * 1.25 + 40;
-          if(hasAlt || !altWorthy) cands.splice(cands.indexOf(rec), 1);
-          else { rec.kind = "alt"; rec.label = "別ルート"; rec.driveNote = "推奨と一部違う道"; }
-        }
-        best.kind = "rec"; best.label = "推奨";
-        if(!wasOsrm || !best.driveNote) best.driveNote = tollOf(best) > 0 ? "高速・有料道路中心" : "主要な一般道中心";
-        rec = best;
-      }
-      /* 推奨を先頭へ並べ替える（カスタム候補がある場合はその次）。
-         初期選択は先頭なので、開いた時点で推奨が選ばれた状態になる。 */
-      if(rec && cands.indexOf(rec) > 0){
-        cands.splice(cands.indexOf(rec), 1);
-        var ins = (cands.length && cands[0].kind === "custom") ? 1 : 0;
-        cands.splice(ins, 0, rec);
-      }
-    })();
-    /* 距離優先の最終不変条件：距離優先は、全候補（推奨自身・有料を
-       含む）の中で実距離が最小の経路でなければならない。出典ごとに
-       「最短」の物差しが違う（TomTomの routeType=shortest とOSRM
-       代替案の最短では道路の選び方が違う）ため、方針別の生成だけでは
-       「推奨47kmより長い49kmが距離優先」「有料と完全同一の複製が
-       距離優先」という表示になっていた。表示直前に横並びで検査し、
-       距離優先が最短でなければ、最短候補の経路を共有して距離優先を
-       作り直す（グラフ候補側の共有と同じ考え方）。距離優先が無い
-       場合は、最短候補の共有として補う。有料と同一形状になるのは、
-       その形状が本当に最短のときに限られる */
-    (function(){
-      var pool = cands.filter(function(c){ return c.kind !== "custom" && c.res && c.res.km > 0; });
-      if(!pool.length) return;
-      var minKm = Infinity, holder = null;
-      pool.forEach(function(c){ if(c.res.km < minKm){ minKm = c.res.km; holder = c; } });
-      if(!holder) return;
-      var di = -1;
-      cands.forEach(function(c, i){ if(c.kind === "dist") di = i; });
-      function distClone(src){
-        var nc = {}, k;
-        for(k in src) nc[k] = src[k];
-        var rs = {}; for(k in src.res) rs[k] = src.res[k];
-        var rt = {}; for(k in src.route) rt[k] = src.route[k];
-        nc.res = rs; nc.route = rt;
-        nc.fare = { toll: src.fare ? src.fare.toll : src.res.toll,
-          gates: src.fare ? src.fare.gates : src.route.gates,
-          label: (src.route.fromLabel || src.route.from) + " → " + src.route.to + "（距離優先）" };
-        nc.kind = "dist"; nc.label = "距離優先"; nc.driveNote = "一番短い距離";
-        /* IC選択の状態は共有元のものを引き継がず、距離優先自身として
-           検出し直す（形状は同じなので検出結果も同じになる） */
-        delete nc.icSel; delete nc.icPlan; delete nc.icToll; delete nc._icNone;
-        delete nc._icEls; delete nc._icGeomPair; delete nc._icHomePair;
-        delete nc._icBaseSnap; delete nc._icOpt; delete nc._icReoptTimer; delete nc._icReoptSeq;
-        return nc;
-      }
-      if(di >= 0){
-        if(cands[di] !== holder && cands[di].res.km > minKm + 0.05)
-          cands[di] = distClone(holder);
-      } else if(pool.length > 1){
-        var ai = -1;
-        cands.forEach(function(c, i){ if(c.kind === "alt") ai = i; });
-        if(ai >= 0) cands.splice(ai, 0, distClone(holder));
-        else cands.push(distClone(holder));
-      }
-    })();
+    finalizeCandidateList(cands);
     note.classList.add("hidden");
     pendingCandidates = cands;
     selectedCand = 0;
@@ -10839,8 +11235,6 @@ function proceedDecide(from){
     pendingMeta = { km: cands[0].res.km, min: candMin(cands[0]) };
     showPreview();
     fetchCandidateEtas(); /* TomTomキーがあれば候補ごとに渋滞込みETAを取り直す */
-    }
-    finishCands();
   });
 }
 $("btnDecide").addEventListener("click", function(){
@@ -11703,6 +12097,9 @@ syncDestDisplay();
      ボタンからの従来フローは妨げない。
      経由地ピッカーや「地図から選ぶ」モードは対象外（従来どおり）。 */
   var pinLayer = null, pinSeq = 0, pinKey = null, pinWaitingGps = false;
+  /* v57: ピン設置時点の全候補（簡易選択用）。候補が揃うまでは従来の
+     一般道プレビューだけを出し、揃ったらチップで切り替え可能にする */
+  var pinCands = null, pinCandSel = -1;
   var pinGpsRequested = false, pinGpsFailed = false, pinGpsLastTry = 0;
   /* 現在地が未取得のままピンが刺さったときの取得キック。
      従来は「取得中…」と表示するだけで、GPS取得を開始する処理が
@@ -11746,8 +12143,16 @@ syncDestDisplay();
   function setPinRouteSum(text){
     var el = $id("htbRouteSum"); if(el) el.textContent = text;
   }
+  function resetPinCands(){
+    pinCands = null; pinCandSel = -1;
+    var wrap = $id("htbCands"); if(wrap) wrap.classList.add("hidden");
+    var chips = $id("htbCandChips"); if(chips) chips.innerHTML = "";
+    var det = $id("htbCandDetail"); if(det) det.innerHTML = "";
+    var tag = $id("htbRouteTag"); if(tag) tag.textContent = "一般道";
+  }
   function clearPinPreview(){
     pinSeq++; pinWaitingGps = false; pinKey = null;
+    resetPinCands();
     if(pinLayer && homeMap){ try{ homeMap.removeLayer(pinLayer); }catch(e){} }
     pinLayer = null;
   }
@@ -11779,6 +12184,7 @@ syncDestDisplay();
     var pin = [homeTap[0], homeTap[1]];
     var key = pin[0].toFixed(5) + "," + pin[1].toFixed(5);
     pinKey = key;
+    resetPinCands(); /* 前のピンの候補チップを残さない */
     var org = pinOrigin();
     if(!org){
       /* 出発地＝現在地でGPS未取得：この場で取得を開始し、位置が取れ次第
@@ -11796,9 +12202,14 @@ syncDestDisplay();
     pinWaitingGps = false;
     setPinRouteSum("一般道ルートを計算中…");
     var seq = ++pinSeq;
+    /* 全候補（推奨・一般道・距離優先・有料・別ルート）も並行して計算し、
+       揃ったらカード内のチップで切り替えられるようにする（簡易選択）。
+       従来フロー（目的地に設定→シート→候補選択）はそのまま残る */
+    startPinCandidates(org, pin, key, seq);
     buildOsrmRouteForCoords(org.label, "ピン地点", [org.coord, pin], "pin", function(route){
       if(seq !== pinSeq) return; /* その間にピン移動／カードを閉じた */
       if(!homeTap || (homeTap[0].toFixed(5) + "," + homeTap[1].toFixed(5)) !== key) return;
+      if(pinCands) return; /* 全候補が先に揃っていれば、そちらの表示を優先する */
       if(!route || !route.geomPts || route.geomPts.length < 2 || route.toll > 0){
         /* 一般道ルートが取れなければ線は出さず、カードはそのまま使える */
         setPinRouteSum("一般道ルートを取得できませんでした");
@@ -11810,6 +12221,102 @@ syncDestDisplay();
       setPinRouteSum("約" + (Math.round((route.km || 0) * 10) / 10).toFixed(1) + " km ・ " + tstr + " ・ 料金 0円");
     });
   }
+
+  /* ===== v57: ピン設置時点の全候補計算とチップ切り替え =====
+     候補の組み立てはルート選択画面と同じ経路（グラフ候補で料金・ICの
+     材料を取り、形状はAPI候補。最終整形も finalizeCandidateList で共用）
+     を使うため、「そのODで提示可能なもの」がそのまま出る。経由地は
+     ピンプレビューの対象外（従来どおり出発地→ピンの直行で計算する）。
+     取れなかった場合は静かに諦め、一般道プレビューの表示を維持する */
+  function startPinCandidates(org, pin, key, seq){
+    var fromNodeName = null, destNodeName = null;
+    try{
+      fromNodeName = nearestNode(org.coord[0], org.coord[1]).node;
+      destNodeName = nearestNode(pin[0], pin[1]).node;
+    }catch(e){}
+    if(!fromNodeName || !destNodeName) return;
+    var byKind = {};
+    try{
+      buildCandidates(fromNodeName, [], destNodeName, org.label).forEach(function(c){
+        if(c.kind !== "custom" && !byKind[c.kind]) byKind[c.kind] = c;
+      });
+    }catch(e){}
+    assembleApiCandidates([org.coord, pin], byKind, org.label, "ピン地点", null, function(cands){
+      if(seq !== pinSeq) return; /* その間にピン移動／カードを閉じた */
+      if(!homeTap || (homeTap[0].toFixed(5) + "," + homeTap[1].toFixed(5)) !== key) return;
+      cands = (cands || []).filter(apiCandidateSane);
+      if(!cands.length) return;
+      finalizeCandidateList(cands);
+      pinCands = cands;
+      /* 既定は一般道（従来のピンプレビューと同じ）。無ければ先頭 */
+      var def = 0;
+      cands.forEach(function(c, i){ if(c.kind === "surface") def = i; });
+      renderPinCandChips();
+      selectPinCand(def);
+    });
+  }
+  function renderPinCandChips(){
+    var wrap = $id("htbCands"), chips = $id("htbCandChips");
+    if(!wrap || !chips) return;
+    chips.innerHTML = "";
+    if(!pinCands || !pinCands.length){ wrap.classList.add("hidden"); return; }
+    wrap.classList.remove("hidden");
+    chips.style.display = (pinCands.length >= 2) ? "" : "none";
+    if(pinCands.length < 2) return;
+    pinCands.forEach(function(c, i){
+      var b = document.createElement("button"); b.type = "button"; b.className = "htb-chip";
+      b.textContent = c.label;
+      b.setAttribute("aria-pressed", "false");
+      b.addEventListener("click", function(){ selectPinCand(i); });
+      chips.appendChild(b);
+    });
+  }
+  function pinCandSummary(c){
+    var mins = Math.max(1, Math.round(candMin(c)));
+    var tstr = mins >= 60 ? ("約" + Math.floor(mins / 60) + "時間" + (mins % 60 ? (mins % 60) + "分" : "")) : ("約" + mins + "分");
+    var tollTxt = c.tollUnknown ? "有料区間あり" : ((c.res && c.res.toll > 0) ? ("料金 " + yen(c.res.toll)) : "料金 0円");
+    return "約" + (Math.round(((c.res && c.res.km) || 0) * 10) / 10).toFixed(1) + " km ・ " + tstr + " ・ 到着 " + arrivalClock(mins) + "頃 ・ " + tollTxt;
+  }
+  function renderPinCandDetail(c){
+    var box = $id("htbCandDetail"); if(!box) return;
+    box.innerHTML = "";
+    box.scrollTop = 0;
+    var lines = [];
+    if(c.driveNote) lines.push(c.driveNote);
+    if(c.trafficNote) lines.push(c.trafficNote);
+    if(c.fare && c.fare.gates){
+      var roads = [];
+      c.fare.gates.forEach(function(g){ if(g[1] > 0 && roads.indexOf(g[0]) < 0) roads.push(g[0]); });
+      if(roads.length) lines.push("有料区間：" + roads.join("・"));
+    }
+    if(c.tollUnknown) lines.push("料金は目安です（有料区間あり）");
+    lines.forEach(function(t){
+      var d = document.createElement("div"); d.className = "htb-cd-line"; d.textContent = t;
+      box.appendChild(d);
+    });
+  }
+  function selectPinCand(i){
+    if(!pinCands || !pinCands[i]) return;
+    pinCandSel = i;
+    var c = pinCands[i];
+    var chips = $id("htbCandChips");
+    if(chips){
+      Array.prototype.forEach.call(chips.children, function(ch, j){
+        ch.setAttribute("aria-pressed", String(j === i));
+      });
+    }
+    var tag = $id("htbRouteTag"); if(tag) tag.textContent = c.label;
+    setPinRouteSum(pinCandSummary(c));
+    if(c.route && c.route.geomPts && c.route.geomPts.length > 1) drawPinRoute(c.route);
+    renderPinCandDetail(c);
+  }
+  /* 候補チップ行の横スクロール詰まり対策（カテゴリチップ行と同じ） */
+  (function(){
+    var row = $id("htbCandChips"); if(!row) return;
+    ["touchstart", "touchmove", "touchend", "touchcancel"].forEach(function(ev){
+      row.addEventListener(ev, function(e){ e.stopPropagation(); }, { passive: true });
+    });
+  })();
 
   /* ピッカーや地図タップで地点が確定したら、従来どおりルート設定
      シートを開く（中間画面は挟まない） */
@@ -11825,11 +12332,139 @@ syncDestDisplay();
     var m = $id("htbMsg"); if(!m) return;
     m.textContent = text; m.classList.remove("hidden");
   }
+  /* 地点カードの見出しと住所が実質同じ文字列なら、住所のサブ表示を畳む
+     （見出し＋住所＋名前欄で同じ文言が重なるのを解消。名前欄の初期値は
+     登録名として編集できるよう残す） */
+  function htbAddrDedup(){
+    var nmEl = $id("htbName"), adEl = $id("htbAddr");
+    if(!nmEl || !adEl) return;
+    var nm = nmEl.textContent || "", ad = adEl.textContent || "";
+    var dup = !!(ad && nm && typeof normCmpText === "function" && normCmpText(nm) === normCmpText(ad));
+    adEl.style.display = dup ? "none" : "";
+  }
   function hideHtbMsg(){ var m = $id("htbMsg"); if(m) m.classList.add("hidden"); }
   function onHomeTap(e){
     /* ピッカーの「地図から選ぶ」選択モード中は、タップをそちらへ渡す */
     if(typeof window.__mapPickClick === "function"){ window.__mapPickClick(e.latlng); return; }
     setHomeTap([e.latlng.lat, e.latlng.lng]);
+  }
+  /* ===== v56: ホーム地図のタップ判定とピンチ速度 =====
+     - 単発タップ：指を離してから300msだけ確定を待ち、その間に2回目の
+       タップが来たら単発側（ピン／地点カード／地図から選ぶ）を発火させず
+       ダブルタップとして扱う。ダブルタップはタップ地点を中心に
+       アニメーション付きで1段拡大する。
+     - ピンチ：Leaflet 標準のピンチズームはそのまま使い、ポインタを
+       観測して指間距離の変化速度（ズーム段／秒）を平滑化して保持。
+       2本→1本でスタッシュし、残りの指がほぼ動かず短時間で離れたら
+       startZoomInertia で短い慣性を付ける（中心はピンチ重心の地点）。
+     観測は passive リスナーだけで行い、パン／ピンチ／マーカードラッグ
+     など Leaflet 側の既存ジェスチャーには一切干渉しない。 */
+  function setupHomeTapZoom(map){
+    var mc = map.getContainer();
+    var ptrs = {}, downRec = {};
+    var pendingTap = null, tapTimer = null;
+    var pinch = { active: false, v: 0, lastLog: 0, lastT: 0, cx: 0, cy: 0 };
+    var stash = null;
+    function clearPending(){
+      if(tapTimer){ clearTimeout(tapTimer); tapTimer = null; }
+      pendingTap = null;
+    }
+    function tapLatLng(clientX, clientY){
+      try{
+        var r = mc.getBoundingClientRect();
+        return map.containerPointToLatLng(L.point(clientX - r.left, clientY - r.top));
+      }catch(e){ return null; }
+    }
+    mc.addEventListener("pointerdown", function(e){
+      stopZoomInertia(map);
+      ptrs[e.pointerId] = { x: e.clientX, y: e.clientY };
+      downRec[e.pointerId] = { x: e.clientX, y: e.clientY, t: performance.now(), moved: false };
+      var ids = Object.keys(ptrs);
+      if(ids.length === 2){
+        clearPending(); /* ピンチ開始＝タップではない */
+        stash = null;
+        var a = ptrs[ids[0]], b = ptrs[ids[1]];
+        var d = Math.hypot(a.x - b.x, a.y - b.y);
+        pinch.active = d > 0;
+        pinch.v = 0;
+        pinch.lastLog = d > 0 ? Math.log2(d) : 0;
+        pinch.lastT = performance.now();
+        pinch.cx = (a.x + b.x) / 2; pinch.cy = (a.y + b.y) / 2;
+      }
+    }, { passive: true });
+    mc.addEventListener("pointermove", function(e){
+      var p = ptrs[e.pointerId]; if(!p) return;
+      p.x = e.clientX; p.y = e.clientY;
+      var dr = downRec[e.pointerId];
+      if(dr && Math.hypot(e.clientX - dr.x, e.clientY - dr.y) > 10) dr.moved = true;
+      var ids = Object.keys(ptrs);
+      if(ids.length === 1){
+        if(stash && Math.hypot(p.x - stash.ax, p.y - stash.ay) > 6) stash = null;
+        /* 2回目のタッチがパンに化けたら、保留中の単発タップを取り消す */
+        if(pendingTap && dr && dr.moved) clearPending();
+        return;
+      }
+      if(ids.length === 2 && pinch.active){
+        var a = ptrs[ids[0]], b = ptrs[ids[1]];
+        var d = Math.hypot(a.x - b.x, a.y - b.y);
+        if(d > 0){
+          var now = performance.now(), dt = (now - pinch.lastT) / 1000, lg = Math.log2(d);
+          if(dt >= 0.008){
+            var inst = (lg - pinch.lastLog) / dt;
+            if(isFinite(inst)) pinch.v = pinch.v * 0.55 + inst * 0.45;
+            pinch.lastLog = lg; pinch.lastT = now;
+          }
+          pinch.cx = (a.x + b.x) / 2; pinch.cy = (a.y + b.y) / 2;
+        }
+      }
+    }, { passive: true });
+    function ptrEnd(e){
+      var dr = downRec[e.pointerId]; delete downRec[e.pointerId];
+      var nBefore = Object.keys(ptrs).length;
+      delete ptrs[e.pointerId];
+      var ids = Object.keys(ptrs);
+      if(pinch.active && nBefore === 2 && ids.length === 1){
+        var rp = ptrs[ids[0]];
+        stash = { v: pinch.v, t: performance.now(), ax: rp.x, ay: rp.y, cx: pinch.cx, cy: pinch.cy };
+        pinch.active = false;
+        /* 残った指（ピンのドラッグ等）はタップ扱いしない */
+        var rd = downRec[ids[0]]; if(rd) rd.moved = true;
+      }
+      if(ids.length) return;
+      if(e.type === "pointercancel"){ stash = null; return; }
+      if(stash){
+        var age = performance.now() - stash.t;
+        if(age < 250){
+          var cll = tapLatLng(stash.cx, stash.cy);
+          if(cll) startZoomInertia(map, cll, stash.v * Math.exp(-age / 250));
+        }
+        stash = null;
+      }
+      /* --- タップ判定 --- */
+      if(!dr || dr.moved) return;
+      if(performance.now() - dr.t > 400) return;
+      var tgt = e.target;
+      if(tgt && tgt.closest && tgt.closest(".leaflet-marker-icon, .leaflet-control, .leaflet-popup, a, button")) return;
+      var ll = tapLatLng(e.clientX, e.clientY);
+      if(!ll) return;
+      var now2 = performance.now();
+      if(pendingTap && now2 - pendingTap.t < 320 && Math.hypot(e.clientX - pendingTap.x, e.clientY - pendingTap.y) < 48){
+        clearPending();
+        var nz = Math.min(mapZoomCap(), map.getZoom() + 1);
+        try{ map.setZoomAround(ll, nz, { animate: true }); }
+        catch(err){ try{ map.setZoom(nz, { animate: true }); }catch(e2){} }
+        return;
+      }
+      pendingTap = { x: e.clientX, y: e.clientY, t: now2, ll: ll };
+      tapTimer = setTimeout(function(){
+        tapTimer = null;
+        var t = pendingTap; pendingTap = null;
+        if(t) onHomeTap({ latlng: t.ll });
+      }, 300);
+    }
+    mc.addEventListener("pointerup", ptrEnd, { passive: true });
+    mc.addEventListener("pointercancel", ptrEnd, { passive: true });
+    mc.addEventListener("wheel", function(){ stopZoomInertia(map); }, { passive: true });
   }
   function setHomeTap(latlng, preset){
     homeTap = [latlng[0], latlng[1]];
@@ -11856,6 +12491,7 @@ syncDestDisplay();
       $id("htbAddr").textContent = preset.addr || "";
       reg.value = (preset.name && preset.name !== "地点") ? preset.name : "";
       reg.placeholder = "地点名（マイ地点登録用）";
+      htbAddrDedup();
       return;
     }
     var lat = homeTap[0], lng = homeTap[1];
@@ -11869,6 +12505,7 @@ syncDestDisplay();
         $id("htbAddr").textContent = addr;
         reg.value = nm === "地点" ? "" : nm;
         reg.placeholder = "地点名（マイ地点登録用）";
+        htbAddrDedup();
       })
       .catch(function(){ if(homeTap && homeTap[0] === lat && homeTap[1] === lng) reg.placeholder = "地点名（マイ地点登録用）"; });
   }
@@ -11891,11 +12528,13 @@ syncDestDisplay();
     if(typeof L === "undefined"){ if(fb) fb.textContent = "地図を読み込めませんでした"; return; }
     if(fb) fb.style.display = "none";
     var start = (typeof state !== "undefined" && state.gps && state.gps.lat != null) ? [state.gps.lat, state.gps.lng] : [35.72, 139.75];
-    homeMap = L.map("homeMap", smoothMapOpts({ zoomControl: false })).setView(start, 12);
+    homeMap = L.map("homeMap", smoothMapOpts({ zoomControl: false, doubleClickZoom: false })).setView(start, 12);
     addBaseLayer(homeMap, function(){
       if(fb){ fb.style.display = "flex"; fb.textContent = "地図を読み込めませんでした"; }
     });
-    homeMap.on("click", onHomeTap);
+    /* 単発タップ（ピン＋地点カード）とダブルタップ拡大を両立させるため、
+       Leaflet の click は使わず自前のタップ判定で onHomeTap を呼ぶ */
+    setupHomeTapZoom(homeMap);
     syncHomePos(true);
     try{ homeMap.invalidateSize(); }catch(e){}
   }
@@ -12002,8 +12641,10 @@ syncDestDisplay();
      地点ピッカー（検索／マイ地点／IC／地図から選ぶ）を開いて自宅として
      端末内に保存する。登録済みの場合は長押しで登録し直せる。
    - レストラン／コンビニ／ショッピング／ガソリン：現在の地図表示エリアを
-     対象に、既存のスポット検索と同じ仕組み（Nominatim 検索）で探し、
-     候補を近い順にパネルへ出す。候補を選ぶと地図タップと同じ状態になる。
+     対象に、OSM のタグ条件（Overpass）でカテゴリに忠実に探し、候補を
+     近い順にパネルへ出す（v56で方式変更：決定的な重複排除・安定ソート・
+     セッション内キャッシュで、同条件では毎回同じ結果になる）。
+     候補を選ぶと地図タップと同じ状態になる。
      検索中の表示は既存の応答中ピル（fetch ラッパー）が担う。 */
 (function(){
   var $id = function(id){ return document.getElementById(id); };
@@ -12080,13 +12721,22 @@ syncDestDisplay();
     });
   }
 
-  /* ---- カテゴリ検索 ---- */
+  /* ---- カテゴリ検索（v56: Overpass のタグ条件でカテゴリに忠実に引く） ----
+     フリーワード検索（Nominatim）は名前が一致しただけの別カテゴリ施設が
+     混ざり、実行ごとに結果もぶれやすかった。OSM のタグ条件で引くことで
+     カテゴリ違いの混入を排除し、後段の決定的な処理（重複排除／範囲外
+     除外／安定ソート／件数固定／セッション内キャッシュ）と合わせて、
+     同じ条件（カテゴリ＋地図範囲）では毎回同じ候補が返るようにする。
+     座標は node はその座標、way／relation は Overpass の center（施設の
+     代表点として妥当な中心点）を使う。 */
   var CATS = {
-    restaurant:  { label: "レストラン",   queries: ["レストラン"] },
-    convenience: { label: "コンビニ",     queries: ["コンビニエンスストア", "コンビニ"] },
-    shopping:    { label: "ショッピング", queries: ["ショッピングモール", "スーパー"] },
-    gas:         { label: "ガソリン",     queries: ["ガソリンスタンド"] }
+    restaurant:  { label: "レストラン",   tags: [["amenity", "restaurant"], ["amenity", "fast_food"], ["amenity", "cafe"]] },
+    convenience: { label: "コンビニ",     tags: [["amenity", "convenience"]] },
+    shopping:    { label: "ショッピング", tags: [["shop", "mall"], ["shop", "supermarket"], ["shop", "department_store"]] },
+    gas:         { label: "ガソリン",     tags: [["amenity", "fuel"]] }
   };
+  var CAT_LIMIT = 12; /* 候補件数の上限は固定（実行ごとに変えない） */
+  var catCache = {};  /* セッション内キャッシュ：キー＝カテゴリ＋量子化した検索範囲 */
   var catSeq = 0;
 
   function homeMapObj(){
@@ -12120,54 +12770,142 @@ syncDestDisplay();
     var d = document.createElement("div"); d.className = "dlg-item"; d.textContent = text;
     box.appendChild(d);
   }
-  function nominatimCat(query, viewbox){
-    var url = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=15&countrycodes=jp&addressdetails=1&accept-language=ja"
-      + "&viewbox=" + encodeURIComponent(viewbox) + "&bounded=1&q=" + encodeURIComponent(query);
-    return fetch(url).then(function(r){ return r.json(); }).catch(function(){ return []; });
+  /* Overpass クエリ：カテゴリのタグ条件に一致する node／way／relation を
+     範囲内から取る。out center で way／relation は代表点（中心）を返す */
+  function overpassQuery(tags, qb){
+    var bb = qb.s.toFixed(5) + "," + qb.w.toFixed(5) + "," + qb.n.toFixed(5) + "," + qb.e.toFixed(5);
+    var body = "[out:json][timeout:15];(";
+    tags.forEach(function(tg){
+      ["node", "way", "relation"].forEach(function(el){
+        body += el + "[\"" + tg[0] + "\"=\"" + tg[1] + "\"](" + bb + ");";
+      });
+    });
+    body += ");out center 160;";
+    return body;
+  }
+  var OVERPASS_EPS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"];
+  function overpassFetch(query){
+    var chain = Promise.reject(new Error("start"));
+    OVERPASS_EPS.forEach(function(ep){
+      chain = chain.catch(function(){
+        var ctl = ("AbortController" in window) ? new AbortController() : null;
+        var to = ctl ? setTimeout(function(){ try{ ctl.abort(); }catch(e){} }, 20000) : null;
+        return fetch(ep, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" },
+          body: "data=" + encodeURIComponent(query),
+          signal: ctl ? ctl.signal : undefined
+        }).then(function(r){
+          if(to) clearTimeout(to);
+          if(!r.ok) throw new Error("overpass http " + r.status);
+          return r.json();
+        }).catch(function(err){
+          if(to) clearTimeout(to);
+          throw err;
+        });
+      });
+    });
+    return chain;
+  }
+  function catAddrFromTags(t){
+    if(!t) return "";
+    if(t["addr:full"]) return String(t["addr:full"]);
+    var keys = ["addr:province", "addr:state", "addr:city", "addr:district", "addr:quarter", "addr:neighbourhood", "addr:street", "addr:block_number", "addr:housenumber"];
+    var parts = [];
+    keys.forEach(function(k){ if(t[k]) parts.push(String(t[k])); });
+    return parts.join("");
+  }
+  /* Overpass の要素列を決定的に正規化する：
+     1) 名前（無ければブランド名）も座標も無い要素は落とす
+     2) 種別（node→way→relation）→ID の順に並べ替えてから処理するので、
+        サーバー側の返却順が変わっても以降の結果は変わらない
+     3) 同名で40m以内にある要素は同一施設とみなし、先勝ちで統合する
+        （node と way で二重登録された施設などの重複排除） */
+  function processCatElements(els){
+    var rank = { node: 0, way: 1, relation: 2 };
+    var items = [];
+    (els || []).forEach(function(el){
+      var t = el.tags || {};
+      var name = t.name || t.brand || "";
+      if(!name) return;
+      var lat = (el.type === "node") ? el.lat : (el.center ? el.center.lat : NaN);
+      var lng = (el.type === "node") ? el.lon : (el.center ? el.center.lon : NaN);
+      if(!isFinite(lat) || !isFinite(lng)) return;
+      items.push({
+        name: String(name), lat: lat, lng: lng, addr: catAddrFromTags(t),
+        oid: el.type + "/" + el.id, rank: (rank[el.type] != null ? rank[el.type] : 3), idn: Number(el.id) || 0
+      });
+    });
+    items.sort(function(a, b){ return (a.rank - b.rank) || (a.idn - b.idn); });
+    /* 重複判定は同名の施設同士でだけ行う（名前でバケット化し、密集エリア
+       でも比較回数が膨らまないようにする） */
+    var kept = [], byName = {};
+    items.forEach(function(it){
+      var same = byName[it.name] || [];
+      for(var i = 0; i < same.length; i++){
+        if(typeof haversine === "function" &&
+           haversine(same[i].lat, same[i].lng, it.lat, it.lng) < 40) return;
+      }
+      kept.push(it);
+      same.push(it); byName[it.name] = same;
+    });
+    return kept;
   }
   function runCatSearch(key){
     var cat = CATS[key]; if(!cat) return;
     var seq = ++catSeq;
     var map = homeMapObj();
     var ref = refPoint(map);
-    var viewbox = null;
+    var vb = null;
     if(map){
       try{
         var b = map.getBounds();
-        viewbox = [b.getWest(), b.getNorth(), b.getEast(), b.getSouth()].join(",");
+        vb = { s: b.getSouth(), w: b.getWest(), n: b.getNorth(), e: b.getEast() };
       }catch(e){}
     }
-    if(!viewbox){
+    if(!vb){
       /* 地図の表示範囲が取れない場合は現在地（基準点）周辺で探す */
       var d = 0.09;
-      viewbox = [ref[1] - d, ref[0] + d, ref[1] + d, ref[0] - d].join(",");
+      vb = { s: ref[0] - d, w: ref[1] - d, n: ref[0] + d, e: ref[1] + d };
     }
+    /* 検索範囲は表示範囲を 0.02° 格子へ外向きに丸めたものにする。わずかな
+       パンでは同じ範囲に落ちるため、同じ条件の再実行がキャッシュに当たり、
+       結果がぶれない。表示は実際の表示範囲で切り直す（範囲外の除外） */
+    var G = 0.02;
+    var qb = {
+      s: Math.floor(vb.s / G) * G, w: Math.floor(vb.w / G) * G,
+      n: Math.ceil(vb.n / G) * G,  e: Math.ceil(vb.e / G) * G
+    };
+    var cacheKey = key + "|" + qb.s.toFixed(3) + "," + qb.w.toFixed(3) + "," + qb.n.toFixed(3) + "," + qb.e.toFixed(3);
     showCatPanel(cat.label);
     renderCatMessage("検索中…");
-    Promise.all(cat.queries.map(function(q){ return nominatimCat(q, viewbox); })).then(function(lists){
-      if(seq !== catSeq) return;
-      var merged = [], seen = {};
-      lists.forEach(function(list){
-        (list || []).forEach(function(it){
-          var lat = parseFloat(it.lat), lng = parseFloat(it.lon);
-          if(!isFinite(lat) || !isFinite(lng)) return;
-          var nm = it.name || (it.display_name || "").split(",")[0];
-          if(!nm) return;
-          var k = nm + "@" + lat.toFixed(4) + "," + lng.toFixed(4);
-          if(seen[k]) return; seen[k] = 1;
-          merged.push({
-            name: nm, lat: lat, lng: lng,
-            addr: (typeof shortAddress === "function") ? (shortAddress(it.address, it.display_name) || "") : (it.display_name || ""),
-            dist: (typeof haversine === "function") ? haversine(ref[0], ref[1], lat, lng) : NaN
-          });
+    var got = catCache[cacheKey]
+      ? Promise.resolve(catCache[cacheKey])
+      : overpassFetch(overpassQuery(cat.tags, qb)).then(function(j){
+          var items = processCatElements(j && j.elements);
+          catCache[cacheKey] = items;
+          return items;
         });
+    got.then(function(items){
+      if(seq !== catSeq) return;
+      var rows = [];
+      (items || []).forEach(function(it){
+        if(it.lat < vb.s || it.lat > vb.n || it.lng < vb.w || it.lng > vb.e) return; /* 範囲外を除外 */
+        var dist = (typeof haversine === "function") ? haversine(ref[0], ref[1], it.lat, it.lng) : NaN;
+        rows.push({ name: it.name, lat: it.lat, lng: it.lng, addr: it.addr, oid: it.oid, dist: dist, dk: Math.round(dist) });
       });
-      merged.sort(function(a, b){ return (a.dist || 0) - (b.dist || 0); });
-      merged = merged.slice(0, 12);
-      if(!merged.length){ renderCatMessage("この周辺では見つかりませんでした"); return; }
+      /* 距離（m単位に丸め）→名前→OSM ID の安定ソート：同条件では常に同順 */
+      rows.sort(function(a, b){
+        if(a.dk !== b.dk) return a.dk - b.dk;
+        if(a.name !== b.name) return a.name < b.name ? -1 : 1;
+        if(a.oid !== b.oid) return a.oid < b.oid ? -1 : 1;
+        return 0;
+      });
+      rows = rows.slice(0, CAT_LIMIT);
+      if(!rows.length){ renderCatMessage("この周辺では見つかりませんでした"); return; }
       var box = $id("homeCatList"); if(!box) return;
       box.innerHTML = "";
-      merged.forEach(function(r){
+      rows.forEach(function(r){
         var b = document.createElement("button"); b.type = "button"; b.className = "dlg-item";
         b.appendChild(document.createTextNode(r.name));
         var sp = document.createElement("span");
