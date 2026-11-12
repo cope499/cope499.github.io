@@ -1330,10 +1330,14 @@ body.navlock #view-nav{height:var(--app-h,100dvh)}
 #homeTapBar .htb-route{padding-right:44px}
 /* --- 検索バーのすぐ下・左寄せのカテゴリチップ行（フロストガラス調ピル） --- */
 .home-cat-chips{position:absolute;top:calc(70px + var(--sat));left:12px;right:12px;z-index:1200;
-  display:flex;gap:7px;overflow-x:auto;overflow-y:hidden;padding:2px 2px 5px;
-  scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  display:flex;gap:7px;overflow-x:auto;overflow-y:hidden;padding:2px 10px 5px 2px;
+  scrollbar-width:none;-webkit-overflow-scrolling:touch;
+  /* 横スワイプは行自身の横スクロールとして処理させる（縦方向は渡さない）。
+     これが無いと、横移動中のわずかな縦ブレをページ側の処理が拾って
+     preventDefault し、スクロールが途中で詰まる */
+  touch-action:pan-x;overscroll-behavior-x:contain}
 .home-cat-chips::-webkit-scrollbar{display:none}
-.cat-chip{flex:none;display:inline-flex;align-items:center;padding:8px 14px;border-radius:999px;
+.cat-chip{flex:none;display:inline-flex;align-items:center;padding:8px 14px;border-radius:999px;touch-action:pan-x;
   border:1.5px solid var(--line);background:var(--glass-3);
   -webkit-backdrop-filter:var(--glass-blur);backdrop-filter:var(--glass-blur);
   box-shadow:0 6px 18px rgba(0,0,0,.16);color:var(--ink);font-family:inherit;
@@ -4219,6 +4223,12 @@ function drawPreviewRoute(){
     var m = L.circleMarker([s.lat, s.lng], {radius: last ? 8 : 6, color:"#1c1c1e", weight:2, fillColor: last ? "#1c1c1e" : "#8e8e93", fillOpacity:0.95}).addTo(previewLayer);
     m.bindTooltip((i + 1) + ". " + s.name, {direction:"top"});
   });
+  /* 現在地が取れていれば、ホーム地図と同じ青ドット（白フチ付き）を
+     プレビュー地図にも出す。取れていない場合は何も出さない */
+  try{
+    if(typeof state !== "undefined" && state.gps && state.gps.lat != null)
+      L.circleMarker([state.gps.lat, state.gps.lng], {radius:8, color:"#ffffff", weight:3, fillColor:"#1a73e8", fillOpacity:1}).addTo(previewLayer);
+  }catch(e){}
   try{
     previewMap.invalidateSize();
     pvFitBounds(pvPts);
@@ -11938,6 +11948,30 @@ syncDestDisplay();
     }).observe(vh, { attributes: true, attributeFilter: ["class"] });
   }
   initHomeMap();
+  /* ---- 起動時の現在地取得と青ドット ----
+     アプリを開いた瞬間（ナビ画面の初期表示時）に、操作を待たず位置情報の
+     取得を開始する。ウォッチが state.gps を更新し続け、ホーム地図の
+     青ドット（白フチ付きの円。syncHomePos が 1.5 秒間隔で同期）が
+     出て、位置の更新に追従する。初回フィックス時は地図も現在地へ寄せる。
+     許可されていない／取れない場合はドットを出さないだけで、エラーで
+     固まったりダイアログを繰り返したりはしない（GPSカード側の表示のみ）。
+     案内中の紙飛行機マーカーは従来どおり別系統で、ここでは触らない。 */
+  (function kickStartupGps(){
+    if(typeof ensureGpsWatch === "function"){ try{ ensureGpsWatch(); }catch(e){} }
+    if(!("geolocation" in navigator)) return;
+    /* ウォッチの初回フィックスを待たず、単発取得でも state.gps を先に埋める
+       （ウォッチ側が先に新鮮な位置を入れていたら上書きしない） */
+    navigator.geolocation.getCurrentPosition(function(pos){
+      try{
+        if(typeof state !== "undefined" && state.gps && state.gps.lat == null){
+          state.gps.lat = pos.coords.latitude; state.gps.lng = pos.coords.longitude;
+          state.gps.acc = pos.coords.accuracy; state.gps.t = pos.timestamp || Date.now();
+        }
+      }catch(e){}
+      syncHomePos(true);
+    }, function(){ /* 許可なし・測位不可：ドットは出さない。ウォッチ側の結果に任せる */ },
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 });
+  })();
   /* シェル高さ（--app-h の補正・回転など）で地図コンテナが伸縮したら、タイルと
      帰属表示の位置を新しい下端へ追随させる（v53） */
   window.addEventListener("resize", function(){ if(homeMap){ try{ homeMap.invalidateSize(); }catch(e){} } });
@@ -11988,6 +12022,29 @@ syncDestDisplay();
     var rec = { name: p.name || "自宅", addr: p.addr || "", lat: Number(p.lat), lng: Number(p.lng) };
     try{ localStorage.setItem(HOME_KEY, JSON.stringify(rec)); }catch(e){}
   };
+
+  /* ---- チップ行の横スクロール詰まり対策 ----
+     行の上から始めた横スワイプが途中で詰まる主因は、ページ側の
+     document レベル touchmove ハンドラ（プルダウン更新抑止が、横移動に
+     混ざったわずかな下方向のブレで preventDefault を発火させる）が
+     行のネイティブ横スクロールを止めてしまうこと。行内で始まった
+     タッチは document 側へ伝播させず、行自身のスクロールに専念させる
+     （CSS の touch-action: pan-x と併用）。タップ（click）は伝播を
+     止めても各チップに届くので、チップの機能は従来どおり効く。
+     デスクトップでは縦ホイールを横スクロールへ読み替える。 */
+  var chipsRow = $id("homeCatChips");
+  if(chipsRow){
+    ["touchstart", "touchmove", "touchend", "touchcancel"].forEach(function(ev){
+      chipsRow.addEventListener(ev, function(e){ e.stopPropagation(); }, { passive: true });
+    });
+    chipsRow.addEventListener("wheel", function(e){
+      e.stopPropagation();
+      if(Math.abs(e.deltaY) > Math.abs(e.deltaX) && chipsRow.scrollWidth > chipsRow.clientWidth){
+        chipsRow.scrollLeft += e.deltaY;
+        e.preventDefault();
+      }
+    }, { passive: false });
+  }
 
   function openHomePicker(){
     if(typeof openSlotDialog !== "function") return;
