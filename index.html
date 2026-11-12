@@ -1262,6 +1262,12 @@ html,body{touch-action:manipulation}
 .htb-cand-detail{max-height:96px;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
 .htb-cand-detail:empty{display:none}
 .htb-cd-line{font-size:12px;font-weight:700;color:var(--ink2);line-height:1.55}
+/* --- v58: ピン候補からのクイック案内開始 ---
+   選択中チップの候補でそのまま案内を始める主ボタン。候補詳細の直下に
+   右寄せで置く（主要ボタンは右端、という既存の流儀）。候補の計算が
+   終わるまでは disabled で、.btn:disabled の減光が無効表示になる */
+.htb-startrow{display:flex;justify-content:flex-end;margin-top:10px}
+#btnHtbStart{padding:12px 28px;font-size:15.5px}
 /* --- 地図から選ぶ：上部バナー --- */
 .mappick-banner{position:absolute;top:calc(12px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:1250;
   background:var(--glass-3);-webkit-backdrop-filter:var(--glass-blur);backdrop-filter:var(--glass-blur);
@@ -1474,6 +1480,7 @@ body.navlock #view-nav{height:var(--app-h,100dvh)}
         <div class="htb-chips" id="htbCandChips"></div>
         <div class="htb-cand-detail" id="htbCandDetail"></div>
       </div>
+      <div class="htb-startrow"><button type="button" class="btn" id="btnHtbStart" disabled>案内開始</button></div>
       <div class="htb-regrow"><input id="htbRegName" type="text" placeholder="地点名（マイ地点登録用）" aria-label="マイ地点に登録する名前"></div>
       <div class="htb-btns">
         <button type="button" class="btn ghost" id="btnHtbReg">マイ地点に登録</button>
@@ -3683,6 +3690,14 @@ function selectIcFromMap(ri, ii){
    帯の切り替えはレイヤー側の minZoom/maxZoom で行う。detectRetina は
    レイヤーの maxZoom を内部で1引くため、上限を閉じるレイヤーには網膜時
    +1して渡し、実効の帯境界を網膜／非網膜で揃える（minZoom は引かれない）。
+   【帯の重なり】低ズーム帯（Esri）の実効 maxZoom は高ズーム帯の開始段
+   （17）まで1段だけ重ねてある。高ズーム帯のタイルは切り替わった瞬間
+   にはまだ読み込まれていないため、重なりが無いと読み込み完了まで地図
+   が空白になる（利用者報告の「切り替わる瞬間らへんが読み込まれない」
+   の正体）。重ねた段では Esri の最深タイル（maxNativeZoom で頭打ち）
+   が引き伸ばしの下敷きとして残り、淡色タイルが読み込まれるにつれて
+   その上に重なって切り替わる。URL ズームは maxNativeZoom で止まる
+   ため、Esri のプレースホルダ段（17以上）が要求されることはない。
    detectRetina 自体は全レイヤーで有効：網膜では1段深いズームのタイルを
    半サイズで表示し、文字・線がくっきり出る。要求ズームが実タイルの上限を
    超える段（ダーク19以上・ライト20）は maxNativeZoom で頭打ちにし、
@@ -3793,9 +3808,11 @@ function attachBaseLayer(map, rec){
      網膜時15指定と同じ調整を、全レイヤーの maxNativeZoom に統一する */
   var nativeCap = function(n){ return retina ? n - 1 : n; };
   if(effectiveDark()){
-    /* ズーム16以下：Esri ダーク。maxZoom で帯を閉じる（detectRetina が
-       内部で1引くため網膜時は17を渡し、実効16で揃える）。 */
-    var esriOpts = {maxZoom:(retina ? 17 : 16), maxNativeZoom:(retina ? 15 : 16), detectRetina:true, className:"tilefx-esri", attribution:"Esri, HERE, Garmin, © OpenStreetMap contributors"};
+    /* ズーム17以下：Esri ダーク。帯は実効17で閉じ、高ズーム帯（17〜）と
+       1段重ねる（detectRetina が内部で1引くため網膜時は18を渡す）。
+       重ねた段では maxNativeZoom の引き伸ばしが下敷きになり、淡色帯の
+       読み込み中に地図が空白にならない。 */
+    var esriOpts = {maxZoom:(retina ? 18 : 17), maxNativeZoom:(retina ? 15 : 16), detectRetina:true, className:"tilefx-esri", attribution:"Esri, HERE, Garmin, © OpenStreetMap contributors"};
     var esriBase = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", esriOpts);
     var esriRef = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}", esriOpts);
     /* ズーム17以上：地理院淡色（実タイル18まで）を .tilefx-darkhi で
@@ -3825,7 +3842,7 @@ function attachBaseLayer(map, rec){
        帯構成はダークと完全に同一なので、追加の実在確認は不要。
        フィルタはレイヤーの className 経由でタイル画像だけに掛かり、
        ルート線・マーカー等のオーバーレイには影響しない。 */
-    var esriOptsL = {maxZoom:(retina ? 17 : 16), maxNativeZoom:(retina ? 15 : 16), detectRetina:true, className:"tilefx-esri-light", attribution:"Esri, HERE, Garmin, © OpenStreetMap contributors"};
+    var esriOptsL = {maxZoom:(retina ? 18 : 17), maxNativeZoom:(retina ? 15 : 16), detectRetina:true, className:"tilefx-esri-light", attribution:"Esri, HERE, Garmin, © OpenStreetMap contributors"};
     var esriBaseL = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", esriOptsL);
     var esriRefL = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}", esriOptsL);
     /* ズーム17以上：地理院淡色（実タイル18まで）を .tilefx-lighthi で
@@ -12149,6 +12166,8 @@ syncDestDisplay();
     var chips = $id("htbCandChips"); if(chips) chips.innerHTML = "";
     var det = $id("htbCandDetail"); if(det) det.innerHTML = "";
     var tag = $id("htbRouteTag"); if(tag) tag.textContent = "一般道";
+    /* 候補が揃うまではクイック案内開始を押せない状態に戻す */
+    var sb = $id("btnHtbStart"); if(sb) sb.disabled = true;
   }
   function clearPinPreview(){
     pinSeq++; pinWaitingGps = false; pinKey = null;
@@ -12309,6 +12328,32 @@ syncDestDisplay();
     setPinRouteSum(pinCandSummary(c));
     if(c.route && c.route.geomPts && c.route.geomPts.length > 1) drawPinRoute(c.route);
     renderPinCandDetail(c);
+    /* この候補で計算が完了したので、クイック案内開始を有効化する */
+    var sb = $id("btnHtbStart"); if(sb) sb.disabled = !c.route;
+  }
+  /* ===== v58: ピン候補からのクイック案内開始 =====
+     選択中チップの候補を、ルート選択画面の selectCandidate と同じ
+     引き継ぎ（pendingRoute／pendingFare／pendingMeta）で startPending
+     へ渡す。表示中の候補の形状・ステップをそのまま使い、候補確定後の
+     再取得・差し替えはしない。ルート設定シートやルート選択画面は
+     経由しない */
+  function startPinNav(){
+    if(!pinCands || pinCandSel < 0 || !pinCands[pinCandSel]) return;
+    var c = pinCands[pinCandSel];
+    if(!c.route) return;
+    pendingRoute = c.route; pendingFare = c.fare || null;
+    pendingTollUnknown = !!c.tollUnknown;
+    pendingMeta = { km: (c.res && c.res.km != null) ? c.res.km : (c.route.km || 0), min: candMin(c) };
+    /* TomTom実勢値がある候補では、案内中の到着予測にも補正として引き継ぐ */
+    if(c.ttMin != null && c.res && c.res.min > 0) pendingRoute.ttCorr = c.ttMin / c.res.min;
+    else pendingRoute.ttCorr = null;
+    /* 地点カードとピンプレビューを片付けてから開始する（×ボタンと同じ後始末） */
+    homeTap = null;
+    clearPinPreview();
+    var bar = $id("homeTapBar"); if(bar) bar.classList.add("hidden");
+    if(homeTapMarker && homeMap){ try{ homeMap.removeLayer(homeTapMarker); }catch(e){} homeTapMarker = null; }
+    syncTopBar();
+    startPending();
   }
   /* 候補チップ行の横スクロール詰まり対策（カテゴリチップ行と同じ） */
   (function(){
@@ -12569,6 +12614,7 @@ syncDestDisplay();
     showHtbMsg("マイ地点に「" + nm + "」を登録しました。");
     if(typeof refreshSettingsMeta === "function"){ try{ refreshSettingsMeta(); }catch(e){} }
   });
+  var bS = $id("btnHtbStart"); if(bS) bS.addEventListener("click", startPinNav);
   var bC = $id("btnHtbClose");
   if(bC) bC.addEventListener("click", function(){
     homeTap = null;
@@ -12731,7 +12777,7 @@ syncDestDisplay();
      代表点として妥当な中心点）を使う。 */
   var CATS = {
     restaurant:  { label: "レストラン",   tags: [["amenity", "restaurant"], ["amenity", "fast_food"], ["amenity", "cafe"]] },
-    convenience: { label: "コンビニ",     tags: [["amenity", "convenience"]] },
+    convenience: { label: "コンビニ",     tags: [["shop", "convenience"]] }, /* OSM の正規タグは shop=convenience。amenity=convenience は実在せず0件になる（実測で確定） */
     shopping:    { label: "ショッピング", tags: [["shop", "mall"], ["shop", "supermarket"], ["shop", "department_store"]] },
     gas:         { label: "ガソリン",     tags: [["amenity", "fuel"]] }
   };
@@ -12770,27 +12816,40 @@ syncDestDisplay();
     var d = document.createElement("div"); d.className = "dlg-item"; d.textContent = text;
     box.appendChild(d);
   }
-  /* Overpass クエリ：カテゴリのタグ条件に一致する node／way／relation を
-     範囲内から取る。out center で way／relation は代表点（中心）を返す */
+  /* Overpass クエリ：カテゴリのタグ条件に一致する node／way を範囲内
+     から取る。out center で way は代表点（中心）を返す。
+     relation は含めない：out center の中心計算で関係（relation）の
+     メンバー形状解決が極端に重く、混雑時は制限時間内に返らなくなる
+     （実測：relation 込みだと45秒でも全滅、node+way のみだと同一範囲・
+     同一カテゴリが約32秒で返る）。対象カテゴリの施設は node／way で
+     ほぼカバーできるため、実用を優先して外している。 */
   function overpassQuery(tags, qb){
     var bb = qb.s.toFixed(5) + "," + qb.w.toFixed(5) + "," + qb.n.toFixed(5) + "," + qb.e.toFixed(5);
-    var body = "[out:json][timeout:15];(";
+    var body = "[out:json][timeout:25];(";
     tags.forEach(function(tg){
-      ["node", "way", "relation"].forEach(function(el){
+      ["node", "way"].forEach(function(el){
         body += el + "[\"" + tg[0] + "\"=\"" + tg[1] + "\"](" + bb + ");";
       });
     });
     body += ");out center 160;";
     return body;
   }
-  var OVERPASS_EPS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"];
+  var OVERPASS_EPS = ["https://overpass-api.de/api/interpreter", "https://overpass.osm.jp/api/interpreter", "https://overpass.kumi.systems/api/interpreter", "https://overpass.private.coffee/api/interpreter"];
+  /* 公開 Overpass は混雑時に単純なクエリでも応答まで26〜38秒かかる
+     ことがある（実測）。従来の「20秒で打ち切って次のエンドポイントへ
+     直列フォールバック」では、遅い日は全エンドポイントで時間切れに
+     なり、どのカテゴリも「検索できませんでした」に倒れていた。
+     全エンドポイントへ並行して投げて最初に成功した応答を採用し、
+     制限時間も45秒に取る（勝った時点で残りは abort する）。 */
   function overpassFetch(query){
-    var chain = Promise.reject(new Error("start"));
-    OVERPASS_EPS.forEach(function(ep){
-      chain = chain.catch(function(){
+    return new Promise(function(resolve, reject){
+      var left = OVERPASS_EPS.length, done = false;
+      var ctls = [];
+      OVERPASS_EPS.forEach(function(ep){
         var ctl = ("AbortController" in window) ? new AbortController() : null;
-        var to = ctl ? setTimeout(function(){ try{ ctl.abort(); }catch(e){} }, 20000) : null;
-        return fetch(ep, {
+        ctls.push(ctl);
+        var to = ctl ? setTimeout(function(){ try{ ctl.abort(); }catch(e){} }, 45000) : null;
+        fetch(ep, {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" },
           body: "data=" + encodeURIComponent(query),
@@ -12799,13 +12858,18 @@ syncDestDisplay();
           if(to) clearTimeout(to);
           if(!r.ok) throw new Error("overpass http " + r.status);
           return r.json();
+        }).then(function(j){
+          if(done) return;
+          done = true;
+          ctls.forEach(function(c){ if(c && c !== ctl){ try{ c.abort(); }catch(e){} } });
+          resolve(j);
         }).catch(function(err){
           if(to) clearTimeout(to);
-          throw err;
+          left--;
+          if(!done && left <= 0) reject(err);
         });
       });
     });
-    return chain;
   }
   function catAddrFromTags(t){
     if(!t) return "";
@@ -12876,6 +12940,20 @@ syncDestDisplay();
       s: Math.floor(vb.s / G) * G, w: Math.floor(vb.w / G) * G,
       n: Math.ceil(vb.n / G) * G,  e: Math.ceil(vb.e / G) * G
     };
+    /* 検索範囲が広いと走査量が跳ね上がり、公開 Overpass がタイムアウト
+       して検索自体が全滅する（ズーム12では表示範囲が約20km四方になる）。
+       中心は表示範囲の中心のまま、一辺の上限を 0.08°（約8km）に丸める。
+       表示側の範囲外除外は従来どおり vb で行うため、画面の隅の候補が
+       欠けることはあっても、検索が失敗することはなくなる。 */
+    var MAXSPAN = 0.08;
+    if(qb.n - qb.s > MAXSPAN){
+      var cs = (vb.s + vb.n) / 2;
+      qb.s = Math.max(qb.s, cs - MAXSPAN / 2); qb.n = Math.min(qb.n, cs + MAXSPAN / 2);
+    }
+    if(qb.e - qb.w > MAXSPAN){
+      var cw = (vb.w + vb.e) / 2;
+      qb.w = Math.max(qb.w, cw - MAXSPAN / 2); qb.e = Math.min(qb.e, cw + MAXSPAN / 2);
+    }
     var cacheKey = key + "|" + qb.s.toFixed(3) + "," + qb.w.toFixed(3) + "," + qb.n.toFixed(3) + "," + qb.e.toFixed(3);
     showCatPanel(cat.label);
     renderCatMessage("検索中…");
