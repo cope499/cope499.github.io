@@ -1315,10 +1315,14 @@ html,body{touch-action:manipulation}
 .hs-body .finder{margin-top:6px}
 .hs-body .gpscard{margin-top:10px}
 /* --- ナビタブ上部：検索テキストボックス（常時表示はこれ1つだけ） --- */
+/* v126: 検索バーとカテゴリチップのドロップシャドウは廃止した。広くぼける黒い
+   影が、バーの上側ににじむモヤと、バー＋チップ群の背後に敷かれたような
+   黒っぽい帯として読めていたため。各要素は自身のすりガラス背景と枠線だけを
+   持ち、地図の上に直接置かれている見え方にする（ライト／ダーク共通） */
 .home-top-search{position:absolute;top:calc(10px + env(safe-area-inset-top));left:12px;right:12px;z-index:1200;
   display:flex;align-items:center;gap:10px;width:calc(100% - 24px);height:52px;padding:0 15px;
   background:var(--glass-3);-webkit-backdrop-filter:var(--glass-blur);backdrop-filter:var(--glass-blur);
-  border:1.5px solid var(--line);border-radius:14px;box-shadow:0 10px 26px rgba(0,0,0,.20);
+  border:1.5px solid var(--line);border-radius:14px;
   color:var(--ink);font-family:inherit;text-align:left;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .home-top-search:active{transform:scale(.99)}
 .home-top-search svg{flex:none;width:20px;height:20px;color:var(--ink2)}
@@ -1400,7 +1404,7 @@ body.navlock #view-nav{height:var(--app-h,100dvh)}
 .cat-chip{flex:none;display:inline-flex;align-items:center;padding:8px 14px;border-radius:999px;touch-action:pan-x;
   border:1.5px solid var(--line);background:var(--glass-3);
   -webkit-backdrop-filter:var(--glass-blur);backdrop-filter:var(--glass-blur);
-  box-shadow:0 6px 18px rgba(0,0,0,.16);color:var(--ink);font-family:inherit;
+  color:var(--ink);font-family:inherit;
   font-size:13.5px;font-weight:800;line-height:1.2;cursor:pointer;-webkit-tap-highlight-color:transparent;
   -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .cat-chip:active{transform:scale(.97)}
@@ -1728,12 +1732,34 @@ html.lens-ok .tab-ind.bubble .tab-ind-in::after{
      （タブバーの選択ピルは対象外で従来どおり）
    - ×ボタン（閉じる・削除系）は上の黒背景化より優先し、背景も
      枠も持たせず×の字だけにする。ホバー／押下時だけ周囲が
-     うっすら丸くハイライトする */
+     うっすら丸くハイライトする
+   ===== v126: ライトモードでは主／副のボタン色を分ける =====
+   - 主ボタン（.btn：決定・案内開始など）はライトでも黒地・白文字のまま
+     （--sign がライトでは #1c1c1e のため従来どおりで変更なし）
+   - 副次ボタン（下記の .btn.ghost 等）はライトモードでは白地・濃い文字・
+     枠線にして、主ボタン（黒）と一目で区別できるようにする。
+     ダークモードは v116 の黒地・白文字のまま一切変更しない */
 .btn.ghost,.mini-btn,.mini-btn.primary,.slot-swap button,.from-cur-btn,
 .leg-bulk button,.dlg-add,.dlg-del{
+  background:#ffffff;color:#1c1c1e;border-color:#aeaeb2}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]) .btn.ghost,:root:not([data-theme="light"]) .mini-btn,
+  :root:not([data-theme="light"]) .mini-btn.primary,:root:not([data-theme="light"]) .slot-swap button,
+  :root:not([data-theme="light"]) .from-cur-btn,:root:not([data-theme="light"]) .leg-bulk button,
+  :root:not([data-theme="light"]) .dlg-add,:root:not([data-theme="light"]) .dlg-del{
+    background:#101013;color:#ffffff;border-color:#6e6e73}
+}
+:root[data-theme="dark"] .btn.ghost,:root[data-theme="dark"] .mini-btn,
+:root[data-theme="dark"] .mini-btn.primary,:root[data-theme="dark"] .slot-swap button,
+:root[data-theme="dark"] .from-cur-btn,:root[data-theme="dark"] .leg-bulk button,
+:root[data-theme="dark"] .dlg-add,:root[data-theme="dark"] .dlg-del{
   background:#101013;color:#ffffff;border-color:#6e6e73}
 .btn.ghost:active,.mini-btn:active,.slot-swap button:active{opacity:.85}
-.mini-btn.danger{color:#ffffff}
+.mini-btn.danger{color:#1c1c1e}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]) .mini-btn.danger{color:#ffffff}
+}
+:root[data-theme="dark"] .mini-btn.danger{color:#ffffff}
 /* ×ボタンは全てこちら（黒背景化より優先）：シートの閉じる（.dlg-close）、
    地点カードの×（.dlg-close.htb-close）、カテゴリパネルの×（.hcp-close）、
    スロット／経由地の削除（.via-remove）、プレビューの閉じる（.pv-close）。
@@ -1744,13 +1770,19 @@ html.lens-ok .tab-ind.bubble .tab-ind-in::after{
 .via-remove:hover,.dlg-close:hover,.pv-close:hover,.hcp-close:hover,.htb-close:hover{background:rgba(128,128,128,.20)}
 .via-remove:active,.dlg-close:active,.pv-close:active,.hcp-close:active,.htb-close:active{background:rgba(128,128,128,.34)}
 
-/* ===== v116: 第2の目的地（目的地2） =====
-   目的地スロットの下に置く小さめの追加ボタンと、目的地2スロット行。
-   幅は取らず、既存のスロット行・経由地追加ボタンに揃えた控えめな大きさ */
+/* ===== v116: 追加の目的地（目的地2〜5） =====
+   目的地スロットの下に置く小さめの追加ボタン。目的地2以降のスロット行は
+   JS（renderDestExtra）が経由地行と同じ作りで描く（v126で最大5か所に一般化） */
 .dest2-add{display:block;margin:9px 0 0 auto;background:#101013;color:#fff;
   border:1.5px solid #6e6e73;border-radius:999px;padding:7px 13px;
   font-weight:800;font-size:12.5px;font-family:inherit;cursor:pointer}
 .dest2-add:active{opacity:.85}
+/* v126: 「目的地を追加」も副次ボタンなので、ライトモードでは白地・濃い文字・
+   枠線にして主ボタン（黒）と区別する（ダークモードは従来どおり黒） */
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]) .dest2-add{background:#ffffff;color:#1c1c1e;border-color:#aeaeb2}
+}
+:root[data-theme="light"] .dest2-add{background:#ffffff;color:#1c1c1e;border-color:#aeaeb2}
 
 /* 到着／終了パネル内の「案内開始（目的地2）」ボタン：主ラベルの上に
    小さいラベルで目的地2と対象地点名を添える */
@@ -1974,11 +2006,8 @@ html.lens-ok .tab-ind.bubble .tab-ind-in::after{
         <button type="button" class="slot-btn" id="btnDestSlot"><span class="slot-tag">目的地</span><b id="destSlotName">未設定</b><span class="slot-arrow">›</span></button>
         <button type="button" class="via-remove hidden" id="btnDestClear" aria-label="目的地をクリア">×</button>
       </div>
-      <button type="button" class="dest2-add" id="btnAddDest2">＋ 目的地を追加</button>
-      <div class="via-slotrow hidden" id="dest2Row">
-        <button type="button" class="slot-btn" id="btnDest2Slot"><span class="slot-tag">目的地2</span><b id="dest2SlotName">未設定</b><span class="slot-arrow">›</span></button>
-        <button type="button" class="via-remove" id="btnDest2Clear" aria-label="目的地2を削除">×</button>
-      </div>
+      <div id="destExtraSlots"></div>
+      <button type="button" class="dest2-add" id="btnAddDest">＋ 目的地を追加</button>
       <div id="slotLegPrefs" class="hidden"></div>
       <div class="hs-actions">
         <button type="button" class="btn ghost save-route-btn" id="btnSaveRouteHome">このルートを保存</button>
@@ -2404,7 +2433,7 @@ html.lens-ok .tab-ind.bubble .tab-ind-in::after{
 
     <div class="finish hidden" id="navFinish">
       <div class="big" id="finishBig">到着</div>
-      <button class="btn fd2-btn hidden" id="btnFinishDest2"><span class="fd2-tag">目的地2</span><span class="fd2-main">案内開始</span><span class="fd2-name" id="fd2Name"></span></button>
+      <button class="btn fd2-btn hidden" id="btnFinishDest2"><span class="fd2-tag" id="fd2Tag">目的地2</span><span class="fd2-main">案内開始</span><span class="fd2-name" id="fd2Name"></span></button>
       <button class="btn ghost" id="btnFinishBack">終了</button>
     </div>
 
@@ -5031,11 +5060,16 @@ function startPending(){
     state.fare = f;
     hideChoice(); closePreview();
     openRoute(r);
-    /* 目的地2が設定されていれば、この案内の終了／到着時に
-       「案内開始（目的地2）」へ切り替えるため控えておく */
-    navDest2 = (typeof dest2Node !== "undefined" && dest2Node)
-      ? { node: dest2Node, label: dest2Label || dest2Node, coord: dest2Coord ? dest2Coord.slice() : null }
-      : null;
+    /* 次の目的地（目的地2以降）が設定されていれば、この案内の終了／
+       到着時に「案内開始（次の目的地）」へ切り替えるためキューに控える。
+       連鎖の途中なら startNextDestNav が控えた番号を引き継ぐ */
+    navQueue = (typeof destExtra !== "undefined" && destExtra)
+      ? destExtra.filter(function(e){ return !!e; }).map(function(e){
+          return { node: e.node, label: e.label || e.node, coord: e.coord ? e.coord.slice() : null };
+        })
+      : [];
+    navDestNo = pendingNavDestNo || 1;
+    pendingNavDestNo = 0;
     startGuidance();
   });
 }
@@ -5115,7 +5149,7 @@ function openRoute(r){
 }
 function backHome(){
   stopSim(); state.running = false;
-  navDest2 = null; /* 目的地2への続き案内は破棄する */
+  navQueue = []; navDestNo = 1; pendingNavDestNo = 0; /* 次の目的地への続き案内は破棄する */
   document.body.classList.remove("navlock");
   $("view-nav").setAttribute("aria-hidden","true");
   $("view-home").style.display = "block";
@@ -5155,26 +5189,30 @@ function arrGateBlocked(){
   return !!(state.arrGate && !state.arrGate.armed);
 }
 
-/* ================= 目的地2への続き案内 =================
+/* ================= 次の目的地への続き案内 =================
    案内中に「終了」を押したとき、または目的地に到着したとき、
-   目的地2が設定されていれば到着パネルに「案内開始（目的地2）」を
-   出す。押すと現在地を出発地にして目的地2への案内を開始する
-   （推奨候補で自動開始するクイック方式）。目的地2が無ければ
-   従来どおり終了してホームへ戻る */
+   次の目的地（目的地2〜5）が残っていれば到着パネルに
+   「案内開始（目的地N）」を出す。押すと現在地を出発地にして
+   その目的地への案内を開始し（推奨候補で自動開始するクイック方式）、
+   残りの目的地はさらにその次の連鎖用に引き継ぐ。次の目的地が
+   無ければ従来どおり終了してホームへ戻る */
 function syncFinishPanel(){
   var b = $("btnFinishDest2");
   if(b){
-    b.classList.toggle("hidden", !navDest2);
+    var nx = navQueue && navQueue.length ? navQueue[0] : null;
+    b.classList.toggle("hidden", !nx);
+    var tg = $("fd2Tag");
+    if(tg) tg.textContent = "目的地" + (navDestNo + 1);
     var nm = $("fd2Name");
-    if(nm) nm.textContent = navDest2 ? (navDest2.label || navDest2.node || "") : "";
+    if(nm) nm.textContent = nx ? (nx.label || nx.node || "") : "";
   }
   var big = $("finishBig");
   if(big) big.textContent = state.__navEndedEarly ? "案内を終了" : "到着";
 }
 function onNavEndPressed(){
-  if(navDest2 && state.route && !state.finished){
+  if(navQueue && navQueue.length && state.route && !state.finished){
     /* 案内はここで止めるがホームへは戻らず、同じパネルで
-       「案内開始（目的地2）」に切り替える */
+       「案内開始（次の目的地）」に切り替える */
     stopSim(); state.running = false;
     if("speechSynthesis" in window) window.speechSynthesis.cancel();
     state.__navEndedEarly = true;
@@ -5185,10 +5223,12 @@ function onNavEndPressed(){
   }
   backHome();
 }
-function startDest2Nav(){
-  var d2 = navDest2;
-  if(!d2){ backHome(); return; }
-  backHome(); /* navDest2 はここで消えるので d2 に控えてある */
+function startNextDestNav(){
+  var nx = navQueue && navQueue.length ? navQueue[0] : null;
+  if(!nx){ backHome(); return; }
+  var rest = navQueue.slice(1); /* さらに後続の目的地（次の連鎖用） */
+  var thisNo = navDestNo + 1;    /* これから案内する目的地の番号 */
+  backHome(); /* navQueue はここで消えるので nx/rest に控えてある */
   /* 出発地は現在地に戻し、経由地と区間設定は引き継がない */
   fromNode = null; fromLabel = null; fromCoord = null; renderFromSlot();
   viaSlots.length = 0; viaLabels.length = 0; viaCoords.length = 0; renderViaSlots();
@@ -5196,16 +5236,19 @@ function startDest2Nav(){
   if(typeof slotLegIc !== "undefined" && slotLegIc)
     Object.keys(slotLegIc).forEach(function(k){ delete slotLegIc[k]; });
   if(typeof lpSig !== "undefined") lpSig = "";
-  destNode = d2.node; destLabel = d2.label || d2.node; destCoord = d2.coord ? d2.coord.slice() : null;
-  dest2Node = null; dest2Label = null; dest2Coord = null; dest2Shown = false;
-  syncDestDisplay(); syncDest2Display(); syncHiddenFromSlots();
+  destNode = nx.node; destLabel = nx.label || nx.node; destCoord = nx.coord ? nx.coord.slice() : null;
+  destExtra = rest.map(function(e){
+    return { node: e.node, label: e.label || e.node, coord: e.coord ? e.coord.slice() : null };
+  });
+  pendingNavDestNo = thisNo; /* startPending が番号と残りキューを引き継ぐ */
+  syncDestDisplay(); renderDestExtra(); syncHiddenFromSlots();
   /* 決定→候補計算→推奨候補でそのまま案内開始（finishDecide 側のフック） */
   window.__autoStartNext = true;
   var dec = $("btnDecide"); if(dec) dec.click();
 }
 $("btnEnd").addEventListener("click", onNavEndPressed);
 $("btnFinishBack").addEventListener("click", backHome);
-$("btnFinishDest2").addEventListener("click", startDest2Nav);
+$("btnFinishDest2").addEventListener("click", startNextDestNav);
 
 /* ================= MAP MATCHING =================
    現在地追従は「一番近い分岐点への直線距離」ではなく、案内ルートの
@@ -8673,12 +8716,16 @@ $("sheetHandle").addEventListener("keydown", function(e){ if(e.key==="Enter" || 
 var viaSlots = [], destNode = null;
 var viaLabels = [], destLabel = null; /* スロットの表示名（地図・検索で選んだ場合は住所） */
 var viaCoords = [], destCoord = null; /* スロットの正確な座標 [lat,lng]（道なり案内・再計算に使う） */
-/* 第2の目的地（目的地2）：ルート計算には含めず、1つ目の目的地までの
-   案内が終わった後に「現在地→目的地2」の案内を始めるために保持する。
-   dest2Shown は空のスロット行を表示しているかどうか */
-var dest2Node = null, dest2Label = null, dest2Coord = null, dest2Shown = false;
-/* 案内セッション中の目的地2（案内開始時点のスナップショット） */
-var navDest2 = null;
+/* 目的地は最大5か所。目的地1は destNode/destLabel/destCoord に、目的地2以降は
+   destExtra（{node,label,coord} の配列、最大4件。null は追加ボタンで開いた
+   空きスロット行）に保持する。追加の目的地はルート計算には含めず、前の
+   目的地までの案内が終わった後に「現在地→次の目的地」の案内を順に始める */
+var destExtra = [];
+/* 案内セッション中の残り目的地キュー（案内開始時点のスナップショット）。
+   navDestNo はいま案内している目的地の番号（1始まり）で、キューの先頭は
+   navDestNo+1 番目の目的地。pendingNavDestNo は連鎖開始時に次の番号を
+   startPending へ受け渡すための控え */
+var navQueue = [], navDestNo = 1, pendingNavDestNo = 0;
 /* 出発地：未設定（null）の間は現在地（GPS）。ピッカーで別の場所を選ぶと
    fromNode/fromLabel/fromCoord が入り、ルート計算はGPSではなくその地点を起点にする */
 var fromNode = null, fromLabel = null, fromCoord = null;
@@ -8813,44 +8860,104 @@ $("btnFromSlot").addEventListener("click", function(){ openSlotDialog("from", -1
 /* 目的地スロット：出発・経由地と同じく、シート内の一行として置き、
    タップでピッカーが開く（並びは 出発 → 経由地 → 目的地） */
 $("btnDestSlot").addEventListener("click", function(){ openSlotDialog("to", -1); });
+/* 目的地1の削除：目的地が複数あるときだけ押せる。消すと後続の目的地が
+   繰り上がり、次の目的地が目的地1になる。残り1か所では削除できない */
 $("btnDestClear").addEventListener("click", function(){
+  if(destSetCount() < 2) return;
   destNode = null; destLabel = null; destCoord = null;
-  var st = $("selTo"); if(st) st.value = "";
-  var dsn0 = $("destSlotName"); if(dsn0) dsn0.textContent = "未設定";
-  syncDestDisplay();
+  normalizeDests();
+  var st = $("selTo"); if(st) st.value = destNode || "";
+  syncDestDisplay(); renderDestExtra();
   syncHiddenFromSlots();
 });
-/* 目的地の表示同期：スロットの表示名とクリアボタンの表示をそろえる */
+/* 設定済みの目的地の総数（目的地1＋destExtra の設定済み件数） */
+function destSetCount(){
+  var n = destNode ? 1 : 0;
+  destExtra.forEach(function(e){ if(e) n++; });
+  return n;
+}
+/* 設定済みの全目的地を順序どおりの配列で返す（保存・案内キュー用） */
+function destAllList(){
+  var out = [];
+  if(destNode) out.push({ node: destNode, label: destLabel || destNode, coord: destCoord ? destCoord.slice() : null });
+  destExtra.forEach(function(e){
+    if(e) out.push({ node: e.node, label: e.label || e.node, coord: e.coord ? e.coord.slice() : null });
+  });
+  return out;
+}
+/* 目的地の並びを整える：目的地1が空なら後続の設定済み目的地を繰り上げ、
+   空きスロット行は末尾へ寄せる。全体は最大5か所（追加は最大4件）に収める */
+function normalizeDests(){
+  var setList = destAllList();
+  var emptyRows = 0;
+  destExtra.forEach(function(e){ if(!e) emptyRows++; });
+  if(setList.length){
+    destNode = setList[0].node; destLabel = setList[0].label; destCoord = setList[0].coord;
+    destExtra = setList.slice(1);
+    for(var i = 0; i < emptyRows; i++) destExtra.push(null);
+  } else {
+    destExtra = destExtra.filter(function(e){ return !e; });
+  }
+  if(destExtra.length > 4) destExtra.length = 4;
+}
+/* 目的地の表示同期：スロットの表示名とクリアボタンの表示をそろえる。
+   クリア（削除）ボタンは、目的地が複数あるときだけ出す（残り1か所は削除不可） */
 function syncDestDisplay(){
   var name = destLabel || (destNode ? destNode : null);
   var clr = $("btnDestClear");
-  if(clr) clr.classList.toggle("hidden", !name);
+  if(clr) clr.classList.toggle("hidden", !(name && destSetCount() >= 2));
   var dsn = $("destSlotName");
   if(dsn) dsn.textContent = name || "未設定";
 }
-/* 目的地2スロットの表示同期：設定済み、または追加ボタンでスロットを
-   開いている間だけ行を出し、追加ボタンと入れ替える */
-function syncDest2Display(){
-  var has = !!dest2Node;
-  var row = $("dest2Row");
-  if(row) row.classList.toggle("hidden", !(has || dest2Shown));
-  var add = $("btnAddDest2");
-  if(add) add.classList.toggle("hidden", has || dest2Shown);
-  var nm = $("dest2SlotName");
-  if(nm) nm.textContent = dest2Label || dest2Node || "未設定";
+/* 目的地2以降のスロット行を描く（経由地スロットと同じ作り）。
+   行の×は、設定済みの目的地は合計2か所以上のときだけ出し（残り1か所は
+   削除不可）、空き行はいつでも閉じられる。追加ボタンは合計5か所で隠す */
+function renderDestExtra(){
+  var box = $("destExtraSlots"); if(!box) return;
+  box.innerHTML = "";
+  destExtra.forEach(function(e, i){
+    var row = document.createElement("div"); row.className = "via-slotrow";
+    var b = document.createElement("button"); b.type = "button"; b.className = "slot-btn";
+    b.innerHTML = '<span class="slot-tag">目的地' + (i + 2) + '</span><b></b><span class="slot-arrow">›</span>';
+    b.querySelector("b").textContent = e ? (e.label || e.node) : "未設定";
+    b.addEventListener("click", function(){ openSlotDialog("toX", i); });
+    row.appendChild(b);
+    if(!e || destSetCount() >= 2){
+      var rm = document.createElement("button"); rm.type = "button"; rm.className = "via-remove"; rm.textContent = "×";
+      rm.setAttribute("aria-label", "目的地" + (i + 2) + "を削除");
+      rm.addEventListener("click", function(){
+        if(destExtra[i] && destSetCount() < 2) return; /* 最後の1か所は削除不可 */
+        destExtra.splice(i, 1);
+        normalizeDests();
+        syncDestDisplay(); renderDestExtra();
+        syncHiddenFromSlots();
+      });
+      row.appendChild(rm);
+    }
+    box.appendChild(row);
+  });
+  var add = $("btnAddDest");
+  if(add) add.classList.toggle("hidden", 1 + destExtra.length >= 5);
+  if(typeof layoutSlotSwaps === "function") layoutSlotSwaps();
 }
-$("btnAddDest2").addEventListener("click", function(){
-  dest2Shown = true; syncDest2Display();
-  openSlotDialog("to2", -1);
+$("btnAddDest").addEventListener("click", function(){
+  if(1 + destExtra.length >= 5) return; /* 目的地は最大5か所まで */
+  destExtra.push(null);
+  renderDestExtra();
+  openSlotDialog("toX", destExtra.length - 1);
 });
-$("btnDest2Slot").addEventListener("click", function(){ openSlotDialog("to2", -1); });
-$("btnDest2Clear").addEventListener("click", function(){
-  dest2Node = null; dest2Label = null; dest2Coord = null; dest2Shown = false;
-  syncDest2Display();
-  syncHiddenFromSlots();
-});
-/* 保存ルート読込など他所からの目的地変更もスロット表示へ追随させる */
-setInterval(function(){ syncDestDisplay(); syncDest2Display(); }, 900);
+renderDestExtra();
+/* 保存ルート読込など他所からの目的地変更もスロット表示へ追随させる。
+   状態の署名が変わったときだけ正規化＋再描画する（開いているピッカーの
+   編集中スロットを壊さないため、無変更なら何もしない） */
+var destSyncSig = null;
+setInterval(function(){
+  var s = (destNode || "") + "#" + destExtra.map(function(e){ return e ? (e.node || "") : ""; }).join("|");
+  if(s === destSyncSig) return;
+  destSyncSig = s;
+  normalizeDests();
+  syncDestDisplay(); renderDestExtra();
+}, 900);
 $("dlgCurrentBtn").addEventListener("click", function(){
   fromNode = null; fromLabel = null; fromCoord = null;
   renderFromSlot(); syncHiddenFromSlots();
@@ -8905,7 +9012,7 @@ document.querySelectorAll("[data-dmode]").forEach(function(b){
 });
 function openSlotDialog(kind, index){
   dlgTarget = { kind:kind, index:index };
-  $("dlgTitle").textContent = kind === "to" ? "目的地を設定" : (kind === "to2" ? "目的地2を設定" : (kind === "from" ? "出発地を設定" : "経由地" + (index + 1) + "を設定"));
+  $("dlgTitle").textContent = kind === "to" ? "目的地を設定" : (kind === "toX" ? "目的地" + (index + 2) + "を設定" : (kind === "from" ? "出発地を設定" : "経由地" + (index + 1) + "を設定"));
   var cb = $("dlgCurrentBtn"); if(cb) cb.classList.toggle("hidden", kind !== "from");
   if(typeof renderMyPlaces === "function") renderMyPlaces();
   if(typeof syncDlgHomeRow === "function") syncDlgHomeRow();
@@ -8957,9 +9064,10 @@ function pickSlotNode(node, label){
     destNode = node; destLabel = label || node; destCoord = c;
     var dsn1 = $("destSlotName"); if(dsn1) dsn1.textContent = destLabel;
     syncDestDisplay();
-  } else if(dlgTarget.kind === "to2"){
-    dest2Node = node; dest2Label = label || node; dest2Coord = c; dest2Shown = true;
-    syncDest2Display();
+  } else if(dlgTarget.kind === "toX"){
+    destExtra[dlgTarget.index] = { node: node, label: label || node, coord: c };
+    if(!window.__deferDestNormalize) normalizeDests();
+    syncDestDisplay(); renderDestExtra();
   } else {
     viaSlots[dlgTarget.index] = node;
     viaLabels[dlgTarget.index] = label || node;
@@ -9075,13 +9183,18 @@ function pickSlotPoint(lat, lng, addrText, fallbackLabel){
      呼ぶことで、シート側の判定がすべて最終座標で統一される */
   window.__deferSlotPicked = true;
   window.__slotPickedPending = null;
+  /* 目的地2以降は、正確な座標の上書き（下記）が終わるまで繰り上げ
+     （normalizeDests）を保留する。上書き先の行がずれないようにするため */
+  window.__deferDestNormalize = true;
   pickSlotNode(node, addrText || fallbackLabel || node);
   window.__deferSlotPicked = false;
+  window.__deferDestNormalize = false;
   /* 地図・検索で選んだ地点は、登録地点ではなくタップした正確な座標を保持する */
   if(target.kind === "to") destCoord = [lat, lng];
-  else if(target.kind === "to2") dest2Coord = [lat, lng];
+  else if(target.kind === "toX"){ if(destExtra[target.index]) destExtra[target.index].coord = [lat, lng]; }
   else if(target.kind === "from") fromCoord = [lat, lng];
   else viaCoords[target.index] = [lat, lng];
+  if(target.kind === "toX"){ normalizeDests(); syncDestDisplay(); renderDestExtra(); }
   var pendingFromMap = window.__slotPickedPending;
   window.__slotPickedPending = null;
   if(pendingFromMap !== null && pendingFromMap !== undefined && typeof window.onSlotPicked === "function"){
@@ -9094,8 +9207,15 @@ function pickSlotPoint(lat, lng, addrText, fallbackLabel){
       if(!s) return;
       if(target.kind === "to"){
         if(destNode === node){ destLabel = s; var dsn2 = $("destSlotName"); if(dsn2) dsn2.textContent = s; syncDestDisplay(); }
-      } else if(target.kind === "to2"){
-        if(dest2Node === node){ dest2Label = s; syncDest2Display(); }
+      } else if(target.kind === "toX"){
+        /* 繰り上げで目的地1へ移っている場合もあるため、node で探して更新する */
+        if(destNode === node){ destLabel = s; syncDestDisplay(); }
+        else {
+          for(var di = 0; di < destExtra.length; di++){
+            if(destExtra[di] && destExtra[di].node === node) destExtra[di].label = s;
+          }
+          renderDestExtra();
+        }
       } else if(target.kind === "from"){
         if(fromNode === node){ fromLabel = s; renderFromSlot(); }
       } else if(viaSlots[target.index] === node){
@@ -9128,13 +9248,13 @@ var mapPickSheetWasOpen = false; /* 地図選択に入る前にルート設定�
 var mapPickTapWasOpen = false; /* 地図選択に入る前に地点カードが出ていたか */
 function slotCoordForPick(){
   if(dlgTarget.kind === "to") return destCoord;
-  if(dlgTarget.kind === "to2") return dest2Coord;
+  if(dlgTarget.kind === "toX"){ var e = destExtra[dlgTarget.index]; return e ? e.coord : null; }
   if(dlgTarget.kind === "from") return fromCoord;
   return viaCoords[dlgTarget.index] || null;
 }
 function mapPickTitleText(){
   if(dlgTarget.kind === "home") return "自宅を地図で選択";
-  if(dlgTarget.kind === "to2") return "目的地2を地図で選択";
+  if(dlgTarget.kind === "toX") return "目的地" + (dlgTarget.index + 2) + "を地図で選択";
   if(dlgTarget.kind === "to") return "目的地を地図で選択";
   if(dlgTarget.kind === "from") return "出発地を地図で選択";
   return "経由地" + (dlgTarget.index + 1) + "を地図で選択";
@@ -9339,7 +9459,7 @@ function readHomePlace(){
 function syncDlgHomeRow(){
   var row = $("dlgHomeRow"); if(!row) return;
   var k = dlgTarget.kind;
-  var show = (k === "via" || k === "to" || k === "to2");
+  var show = (k === "via" || k === "to" || k === "toX");
   row.classList.toggle("hidden", !show);
   if(!show) return;
   var h = readHomePlace();
@@ -12293,7 +12413,7 @@ function proceedDecide(from){
     pendingMeta = { km: cands[0].res.km, min: candMin(cands[0]) };
     showPreview();
     fetchCandidateEtas(); /* TomTomキーがあれば候補ごとに渋滞込みETAを取り直す */
-    /* 目的地2への続き案内：候補が揃ったら推奨候補でそのまま案内開始する */
+    /* 次の目的地への続き案内：候補が揃ったら推奨候補でそのまま案内開始する */
     if(window.__autoStartNext){ window.__autoStartNext = false; startPending(); }
   }
   assembleApiCandidates(chain, byKind, fromDisp, destName, customInfo, function(cands){
@@ -12312,7 +12432,7 @@ function proceedDecide(from){
        根拠なので、この候補だけは形状ゲートを通さずに採用する */
     lastResortCandidate(chain, byKind, fromDisp, destName, function(lr){
       if(lr && lr.route && lr.route.geomPts && lr.route.geomPts.length >= 8){ finishDecide([lr]); return; }
-      window.__autoStartNext = false; /* 目的地2の自動開始が残らないようにする */
+      window.__autoStartNext = false; /* 次の目的地の自動開始が残らないようにする */
       note.textContent = "ルートを取得できませんでした。通信状態を確認してください。";
     });
   });
@@ -12931,17 +13051,30 @@ syncDestDisplay();
       return true;
     }catch(e){ return false; }
   }
-  function specSig(s){ return s.destNode + "|" + (s.vias || []).map(function(v){ return v.node; }).join(">") + "|" + (s.dest2Node || ""); }
+  /* 保存ルートの同一判定用の署名。目的地リスト（最大5か所）は新形式の
+     dests から、旧形式（destNode＋dest2Node）からも同じ並びで組み立てる */
+  function specDestList(s){
+    if(s.dests && s.dests.length) return s.dests;
+    var out = [];
+    if(s.destNode) out.push({ node: s.destNode });
+    if(s.dest2Node) out.push({ node: s.dest2Node });
+    return out;
+  }
+  function specSig(s){ return specDestList(s).map(function(d){ return d.node; }).join(">") + "|" + (s.vias || []).map(function(v){ return v.node; }).join(">"); }
   function specFromCurrent(){
     if(typeof destNode === "undefined" || !destNode) return null;
     var vias = [];
     viaSlots.forEach(function(v, i){ if(v) vias.push({ node:v, label: viaLabels[i] || v, coord: viaCoords[i] ? viaCoords[i].slice() : null }); });
+    var dests = (typeof destAllList === "function") ? destAllList() : [{ node: destNode, label: destLabel || destNode, coord: destCoord ? destCoord.slice() : null }];
+    var d2 = dests.length > 1 ? dests[1] : null;
     return { id:"r" + Date.now(), name: destLabel || destNode,
       destNode: destNode, destLabel: destLabel || destNode,
       destCoord: destCoord ? destCoord.slice() : null,
-      dest2Node: (typeof dest2Node !== "undefined" && dest2Node) ? dest2Node : null,
-      dest2Label: (typeof dest2Node !== "undefined" && dest2Node) ? (dest2Label || dest2Node) : null,
-      dest2Coord: (typeof dest2Coord !== "undefined" && dest2Coord) ? dest2Coord.slice() : null,
+      /* 目的地リスト（最大5か所）。旧形式の dest2* も互換のため併記する */
+      dests: dests,
+      dest2Node: d2 ? d2.node : null,
+      dest2Label: d2 ? (d2.label || d2.node) : null,
+      dest2Coord: d2 ? (d2.coord ? d2.coord.slice() : null) : null,
       vias: vias,
       legModes: (typeof slotLegModes !== "undefined" && slotLegModes) ? slotLegModes.slice() : [],
       savedAt: Date.now() };
@@ -12953,22 +13086,28 @@ syncDestDisplay();
     if(!spec) return "nodest";
     var sig = specSig(spec), ex = null;
     savedRoutes.forEach(function(r){ if(specSig(r) === sig) ex = r; });
-    if(ex){ ex.savedAt = Date.now(); ex.name = spec.name; ex.destLabel = spec.destLabel; ex.destCoord = spec.destCoord; ex.dest2Node = spec.dest2Node; ex.dest2Label = spec.dest2Label; ex.dest2Coord = spec.dest2Coord; ex.legModes = spec.legModes; ex.vias = spec.vias; }
+    if(ex){ ex.savedAt = Date.now(); ex.name = spec.name; ex.destLabel = spec.destLabel; ex.destCoord = spec.destCoord; ex.dests = spec.dests; ex.dest2Node = spec.dest2Node; ex.dest2Label = spec.dest2Label; ex.dest2Coord = spec.dest2Coord; ex.legModes = spec.legModes; ex.vias = spec.vias; }
     else savedRoutes.unshift(spec);
     if(savedRoutes.length > 100) savedRoutes.length = 100;
     return saveSavedRoutes() ? "ok" : "nostorage";
   }
   window.saveCurrentRoute = saveCurrentRoute;
   function loadSavedRoute(r){
-    destNode = r.destNode; destLabel = r.destLabel || r.destNode;
-    destCoord = r.destCoord ? r.destCoord.slice() : null;
-    /* 目的地2も保存・復元する（旧形式の保存ルートには無いので null に戻す） */
-    if(typeof dest2Node !== "undefined"){
-      dest2Node = r.dest2Node || null;
-      dest2Label = r.dest2Label || r.dest2Node || null;
-      dest2Coord = r.dest2Coord ? r.dest2Coord.slice() : null;
-      dest2Shown = !!dest2Node;
-      if(typeof syncDest2Display === "function") syncDest2Display();
+    /* 目的地リスト（最大5か所）を復元する。新形式は dests、旧形式は
+       destNode＋dest2Node から並びを組み立てる */
+    var list = specDestList(r).map(function(d, i){
+      if(r.dests && r.dests.length) return { node: d.node, label: d.label || d.node, coord: d.coord ? d.coord.slice() : null };
+      if(i === 0) return { node: r.destNode, label: r.destLabel || r.destNode, coord: r.destCoord ? r.destCoord.slice() : null };
+      return { node: r.dest2Node, label: r.dest2Label || r.dest2Node, coord: r.dest2Coord ? r.dest2Coord.slice() : null };
+    });
+    destNode = list.length ? list[0].node : null;
+    destLabel = list.length ? list[0].label : null;
+    destCoord = list.length ? list[0].coord : null;
+    if(typeof destExtra !== "undefined"){
+      destExtra = list.slice(1, 5);
+      if(typeof normalizeDests === "function") normalizeDests();
+      if(typeof syncDestDisplay === "function") syncDestDisplay();
+      if(typeof renderDestExtra === "function") renderDestExtra();
     }
     viaSlots.length = 0; viaLabels.length = 0; viaCoords.length = 0;
     (r.vias || []).forEach(function(v){
@@ -13016,7 +13155,8 @@ syncDestDisplay();
         var main = document.createElement("button"); main.type = "button"; main.className = "mgmt-main";
         var bEl = document.createElement("b"); bEl.textContent = "現在地 → " + (r.name || r.destLabel || r.destNode);
         var viaTxt = (r.vias && r.vias.length) ? "経由地 " + r.vias.length + "件 ・ " : "";
-        if(r.dest2Node) viaTxt += "目的地2あり ・ ";
+        var destN = specDestList(r).length;
+        if(destN > 1) viaTxt += "目的地" + destN + "か所 ・ ";
         var sEl = document.createElement("span"); sEl.textContent = viaTxt + fmtDate(r.savedAt) + " 保存";
         main.appendChild(bEl); main.appendChild(sEl);
         main.addEventListener("click", function(){ loadSavedRoute(r); });
