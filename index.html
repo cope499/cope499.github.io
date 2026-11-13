@@ -1529,6 +1529,24 @@ html,body{overscroll-behavior:none}
   #busyPill .busy-spin{animation-duration:2.4s}
 }
 
+/* ===== ボタン上の読み込み表示（iOS風スピナー）と、条件据え置き時の無効化 =====
+   処理中は、そのボタン自体の中央に放射状セグメントのスピナーを重ねる
+   （.btn-spin のバーを JS が12本差し込む）。計算・検索が終わったボタンは、
+   条件が変わるまで .is-stale ＋ disabled で暗く無効化する（BtnFx が管理）。 */
+.btn{position:relative}
+.btn-spin{position:absolute;left:50%;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;
+  pointer-events:none;color:inherit;z-index:3;animation:btnSpinSteps 1s steps(12) infinite}
+.btn-spin i{position:absolute;left:calc(50% - 1.4px);top:calc(50% - 12px);width:2.8px;height:7.5px;
+  border-radius:2px;background:currentColor;transform-origin:50% 12px}
+button.btn-busy{pointer-events:none}
+button.btn-busy::after{content:"";position:absolute;inset:0;border-radius:inherit;
+  background:rgba(127,127,127,.28);z-index:2;pointer-events:none}
+button.is-stale{opacity:.45}
+@keyframes btnSpinSteps{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion: reduce){
+  .btn-spin{animation-duration:2.4s}
+}
+
 /* ===== v42: アプリシェル固定（画面サイズに完全追従させ、下部タブバーをスクロールでズラさない） ===== */
 /* 外枠（html/body）はビューポートに固定して一切スクロールさせない。
    スクロールはシェル内のコンテンツ領域（.wrap）だけで起こるため、
@@ -3277,6 +3295,9 @@ function scrollShellTop(){
   var showTimer = null, hideTimer = null, shownAt = 0;
   function pill(){ return document.getElementById("busyPill"); }
   function doShow(){
+    /* ボタン起点の処理中は、画面上部の汎用ピルではなくボタン上の
+       スピナーで見せる（BtnFx.begin が立てた __btnBusyDepth で判定） */
+    if(window.__btnBusyDepth > 0) return;
     var p = pill(); if(!p) return;
     shownAt = Date.now();
     p.classList.add("show"); p.setAttribute("aria-hidden", "false");
@@ -3318,6 +3339,78 @@ function scrollShellTop(){
       function(e){ end(); throw e; }
     );
   };
+})();
+
+/* ================= ボタン単位の読み込み表示／据え置き無効化（BtnFx） =================
+   begin(btn): 処理の間、そのボタン上に iOS 風スピナーを重ねて無効化する。
+     この間は画面上部の汎用ピル（busyPill）を出さない（__btnBusyDepth）。
+   register(btn, sigFn) + done(btn): 実行が終わった時点の条件の署名を記録し、
+     条件（sigFn の返す文字列）が変わるまでボタンを disabled＋.is-stale で
+     暗く無効化する。条件が変われば自動で再度押せるよう戻す。
+   clear(btn): 保存ルート読込のような「新しい文脈での実行」を許可するため、
+     記録した署名を消して無効化を解除する。 */
+window.BtnFx = (function(){
+  var depth = 0, watchers = [];
+  function makeSpin(){
+    var s = document.createElement("span");
+    s.className = "btn-spin"; s.setAttribute("aria-hidden", "true");
+    for(var i = 0; i < 12; i++){
+      var b = document.createElement("i");
+      b.style.transform = "rotate(" + (i * 30) + "deg)";
+      b.style.opacity = String(Math.max(0.18, 1 - i * 0.072));
+      s.appendChild(b);
+    }
+    return s;
+  }
+  function findW(btn){
+    for(var i = 0; i < watchers.length; i++) if(watchers[i].btn === btn) return watchers[i];
+    return null;
+  }
+  function refresh(){
+    watchers.forEach(function(w){
+      var b = w.btn;
+      if(!b || b._btnBusy || w.sig == null) return;
+      var cur;
+      try{ cur = w.sigFn(); }catch(e){ return; }
+      if(cur === w.sig){ b.disabled = true; b.classList.add("is-stale"); w.owned = true; }
+      else if(w.owned){ b.disabled = false; b.classList.remove("is-stale"); w.owned = false; }
+    });
+  }
+  function begin(btn){
+    if(!btn || btn._btnBusy) return;
+    btn._btnBusy = true; depth++; window.__btnBusyDepth = depth;
+    var p = document.getElementById("busyPill");
+    if(p){ p.classList.remove("show"); p.setAttribute("aria-hidden", "true"); }
+    btn._btnWasDisabled = !!btn.disabled;
+    btn.disabled = true;
+    btn.classList.add("btn-busy"); btn.setAttribute("aria-busy", "true");
+    if(!btn.querySelector(".btn-spin")) btn.appendChild(makeSpin());
+  }
+  function end(btn){
+    if(!btn || !btn._btnBusy) return;
+    btn._btnBusy = false; depth = Math.max(0, depth - 1); window.__btnBusyDepth = depth;
+    btn.classList.remove("btn-busy"); btn.removeAttribute("aria-busy");
+    var s = btn.querySelector(".btn-spin");
+    if(s && s.parentNode) s.parentNode.removeChild(s);
+    btn.disabled = !!btn._btnWasDisabled;
+    refresh();
+  }
+  function done(btn){
+    var w = findW(btn); if(!w) return;
+    try{ w.sig = w.sigFn(); }catch(e){}
+    refresh();
+  }
+  function clear(btn){
+    var w = findW(btn); if(!w) return;
+    w.sig = null;
+    if(w.owned){ btn.disabled = false; btn.classList.remove("is-stale"); w.owned = false; }
+  }
+  function register(btn, sigFn){
+    if(!btn || typeof sigFn !== "function" || findW(btn)) return;
+    watchers.push({ btn: btn, sigFn: sigFn, sig: null, owned: false });
+  }
+  setInterval(refresh, 400);
+  return { begin: begin, end: end, done: done, clear: clear, register: register, refresh: refresh };
 })();
 
 /* ================= ROUTE DATA ================= */
@@ -3980,6 +4073,8 @@ function fmtDist(m){
 }
 function distText(m){ var f=fmtDist(m); return f[0]+(f[1]?" "+f[1]:""); }
 function yen(n){ return "¥" + Number(n).toLocaleString("ja-JP"); }
+/* 所要時間の表示は「何時間何分」に統一する：1時間未満は「25分」、ちょうど何時間なら「3時間」、それ以外は「11時間25分」 */
+function fmtDur(min){ var m = Math.max(0, Math.round(Number(min) || 0)); if(m < 60) return m + "分"; var h = Math.floor(m / 60), r = m % 60; return r ? (h + "時間" + r + "分") : (h + "時間"); }
 function haversine(aLat,aLng,bLat,bLng){
   var R=6371000, dLat=(bLat-aLat)*Math.PI/180, dLng=(bLng-aLng)*Math.PI/180;
   var x=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(aLat*Math.PI/180)*Math.cos(bLat*Math.PI/180)*Math.sin(dLng/2)*Math.sin(dLng/2);
@@ -4374,6 +4469,12 @@ function getVias(){
     renderLegPrefs();
     var note=$("fareNote"); note.classList.remove("hidden");
     note.textContent = "全区間に「"+legModeLabel(v)+"」を適用。";
+    if(window.BtnFx) BtnFx.done(bulkBtn); /* 同じ一括指定・同じ区間設定のままでは再適用させない */
+  });
+  /* 全区間に適用：適用先の選び方か、個別の区間設定が変わるまで無効化 */
+  if(bulkBtn && window.BtnFx) BtnFx.register(bulkBtn, function(){
+    return ($("bulkPref") ? $("bulkPref").value : "") + "|" +
+      ((typeof legPrefs !== "undefined" && legPrefs) ? legPrefs.join(",") : "");
   });
   renderLegPrefs();
   $("btnFromCurrent").addEventListener("click", function(){
@@ -4418,13 +4519,13 @@ function runFareSearch(fromRaw, to){
     var roads = res.edges.map(function(e){ return e.road; }).join(" → ");
     var legHtml = res.segments.map(function(sg, i){
       var sgRoads = sg.edges.map(function(e){ return e.road; }).join(" → ");
-      return "区間"+(i+1)+" <b>"+sg.from+" → "+sg.to+"</b>："+legModeLabel(sg.mode)+" ― "+sgRoads+" ／ "+yen(sg.toll)+"・約"+sg.km.toFixed(0)+"km・約"+sg.min+"分";
+      return "区間"+(i+1)+" <b>"+sg.from+" → "+sg.to+"</b>："+legModeLabel(sg.mode)+" ― "+sgRoads+" ／ "+yen(sg.toll)+"・約"+sg.km.toFixed(0)+"km・約"+fmtDur(sg.min);
     }).join("<br>");
     var modeSummary = modes.map(function(m,i){ return "区間"+(i+1)+"="+legModeLabel(m); }).join("、");
     card.innerHTML = '<span class="kind">区間設定 ― '+modeSummary+'</span>'
       + '<span class="price">'+yen(res.toll)+' <small>ETC目安'+(res.toll===0?'（下道のみ・無料）':'')+(res.toll===cheapest?' ／ 3案と比べても最安':' ／ 最安より +'+yen(res.toll-cheapest))+'</small></span>'
       + '<span class="path">'+res.path.join(" → ")+'</span>'
-      + '<span class="det">'+roads+'<br>距離 約'+res.km.toFixed(0)+'km ／ 所要 約'+res.min+'分</span>'
+      + '<span class="det">'+roads+'<br>距離 約'+res.km.toFixed(0)+'km ／ 所要 約'+fmtDur(res.min)+'</span>'
       + '<span class="legbreak">'+legHtml+'</span>';
     var btn=document.createElement("button");
     btn.className="btn"; btn.textContent = "このルートを選ぶ";
@@ -4447,7 +4548,7 @@ function runFareSearch(fromRaw, to){
     card.innerHTML = '<span class="kind">'+r.label+''+'</span>'
       + '<span class="price">'+yen(res.toll)+' <small>ETC目安'+(res.toll===0?'（下道のみ・無料）':'')+'</small></span>'
       + '<span class="path">'+res.path.join(" → ")+'</span>'
-      + '<span class="det">'+roads+'<br>距離 約'+res.km.toFixed(0)+'km ／ 所要 約'+res.min+'分'+(save?' ／ '+save:'')+'</span>';
+      + '<span class="det">'+roads+'<br>距離 約'+res.km.toFixed(0)+'km ／ 所要 約'+fmtDur(res.min)+(save?' ／ '+save:'')+'</span>';
     var btn=document.createElement("button");
     btn.className="btn"; btn.textContent = "このルートを選ぶ";
     btn.addEventListener("click", function(){
@@ -4463,22 +4564,40 @@ function runFareSearch(fromRaw, to){
   var now=new Date();
   note.textContent = "ETC普通車の目安（2026年11月時点）。";
 }
+/* 検索ボタン（最安検索）：検索できたら、その時点の条件（出発地・目的地・
+   経由地・区間設定）が変わるまで無効化して暗くする。現在地取得を伴う
+   場合はボタン上にスピナーも出す */
+if(window.BtnFx) BtnFx.register($("btnFare"), function(){
+  var vs = Array.prototype.map.call(document.querySelectorAll(".via-select"), function(s){ return s.value; }).join("|");
+  return [$("selFrom").value, $("selTo").value, vs,
+    (typeof legPrefs !== "undefined" && legPrefs) ? legPrefs.join(",") : ""].join("#");
+});
+function fareBtnSettle(){
+  if(!window.BtnFx) return;
+  var b = $("btnFare"); BtnFx.end(b);
+  var box = $("fareResults");
+  if(box && box.children.length) BtnFx.done(b); /* 結果が出た検索だけ据え置き無効化する */
+}
 $("btnFare").addEventListener("click", function(){
   var fromRaw = $("selFrom").value, to = $("selTo").value;
   var note = $("fareNote");
   if(fromRaw === "__current__" && state.gps.lat == null && "geolocation" in navigator){
+    if(window.BtnFx) BtnFx.begin($("btnFare"));
     note.classList.remove("hidden");
     note.textContent = "現在地を取得中…";
     navigator.geolocation.getCurrentPosition(function(pos){
       state.gps.lat = pos.coords.latitude; state.gps.lng = pos.coords.longitude; state.gps.acc = pos.coords.accuracy;
       updateFromNearInfo();
       runFareSearch(fromRaw, to);
+      fareBtnSettle();
     }, function(){
       note.textContent = "現在地を取得できませんでした。";
+      if(window.BtnFx) BtnFx.end($("btnFare"));
     }, { enableHighAccuracy:true, timeout:12000, maximumAge:60000 });
     return;
   }
   runFareSearch(fromRaw, to);
+  fareBtnSettle();
 });
 
 /* ================= DETOUR / SHORTEST-DISTANCE TOLL CALCULATOR =================
@@ -4520,11 +4639,16 @@ var KENO_SEGMENTS = [
 ];
 var TOLL_NETWORKS = {
   shuto:{ label:"首都高", segments:SHUTO_SEGMENTS,
-    toll:function(d){ /* 距離帯の概算（普通車・ETC） */
-      if(d<=6) return 300; if(d<=12) return 480; if(d<=18) return 660;
-      if(d<=24) return 840; if(d<=30) return 1020; if(d<=36) return 1200; return 1320; } },
+    toll:function(d){ /* 公式の距離制（普通車・ETC、2026年10月改定後）：
+      （150円＋32.472円/km×料金距離）×消費税10%を10円単位に丸め、
+      下限300円・上限2,130円（上限は料金距離55kmで到達） */
+      return Math.min(2130, Math.max(300, Math.round((150 + 32.472 * d) * 1.1 / 10) * 10)); } },
   keno:{ label:"圏央道", segments:KENO_SEGMENTS,
-    toll:function(d){ return Math.max(320, Math.round((150 + 27*d)/10)*10); } }
+    /* 圏央道は全線が大都市近郊水準（29.52円/km＋ターミナル150円）×
+       消費税。公式例：入間⇔境古河62.1km＝2,180円、つくば中央⇔神崎
+       34.4km＝1,280円と式が一致する。旧式（150＋27円/km）は普通区間
+       水準で系統的に約16%安かった */
+    toll:function(d){ return Math.max(320, Math.round((150 + 29.52 * d) * 1.1 / 10) * 10); } }
 };
 function netGraph(net){
   var nodes = {}, adj = {};
@@ -6183,9 +6307,11 @@ function initIcMap(){
     if(role === "entry"){
       $("selFrom").value = nn.node; updateFromNearInfo(); renderLegPrefs();
       res.innerHTML = "出発地：<b>" + nn.node + "</b>（" + ic[0] + "・" + dirTxt + "）";
+      if(window.BtnFx) BtnFx.done($("btnIcApply"));
     } else if(role === "exit"){
       $("selTo").value = nn.node; renderLegPrefs();
       res.innerHTML = "目的地：<b>" + nn.node + "</b>（" + ic[0] + "・" + dirTxt + "）";
+      if(window.BtnFx) BtnFx.done($("btnIcApply"));
     } else {
       var sels = document.querySelectorAll(".via-select");
       var placed = false;
@@ -6194,11 +6320,17 @@ function initIcMap(){
         $("viaList").appendChild(makeViaRow(nn.node)); refreshViaAddBtn(); placed = true;
       }
       renderLegPrefs();
+      if(placed && window.BtnFx) BtnFx.done($("btnIcApply"));
       res.innerHTML = placed
         ? "経由地：<b>" + nn.node + "</b>（" + ic[0] + "・" + dirTxt + "）"
         : "経由地は最大4件";
     }
     var f = $("finder"); if(f) f.scrollIntoView({block:"start", behavior:"smooth"});
+  });
+  /* 最安検索に反映：使い方・向かう先・道路・IC の選択が変わるまで、
+     反映済みの組み合わせではボタンを無効化して暗くする */
+  if(window.BtnFx) BtnFx.register($("btnIcApply"), function(){
+    return [roleSel.value, refSel.value, roadSel.value, $("icName").value].join("|");
   });
 })();
 
@@ -6310,7 +6442,7 @@ function renderRoutes(filter){
     var b = document.createElement("button");
     b.className = "route";
     b.innerHTML = '<span class="fromto">'+r.from+'<span class="arrow">→</span>'+r.to+'</span>'
-      + '<span class="meta"><span>'+r.km+' km</span><span>約'+r.min+'分</span><span>'+(r.toll? yen(r.toll) : "無料")+'</span></span>';
+      + '<span class="meta"><span>'+r.km+' km</span><span>約'+fmtDur(r.min)+'</span><span>'+(r.toll? yen(r.toll) : "無料")+'</span></span>';
     b.addEventListener("click", function(){ selectRoute(r, null); });
     list.appendChild(b);
   });
@@ -6360,7 +6492,7 @@ function pvMetaText(r, toll){
   /* 料金不明の有料区間を含む候補は、ヘッダーでも「無料」と出さない
      （候補カードの「有料区間あり」と揃える）。料金グラフでなく
      公式料金体系からの概算の場合は「概算」を付けて区別する */
-  return "約" + km + "km ・ 約" + min + "分 ・ " + (toll ? ((pendingTollUnknown && pendingEstToll) ? "概算 " : "") + yen(toll) : (pendingTollUnknown ? "有料区間あり" : "無料"));
+  return "約" + km + "km ・ 約" + fmtDur(min) + " ・ " + (toll ? ((pendingTollUnknown && pendingEstToll) ? "概算 " : "") + yen(toll) : (pendingTollUnknown ? "有料区間あり" : "無料"));
 }
 function showPreview(){
   if(!pendingRoute) return;
@@ -6797,12 +6929,21 @@ function ensureGpsWatch(){
   if(state.gps.active || state.gps.watchId != null) return;
   var gb = $("btnGps"); if(gb) gb.click();
 }
+/* 案内開始ボタン群（プレビュー／ルート選択／地点カード）の読み込み表示を
+   まとめて畳む。どのボタンから始めても、開始処理が終われば全部戻す */
+function endStartBtns(){
+  if(!window.BtnFx) return;
+  ["btnPvStart", "btnChoiceStart", "btnHtbStart"].forEach(function(id){
+    var b = document.getElementById(id); if(b) BtnFx.end(b);
+  });
+}
 function startPending(){
-  if(!pendingRoute) return;
+  if(!pendingRoute){ endStartBtns(); return; }
   ensureGpsWatch(); /* タップ直後に位置情報の取得・許可を開始する */
   requestCompass(); /* 端末の向きを使う許可はタップの流れで取る */
   var r = pendingRoute, f = pendingFare;
   upgradeRoute(r, function(){
+    endStartBtns(); /* 案内開始ボタンのスピナーを畳む（遷移ボタンなので据え置き無効化はしない） */
     state.fare = f;
     hideChoice(); closePreview();
     openRoute(r);
@@ -6820,9 +6961,9 @@ function startPending(){
   });
 }
 $("btnChoicePreview").addEventListener("click", showPreview);
-$("btnChoiceStart").addEventListener("click", startPending);
+$("btnChoiceStart").addEventListener("click", function(){ if(window.BtnFx) BtnFx.begin(this); startPending(); });
 $("btnChoiceCancel").addEventListener("click", function(){ hideChoice(); pendingRoute = null; pendingFare = null; });
-$("btnPvStart").addEventListener("click", startPending);
+$("btnPvStart").addEventListener("click", function(){ if(window.BtnFx) BtnFx.begin(this); startPending(); });
 $("btnPvBack").addEventListener("click", closePreview);
 document.querySelectorAll(".tabbtn").forEach(function(b){
   b.addEventListener("click", function(){ showTab(b.getAttribute("data-tab")); });
@@ -7120,6 +7261,9 @@ function startNextDestNav(){
   syncDestDisplay(); renderDestExtra(); syncHiddenFromSlots();
   /* 決定→候補計算→推奨候補でそのまま案内開始（finishDecide 側のフック） */
   window.__autoStartNext = true;
+  /* 目的地が差し替わって条件は変わっている。決定ボタンが前回の条件で
+     無効化されたままなら、先に BtnFx へ再判定させて押せる状態に戻す */
+  if(window.BtnFx) BtnFx.refresh();
   var dec = $("btnDecide"); if(dec) dec.click();
 }
 $("btnEnd").addEventListener("click", onNavEndPressed);
@@ -7501,10 +7645,12 @@ function doReroute(manual){
   }
   if(chain.length < 2) return;
   rerouting = true;
+  /* 手動の再計算はボタン上にスピナーを出す（自動リルートは対象外） */
+  if(manual && window.BtnFx) BtnFx.begin($("btnReroute"));
   showRerouteToast("再計算中…");
   function adopt(nr){
     rerouting = false;
-    if(!nr || !state.route){ if(manual) showRerouteToast("再計算できませんでした"); return; }
+    if(!nr || !state.route){ if(manual){ showRerouteToast("再計算できませんでした"); if(window.BtnFx) BtnFx.end($("btnReroute")); } return; }
     var old = state.route;
     old.steps = nr.steps; old.geomPts = nr.geomPts; old._geomDense = nr._geomDense;
     old.id = nr.id; old.destCoords = chain.slice();
@@ -7524,6 +7670,9 @@ function doReroute(manual){
     renderNav(); renderSteps();
     showRerouteToast("ルートを再計算しました");
     speak("ルートを再計算しました。");
+    /* 再計算できたら、その位置・目的地のままでは再計算ボタンを無効化
+       して暗くする（位置が動く／目的地が変われば再度押せる） */
+    if(manual && window.BtnFx){ BtnFx.end($("btnReroute")); BtnFx.done($("btnReroute")); }
   }
   /* 有料ルートの再計算に一般道専用ビルダー（有料区間を弾く）を使うと、
      再計算できないか、高速に乗るルートが一般道の線に化けて残る。
@@ -8064,7 +8213,7 @@ function ttFetchMinutes(pts, cb, avoidToll){
   var locStr = locs.map(function(c){ return c[0].toFixed(5) + "," + c[1].toFixed(5); }).join(":");
   var cacheKey = locStr + (avoidToll ? "|notoll" : "");
   var cached = ttEtaCache[cacheKey];
-  if(cached && Date.now() - cached.at < 3 * 60000){ apiLog("TomTom", "ETA" + (avoidToll ? "（有料回避）" : ""), true, "cache", 0, cached.out.min + "分"); cb(cached.out); return; }
+  if(cached && Date.now() - cached.at < 3 * 60000){ apiLog("TomTom", "ETA" + (avoidToll ? "（有料回避）" : ""), true, "cache", 0, fmtDur(cached.out.min)); cb(cached.out); return; }
   var url = "https://api.tomtom.com/routing/1/calculateRoute/" + locStr +
     "/json?key=" + encodeURIComponent(key) +
     "&traffic=true&departAt=now&travelMode=car&routeType=fastest" +
@@ -8081,7 +8230,7 @@ function ttFetchMinutes(pts, cb, avoidToll){
     var out = { min: Math.max(1, Math.round(s.travelTimeInSeconds / 60)),
       delayMin: Math.round((s.trafficDelayInSeconds || 0) / 60) };
     ttEtaCache[cacheKey] = { out: out, at: Date.now() };
-    apiLog("TomTom", etaOp, true, etaSt, Date.now() - etaT0, out.min + "分・遅延" + out.delayMin + "分");
+    apiLog("TomTom", etaOp, true, etaSt, Date.now() - etaT0, fmtDur(out.min) + "・遅延" + fmtDur(out.delayMin));
     cb(out);
   }).catch(function(){ apiLog("TomTom", etaOp, false, etaSt, Date.now() - etaT0, "取得失敗"); cb(null); });
 }
@@ -8155,10 +8304,11 @@ function fetchCandidateEtas(){
     ttFetchMinutes(pts, function(res){
       if(pendingCandidates !== cands) return;
       /* 無料候補に非現実的な平均速度になるETAは採用しない。有料道路の
-         所要時間を一般道候補へ貼ってしまう事故の防止。都市部の一般道で
-         平均40km/h超は信号待ちを考えると現実的でないため上限は40 */
+         所要時間を一般道候補へ貼ってしまう事故の防止。上限は52km/h：
+         旧値40では、地方の国道を正しく平均40〜50km/hで走るETAまで
+         「非現実的」として捨てていた（2026-11ベンチマーク） */
       if(res && freeCand && c.res && c.res.km > 0 &&
-         c.res.km / (res.min / 60) > 40) res = null;
+         c.res.km / (res.min / 60) > 52) res = null;
       /* 採用する場合も、一般道区間の実勢下限より速い時間は付けない。
          経由点間だけ別ルートで取り直したETAは候補自身の時間ではなく、
          そのまま付けると候補間で時間の物差しがずれる（差異の主因） */
@@ -8263,7 +8413,7 @@ function renderApiDebug(){
       var parts = [dbgEsc(rw.label), '出典:' + rw.src];
       if(rw.ttState) parts.push('ETA:' + rw.ttState);
       parts.push(rw.km.toFixed(1) + 'km');
-      parts.push('表示' + rw.min + '分' + (rw.rawMin != null && rw.rawMin !== rw.min ? '（API生' + rw.rawMin + '分）' : ''));
+      parts.push('表示' + fmtDur(rw.min) + (rw.rawMin != null && rw.rawMin !== rw.min ? '（API生' + rw.rawMin + '分）' : ''));
       parts.push('形状' + rw.pts + '点');
       if(rw.tollShare != null) parts.push('有料割合' + Math.round(rw.tollShare * 100) + '%');
       parts.push(rw.sane ? 'ゲート合格' : 'ゲート不合格（非表示）');
@@ -8314,7 +8464,7 @@ function runApiSelfTest(){
         var s = data && data.routes && data.routes[0] && data.routes[0].summary;
         if(res.ok && s && s.travelTimeInSeconds != null){
           dbgTestResult.tt = "TomTom：有効 ｜ HTTP " + st + " ｜ " + (Date.now() - t0) + "ms ｜ 所要時間 " +
-            Math.max(1, Math.round(s.travelTimeInSeconds / 60)) + "分を取得（実際にAPIが使えています）";
+            fmtDur(Math.max(1, Math.round(s.travelTimeInSeconds / 60))) + "を取得（実際にAPIが使えています）";
           apiLog("TomTom", "接続テスト", true, st, Date.now() - t0, "成功");
         } else {
           dbgTestResult.tt = "TomTom：応答エラー ｜ HTTP " + st + " ｜ キーの有効性・許可ドメイン・月間上限を確認してください";
@@ -8869,17 +9019,47 @@ function ttAugmentCandidates(cands, chain, done){
    道路種別の実勢速度で下限を掛ける：幹線（番号路線・街道）27km/h、
    名称のある道22km/h、名称のない細道16km/h。有料ステップは高速の
    流れに近いのでOSRM値×高速係数のまま使う。 */
+/* 実勢速度キャップ（km/h）。基本値は都市部の実勢（幹線27・名称あり
+   22・細道16）だが、2026-11 のベンチマークで、地方の国道・バイパスに
+   まで同じ値を掛けると所要時間が系統的に大幅過大になることを確認
+   した（遠野→釜石43km：現行108分 vs 実勢約60分、会津若松→米沢68km：
+   162分 vs 約105分、東京→秋田の国道13号バイパス群でも同様）。
+   長いステップ（2km以上途切れない＝信号が疎）は、そのステップ自身の
+   自由流速度（OSRM duration が示す制限速度ベース）に連動してキャップ
+   を引き上げる。都市部のステップは短く・自由流速度も低いため従来値の
+   ままになり、東久留米→渋谷などの都市部較正は変わらない */
+function realisticCapKmh(cls, d, dur){
+  var base = cls === "arterial" ? 27 : (cls === "named" ? 22 : 16);
+  if(!(d >= 2000) || !(dur > 0)) return base;
+  var v = (d / 1000) / (dur / 3600); /* そのステップの自由流速度 */
+  if(v < 55) return base;
+  var k = cls === "arterial" ? 0.62 : (cls === "named" ? 0.58 : 0.55);
+  var hi = cls === "arterial" ? 55 : (cls === "named" ? 44 : 34);
+  var s = v * k;
+  return s > hi ? hi : (s > base ? s : base);
+}
+/* 高速区間への渋滞係数は、行程が長いほど薄める。混雑は主に発着側の
+   都市部で発生し、地方の高速区間は時間帯によらずほぼ一定の流れの
+   ため、全区間に一律で掛けると長距離ほど過大になっていた（東京→
+   秋田の日中係数×1.085で約+37分）。60km以下の行程は従来どおり全量 */
+function hwTrafficFactor(tm, totalKm){
+  var w = Math.min(1, 60 / Math.max(1, totalKm || 0));
+  return 1 + (tm.hw - 1) * w;
+}
 function osrmRealisticMin(r0){
   var tm = trafficModel();
   var capAdj = 1 + Math.max(0, tm.surface - 1) * 0.6; /* 混雑時は実勢速度も下がる */
+  var totalKm = 0;
+  (r0.legs || []).forEach(function(leg){ (leg.steps || []).forEach(function(st){ totalKm += (st.distance || 0) / 1000; }); });
+  var hwF = hwTrafficFactor(tm, totalKm);
   var sec = 0, baseSec = 0;
   (r0.legs || []).forEach(function(leg){
     (leg.steps || []).forEach(function(st){
       var d = st.distance || 0, dur = st.duration || 0;
       baseSec += dur;
-      if(isTollRoadStep(st)){ sec += dur * tm.hw; return; }
+      if(isTollRoadStep(st)){ sec += dur * hwF; return; }
       var cls = osrmStepClass(st);
-      var capKmh = cls === "arterial" ? 27 : (cls === "named" ? 22 : 16);
+      var capKmh = realisticCapKmh(cls, d, dur);
       var floorSec = d / (capKmh / 3.6) * capAdj;
       sec += Math.max(dur * tm.surface, floorSec);
     });
@@ -8902,13 +9082,24 @@ function surfaceFloorMin(steps){
   steps.forEach(function(s){
     var d = s.leg || 0;
     if(!(d > 0)) return;
-    if(s.toll){ sec += d / (100 / 3.6); return; }
+    /* 有料区間の下限速度は100km/h→88km/hに。ランプ・料金所・制限
+       80km/h区間を含む実勢の平均は100には届かず、100では下限が
+       緩すぎて速すぎるAPI時間を素通ししていた */
+    if(s.toll){ sec += d / (88 / 3.6); return; }
     var road = s.road || "";
     var txt = (road + " " + (s.name || "")).trim();
+    var cls;
+    if(/国道|県道|都道|府道|環状|街道|バイパス|自動車道|高速/.test(txt) || /^\s*(E|C)?\d/.test(road)) cls = "arterial";
+    else if(txt && txt !== "一般道") cls = "named";
+    else cls = "minor";
+    /* 案内ステップには自由流速度が無いため、osrmRealisticMin の
+       速度連動と同じ考え方を「ステップの長さ」で近似する：長く
+       途切れないステップは信号が疎な地方道・バイパスとみなし、
+       キャップを引き上げる（都市部の短いステップは従来値） */
     var capKmh;
-    if(/国道|県道|都道|府道|環状|街道|バイパス|自動車道|高速/.test(txt) || /^\s*(E|C)?\d/.test(road)) capKmh = 27;
-    else if(txt && txt !== "一般道") capKmh = 22;
-    else capKmh = 16;
+    if(cls === "arterial") capKmh = d >= 5000 ? 42 : (d >= 2000 ? 34 : 27);
+    else if(cls === "named") capKmh = d >= 5000 ? 34 : (d >= 2000 ? 28 : 22);
+    else capKmh = d >= 5000 ? 26 : (d >= 2000 ? 20 : 16);
     sec += d / (capKmh / 3.6) * capAdj;
   });
   return Math.max(0, Math.round(sec / 60));
@@ -9976,7 +10167,7 @@ function buildStitchedCandidate(chain, pair, nodes, hw, rawA, rawB, eGate, xGate
   if(!(km > 0)) return null;
   var tm = trafficModel();
   var hwBaseMin = hw.km / 86 * 60;
-  var min = Math.max(1, Math.round(rtA.min + hwBaseMin * tm.hw + rtB.min));
+  var min = Math.max(1, Math.round(rtA.min + hwBaseMin * hwTrafficFactor(tm, km) + rtB.min));
   var baseMin = Math.max(1, Math.round(rtA.baseMin + hwBaseMin + rtB.baseMin));
   var tollKm = Math.round(Math.min(km, hw.km + (rtA.tollKmOsrm || 0) + (rtB.tollKmOsrm || 0)) * 100) / 100;
   var route = { id: "local-hw-" + pair.entry.name + "-" + pair.exit.name,
@@ -11571,11 +11762,11 @@ function renderNav(){
   $("kvEta").textContent = eta.text + " 頃";
   var kes = $("kvEtaSrc");
   if(kes) kes.textContent = eta.src === "tomtom"
-    ? ("TomTom（渋滞込み）" + (state.ttRemain && state.ttRemain.delayMin > 0 ? "・遅延約" + state.ttRemain.delayMin + "分" : ""))
+    ? ("TomTom（渋滞込み）" + (state.ttRemain && state.ttRemain.delayMin > 0 ? "・遅延約" + fmtDur(state.ttRemain.delayMin) : ""))
     : "時間帯からの推定";
   maybeRefreshTtNav();
   $("kvRemain").textContent = (eta.rem/1000).toFixed(1) + " km";
-  $("kvLeft").textContent = "約 " + eta.min + " 分";
+  $("kvLeft").textContent = "約 " + fmtDur(eta.min);
   $("kvSpeed").textContent = state.gps.active && state.gps.speed!=null ? Math.round(state.gps.speed*3.6) + " km/h" : (state.simSpeed>0 ? "デモ走行中" : "—");
   $("kvAcc").textContent = state.gps.active && state.gps.acc!=null ? "約 " + Math.round(state.gps.acc) + " m" : "—";
   $("kvStep").textContent = "分岐 " + (state.stepIdx+1) + " / " + state.route.steps.length + "（" + step.name + "）";
@@ -11655,6 +11846,15 @@ function startGuidance(){
 }
 var _bn=$("btnNext"); if(_bn) _bn.addEventListener("click", function(){ if(!state.finished && state.route) advanceStep(true); });
 $("btnReroute").addEventListener("click", function(){ doReroute(true); });
+/* 再計算ボタンの条件＝現在地（約100m単位）と目的地。再計算した位置から
+   動かない間は、同じ再計算を繰り返させない */
+if(window.BtnFx) BtnFx.register($("btnReroute"), function(){
+  if(!state.route) return "noroute";
+  var pos = (state.gps && state.gps.lat != null) ? state.gps.lat.toFixed(3) + "," + state.gps.lng.toFixed(3) : "nopos";
+  var dc = state.route.destCoords;
+  var tail = (dc && dc.length) ? dc[dc.length - 1][0].toFixed(4) + "," + dc[dc.length - 1][1].toFixed(4) : (state.route.to || "");
+  return pos + "@" + tail;
+});
 $("btnPrev").addEventListener("click", function(){
   if(!state.route || state.stepIdx<=0) return;
   state.stepIdx--; state.finished=false; $("navMain").classList.remove("hidden"); $("navFinish").classList.add("hidden");
@@ -13459,7 +13659,7 @@ function buildLegIcBlock(idx, a, b, seg, recRes, saveIc){
     stripSlot.innerHTML = ""; stripSlot.appendChild(buildIcStrip(plan, e, x));
     tollLine.textContent = "この区間の料金目安 " + yen(toll) +
       (delta === 0 ? "（推奨ペア）" : "（推奨ペアより " + (delta > 0 ? "+¥" : "−¥") + Math.abs(delta) + "）") +
-      (shiftMin !== 0 ? " ・ 到着は推奨ペアより約" + Math.abs(shiftMin) + "分" + (shiftMin < 0 ? "早い" : "遅い") + "（目安）" : "");
+      (shiftMin !== 0 ? " ・ 到着は推奨ペアより約" + fmtDur(Math.abs(shiftMin)) + (shiftMin < 0 ? "早い" : "遅い") + "（目安）" : "");
   }
   eS.s.addEventListener("change", upd);
   xS.s.addEventListener("change", upd);
@@ -13665,7 +13865,7 @@ function tollPlanFor(res){
    区間距離はIC表座標からの沿道距離に、同梱高速線の実長から求めた
    補正係数（kmScale）を掛けて実距離へ寄せる。割引（深夜・休日等）
    は含まない */
-var TOLL_NEXCO_ROADS = { "東名高速": 1, "新東名高速（神奈川区間）": 1, "中央道": 1, "関越道": 1, "東北道": 1, "常磐道": 1, "東関東道": 1, "館山道": 1, "北関東道": 1, "上信越道（群馬区間）": 1, "秋田道": 1, "山形道": 1, "磐越道": 1, "日本海東北道": 1, "八戸道": 1, "北陸道": 1, "名神高速": 1, "新名神高速": 1, "東海北陸道": 1, "近畿道": 1, "阪和道": 1, "中国道": 1, "山陽道": 1, "九州道": 1, "東九州道": 1, "宮崎道": 1, "大分道": 1, "長崎道": 1, "道央道": 1, "道東道": 1, "伊勢湾岸道": 1, "高松道": 1, "松山道": 1, "徳島道": 1, "高知道": 1, "舞鶴若狭道": 1, "仙台東部道": 1, "広島道": 1, "東京外環道": 1 };
+var TOLL_NEXCO_ROADS = { "東名高速": 1, "新東名高速（神奈川区間）": 1, "中央道": 1, "関越道": 1, "東北道": 1, "常磐道": 1, "東関東道": 1, "館山道": 1, "北関東道": 1, "上信越道（群馬区間）": 1, "秋田道": 1, "山形道": 1, "磐越道": 1, "日本海東北道": 1, "八戸道": 1, "北陸道": 1, "名神高速": 1, "新名神高速": 1, "東海北陸道": 1, "近畿道": 1, "阪和道": 1, "中国道": 1, "山陽道": 1, "九州道": 1, "東九州道": 1, "宮崎道": 1, "大分道": 1, "長崎道": 1, "道央道": 1, "道東道": 1, "伊勢湾岸道": 1, "東名阪道": 1, "高松道": 1, "松山道": 1, "徳島道": 1, "高知道": 1, "舞鶴若狭道": 1, "仙台東部道": 1, "広島道": 1, "東京外環道": 1 };
 /* 無料区間として知られている路線（新直轄方式）。料金は 0 円で、
    概算を null にしない。東北中央道は福島〜米沢〜山形〜湯沢〜横手の
    全区間が無料（国交省・ドラぷらで確認）。福島JCT〜桑折JCTの接続部
@@ -13678,7 +13878,20 @@ var TOLL_URBAN_ZONES = [
   { road: "東名高速", from: "東京IC", to: "厚木" },
   { road: "常磐道", from: "三郷JCT", to: "谷田部" },
   { road: "中央道", from: "高井戸IC", to: "八王子" },
-  { road: "東京外環道", from: "大泉JCT", to: "高谷JCT" }
+  { road: "東京外環道", from: "大泉JCT", to: "高谷JCT" },
+  /* 2026-11 ベンチマークで判明した登録漏れ（NEXCO事業許可の大都市
+     近郊区間一覧と照合）。東関東道は湾岸市川〜成田が対象だが、IC表は
+     宮野木JCT以東しか持たないため、表内は千葉北からで全体を覆う。
+     漏れていた間は普通単価で計算され、千葉北→成田で約15%過小だった */
+  { road: "東関東道", from: "千葉北", to: "成田" },
+  { road: "新東名高速（神奈川区間）", from: "海老名南JCT", to: "厚木南" },
+  /* 名古屋近郊（2021年から大都市近郊と同水準） */
+  { road: "東名高速", from: "豊田JCT", to: "小牧" },
+  { road: "名神高速", from: "小牧", to: "養老JCT" },
+  { road: "中央道", from: "土岐JCT", to: "小牧JCT" },
+  { road: "東名阪道", from: "名古屋西JCT", to: "四日市JCT" },
+  /* 大阪近郊 */
+  { road: "中国道", from: "中国吹田", to: "西宮北" }
 ];
 function tollRoadClass(roadName){
   if(!roadName) return null;
@@ -13693,7 +13906,10 @@ function nexcoTollYen(chargeSum, km){
   if(!(km > 0) || !(chargeSum > 0)) return 0;
   var adj = km <= 100 ? km : (km <= 200 ? 100 + (km - 100) * 0.75 : 175 + (km - 200) * 0.70);
   var v = (chargeSum * (adj / km) + 150) * 1.1;
-  return v > 10000 ? Math.floor(v / 100) * 100 : Math.round(v / 10) * 10;
+  /* 公式の端数処理は金額によらず10円単位の四捨五入（例：川口JCT→
+     青森は14,100円）。旧実装の「1万円超は100円未満切り捨て」は
+     長距離ほど最大99円の系統的な過小評価になっていた */
+  return Math.round(v / 10) * 10;
 }
 /* チェーン区間列から料金概算を返す。{ total, parts:[内訳文字列] }
    算出できない路線を含む場合は null */
@@ -13804,7 +14020,11 @@ function buildSpanPlan(eRef, xRef, groups, hwKm){
   /* 公式料金体系ベースの概算（料金グラフがペアをカバーしない長距離
      向け）。IC表座標からの沿道距離は実距離とずれるため、同梱高速線
      の実長（この候補の hwKm）との比で補正してから単価を掛ける */
-  var kmScale = 1;
+  /* 同梱高速線の実長が無い場合は 1.05 を既定にする。icAlongDist は
+     IC座標間の直線合算で、実距離より系統的に短い（実測：東名 東京〜
+     厚木 33.6km vs 公式35.0km＝×1.04、東北道 川口JCT〜青森 635km vs
+     約677km＝×1.07）。補正なしでは料金が4〜6%過小になっていた */
+  var kmScale = 1.05;
   if(hwKm > 0 && chainTotal > 0){
     var scT = hwKm / chainTotal;
     if(scT > 0.8 && scT < 1.25) kmScale = scT;
@@ -14503,7 +14723,7 @@ function fmtTollDelta(d){
 }
 function fmtMinDelta(d){
   if(d === 0) return "到着は推奨と同じ";
-  return d < 0 ? ("到着は推奨より " + (-d) + "分早い") : ("到着は推奨より " + d + "分遅い");
+  return d < 0 ? ("到着は推奨より " + fmtDur(-d) + "早い") : ("到着は推奨より " + fmtDur(d) + "遅い");
 }
 function arrivalClock(min){
   var t = new Date(Date.now() + min * 60000);
@@ -14960,7 +15180,7 @@ function applyIcSelection(cand, plan, amtEl, dltEl, pairBtns){
       var shiftMin = icOptMatch ? 0 : icShiftMin(plan, cand.icSel.e, cand.icSel.x, cand.res.km, candMin(cand));
       if(!rec || rec === cand){
         diffEl.textContent = "このルートが推奨です ・ 到着 " + arrivalClock(candMin(cand) + shiftMin) + "頃" +
-          (shiftMin !== 0 ? "（IC変更で約" + Math.abs(shiftMin) + "分" + (shiftMin < 0 ? "早い" : "遅い") + "・目安）" : "");
+          (shiftMin !== 0 ? "（IC変更で約" + fmtDur(Math.abs(shiftMin)) + (shiftMin < 0 ? "早い" : "遅い") + "・目安）" : "");
       } else {
         var recToll = (rec.icToll != null) ? rec.icToll : rec.res.toll;
         diffEl.textContent = fmtTollDelta(tollRef - recToll) + " ・ " +
@@ -15229,7 +15449,7 @@ function refreshIcOptDisplays(cand, plan){
   var card = (typeof candCardEls !== "undefined" && candCardEls) ? candCardEls[selectedCand] : null;
   if(isSel && card){
     var cm = card.querySelector(".cm");
-    if(cm) cm.textContent = "約" + cand.res.km.toFixed(0) + "km ・ 約" + candMin(cand) + "分 ・ 到着 " + arrivalClock(candMin(cand)) + "頃";
+    if(cm) cm.textContent = "約" + cand.res.km.toFixed(0) + "km ・ 約" + fmtDur(candMin(cand)) + " ・ 到着 " + arrivalClock(candMin(cand)) + "頃";
   }
   if(isSel && document.body.classList.contains("previewing")) drawPreviewRoute();
   if(cand._icEls) applyIcSelection(cand, plan, cand._icEls.amt, cand._icEls.dlt, null);
@@ -15830,7 +16050,7 @@ function reoptimizeIcRoute(cand, plan, seq){
     if(partial) setIcReoptStatus(cand, "一部の一般道区間は取得できず、従来の形状で表示しています。");
     else if(contaminated) setIcReoptStatus(cand, "一般道区間の一部に有料道路を含む案で表示しています。");
     apiLog("OSRM", "IC変更で区間別に再最適化", true, null, Date.now() - t0,
-      plan.entryName(e) + "→" + plan.exitName(x) + " ｜ " + nr.km + "km・" + nr.min + "分");
+      plan.entryName(e) + "→" + plan.exitName(x) + " ｜ " + nr.km + "km・" + fmtDur(nr.min));
   }).catch(function(){
     if(seq === cand._icReoptSeq) failIcReopt(cand);
   });
@@ -15863,7 +16083,7 @@ function renderCandidates(){
       });
     }
     var cm = document.createElement("span"); cm.className = "cm";
-    segLine(cm, ["約" + c.res.km.toFixed(0) + "km", "約" + candMin(c) + "分", "到着 " + arrivalClock(candMin(c)) + "頃"]);
+    segLine(cm, ["約" + c.res.km.toFixed(0) + "km", "約" + fmtDur(candMin(c)), "到着 " + arrivalClock(candMin(c)) + "頃"]);
     mid.appendChild(cm);
     /* 推奨との差分（料金のプラスマイナスと到着時間の差）を出す */
     if(recBase && c.res){
@@ -15883,7 +16103,7 @@ function renderCandidates(){
     }
     var notes = [];
     if(c.driveNote) notes.push(c.driveNote);
-    if(c.ttState === "ok") notes.push("TomTom渋滞込み" + (c.ttDelayMin > 0 ? "・遅延約" + c.ttDelayMin + "分" : "・遅延なし"));
+    if(c.ttState === "ok") notes.push("TomTom渋滞込み" + (c.ttDelayMin > 0 ? "・遅延約" + fmtDur(c.ttDelayMin) : "・遅延なし"));
     else if(c.ttState === "loading") notes.push("渋滞情報を取得中…");
     else if(c.trafficNote) notes.push(c.trafficNote);
     if(notes.length){
@@ -16195,12 +16415,13 @@ function starShapeSane(pts, stops){
   if(evPos.length > evLimit) return false;
   return true;
 }
-/* 候補の平均速度が種別に対して現実的か。無料候補は一般道前提で
-   平均34km/hを超えたら壊れているとみなす。全候補に実勢下限
-   （surfaceFloorMin／osrmRealisticMin：幹線でも27km/h）を通した後は
-   一般道の平均は27km/h以下に収まるはずで、34はその上限への余裕分。
-   旧上限42では、一般道25kmを37分（平均40km/h超）とするTomTom候補が
-   素通りし、実勢（Google表示で同OD約80分）と大きく差異が出ていた。
+/* 候補の平均速度が種別に対して現実的か。無料候補の上限は52km/h。
+   実勢下限（surfaceFloorMin／osrmRealisticMin）が本命のガードで、
+   都市部の一般道候補は下限により平均27km/h前後に収まるため、
+   都市部で「25kmを37分」とするような候補は下限側で既に是正される。
+   旧上限34km/hは、地方の国道・バイパスを正しく平均40〜50km/hで
+   走る候補まで壊れているとして落としていた（2026-11ベンチマーク：
+   実勢下限の速度連動化に合わせて上限も52へ統一）。
    有料候補は高速道路の上限として平均110km/hまで許す。 */
 function candSpeedSane(c){
   if(!c || !c.res || !(c.res.km > 0)) return false;
@@ -16208,7 +16429,7 @@ function candSpeedSane(c){
   if(!(min > 0)) return false;
   var kmh = c.res.km / (min / 60);
   if(c.res.toll > 0 || c.tollUnknown) return kmh <= 110;
-  return kmh <= 34;
+  return kmh <= 52;
 }
 /* 表示してよい候補かどうか：APIの密な実形状を持ち、形・距離・速度の
    すべてが健全なものだけを通す。グラフ組み立て候補（geomPtsなし）は
@@ -16647,6 +16868,9 @@ function proceedDecide(from){
     pendingFare = cands[0].fare;
     pendingMeta = { km: cands[0].res.km, min: candMin(cands[0]) };
     showPreview();
+    /* 計算完了：ボタン上のスピナーを消し、今の条件のままでは再計算
+       できないよう決定ボタンを無効化して暗くする（条件が変われば戻る） */
+    if(window.BtnFx){ BtnFx.end($("btnDecide")); BtnFx.done($("btnDecide")); }
     fetchCandidateEtas(); /* TomTomキーがあれば候補ごとに渋滞込みETAを取り直す */
     /* 次の目的地への続き案内：候補が揃ったら推奨候補でそのまま案内開始する */
     if(window.__autoStartNext){ window.__autoStartNext = false; startPending(); }
@@ -16669,6 +16893,7 @@ function proceedDecide(from){
       if(lr && lr.route && lr.route.geomPts && lr.route.geomPts.length >= 8){ finishDecide([lr]); return; }
       window.__autoStartNext = false; /* 次の目的地の自動開始が残らないようにする */
       note.textContent = "ルートを取得できませんでした。通信状態を確認してください。";
+      if(window.BtnFx) BtnFx.end($("btnDecide")); /* 失敗時は無効化せず、同じ条件でも再試行できるようにする */
     });
   });
 }
@@ -16714,6 +16939,22 @@ function dedupeStopsBeforeDecide(){
   }
   return removed;
 }
+/* 決定ボタン：計算が終わったら、その時点の条件（出発地・経由地・目的地・
+   追加目的地・区間ごとの設定・IC指定）が変わるまで無効化して暗くする。
+   計算中はボタン上に iOS 風スピナーを出す（BtnFx） */
+if(window.BtnFx) BtnFx.register($("btnDecide"), function(){
+  function c(a){ return a ? a[0].toFixed(5) + "," + a[1].toFixed(5) : ""; }
+  var org = (fromCoord || fromNode) ? (c(fromCoord) || fromNode)
+    : "gps:" + ((state.gps && state.gps.lat != null) ? state.gps.lat.toFixed(2) + "," + state.gps.lng.toFixed(2) : "none");
+  return [ org,
+    viaSlots.join("|"), viaCoords.map(c).join("|"), viaLabels.join("|"),
+    destNode || "", c(destCoord), destLabel || "",
+    destExtra.map(function(e){ return e ? (e.node || "") + "@" + c(e.coord) : ""; }).join("|"),
+    (typeof slotLegModes !== "undefined" && slotLegModes) ? slotLegModes.join(",") : "",
+    (typeof slotLegIc !== "undefined" && slotLegIc) ? JSON.stringify(slotLegIc) : "",
+    (typeof legPrefs !== "undefined" && legPrefs) ? legPrefs.join(",") : ""
+  ].join("#");
+});
 $("btnDecide").addEventListener("click", function(){
   var note = $("decideNote");
   syncHiddenFromSlots();
@@ -16724,6 +16965,7 @@ $("btnDecide").addEventListener("click", function(){
   }
   /* 重なる経由地はエラーにせず整理して続行する（メッセージは計算中表示に置き換わる） */
   dedupeStopsBeforeDecide();
+  if(window.BtnFx) BtnFx.begin($("btnDecide")); /* 以後の完了・失敗は proceedDecide 側と GPS エラー側で end する */
   if(fromCoord || fromNode){
     /* 出発地が変更されている場合は、その地点を起点にする（GPSは使わない） */
     proceedDecide(fromNode || nearestNode(fromCoord[0], fromCoord[1]).node);
@@ -16741,11 +16983,13 @@ $("btnDecide").addEventListener("click", function(){
       proceedDecide(nearestNode(state.gps.lat, state.gps.lng).node);
     }, function(){
       note.textContent = "現在地を取得できませんでした。";
+      if(window.BtnFx) BtnFx.end($("btnDecide"));
     }, { enableHighAccuracy:true, timeout:12000, maximumAge:60000 });
     return;
   }
   note.classList.remove("hidden");
   note.textContent = "現在地を取得できませんでした。";
+  if(window.BtnFx) BtnFx.end($("btnDecide"));
 });
 
 /* ================= NAV MAP SETTINGS (sheet) ================= */
@@ -16793,12 +17037,15 @@ $("btnEnd").addEventListener("click", function(e){ e.stopPropagation(); });
   var saved = tomtomKey();
   if(saved) inp.value = saved;
   refreshTtKeyStatus();
+  /* 保存ボタン：保存したキーのまま入力が変わらない間は無効化して暗くする */
+  if(window.BtnFx) BtnFx.register($("btnTtSave"), function(){ return inp.value.trim(); });
   $("btnTtSave").addEventListener("click", function(){
     setTomtomKey(inp.value);
     inp.value = tomtomKey();
     refreshTtKeyStatus();
     var st = $("ttKeyStatus");
     if(st && tomtomKey()) st.textContent = "保存しました。次回のルート検索から渋滞込みETAを使います。";
+    if(window.BtnFx) BtnFx.done($("btnTtSave"));
     /* 候補表示中なら、その場で取り直す */
     ttEtaCache = {};
     if(pendingCandidates){
@@ -17362,6 +17609,9 @@ syncDestDisplay();
     if(typeof renderViaSlots === "function") renderViaSlots();
     if(typeof syncHiddenFromSlots === "function") syncHiddenFromSlots();
     showTabMain("home");
+    /* 保存ルートの読込は新しい実行文脈なので、決定ボタンの据え置き
+       無効化は解除してから従来どおり決定を押す */
+    if(window.BtnFx) BtnFx.clear($id("btnDecide"));
     var dec = $id("btnDecide"); if(dec) dec.click();
   }
   window.loadSavedRoute = loadSavedRoute;
@@ -17427,13 +17677,35 @@ syncDestDisplay();
     msg.classList.remove("hidden");
     var res = saveCurrentRoute(), t = saveResultText(res);
     msg.textContent = t || "先に目的地を設定してください。";
+    if(res === "ok" && window.BtnFx) BtnFx.done(btnSaveHome); /* 同じ条件の二重保存を防ぐ */
   });
   var btnSavePv = $id("btnPvSaveRoute");
   if(btnSavePv) btnSavePv.addEventListener("click", function(){
     var m = $id("pvSaveMsg"); if(!m) return;
     var res = saveCurrentRoute(), t = saveResultText(res);
     m.textContent = t || "目的地が未設定のため保存できません。";
+    if(res === "ok" && window.BtnFx) BtnFx.done(btnSavePv);
   });
+  /* 保存ボタン共通の条件署名：出発地・経由地・目的地・追加目的地・
+     区間設定が変わるまで、保存済みの組み合わせでは無効化して暗くする */
+  function saveCondSig(){
+    function c(a){ return a ? a[0].toFixed(5) + "," + a[1].toFixed(5) : ""; }
+    return [
+      (typeof fromNode !== "undefined" && fromNode) || "", c(typeof fromCoord !== "undefined" ? fromCoord : null),
+      (typeof viaSlots !== "undefined" ? viaSlots.join("|") : ""),
+      (typeof destNode !== "undefined" && destNode) || "", c(typeof destCoord !== "undefined" ? destCoord : null),
+      (typeof destExtra !== "undefined" && destExtra) ? destExtra.map(function(e){ return e ? (e.node || "") + "@" + c(e.coord) : ""; }).join("|") : "",
+      (typeof slotLegModes !== "undefined" && slotLegModes) ? slotLegModes.join(",") : "",
+      (typeof slotLegIc !== "undefined" && slotLegIc) ? JSON.stringify(slotLegIc) : ""
+    ].join("#");
+  }
+  if(window.BtnFx){
+    if(btnSaveHome) BtnFx.register(btnSaveHome, saveCondSig);
+    if(btnSavePv) BtnFx.register(btnSavePv, function(){
+      return saveCondSig() + "#cand" + (typeof selectedCand !== "undefined" ? selectedCand : "") +
+        "#" + ((typeof pendingRoute !== "undefined" && pendingRoute) ? (pendingRoute.id || "") : "");
+    });
+  }
 
   /* ---------- 設定タブ ---------- */
   function syncThemeBtns(){
@@ -17968,7 +18240,7 @@ syncDestDisplay();
       }
       drawPinRoute(route);
       var mins = Math.max(1, Math.round(route.min || 0));
-      var tstr = mins >= 60 ? ("約" + Math.floor(mins / 60) + "時間" + (mins % 60 ? (mins % 60) + "分" : "")) : ("約" + mins + "分");
+      var tstr = "約" + fmtDur(mins);
       setPinRouteSum("約" + (Math.round((route.km || 0) * 10) / 10).toFixed(1) + " km ・ " + tstr + " ・ 料金 0円");
     });
   }
@@ -18062,7 +18334,7 @@ syncDestDisplay();
   }
   function pinCandSummary(c){
     var mins = Math.max(1, Math.round(candMin(c)));
-    var tstr = mins >= 60 ? ("約" + Math.floor(mins / 60) + "時間" + (mins % 60 ? (mins % 60) + "分" : "")) : ("約" + mins + "分");
+    var tstr = "約" + fmtDur(mins);
     var tollTxt = c.tollUnknown ? "有料区間あり" : ((c.res && c.res.toll > 0) ? ("料金 " + yen(c.res.toll)) : "料金 0円");
     return "約" + (Math.round(((c.res && c.res.km) || 0) * 10) / 10).toFixed(1) + " km ・ " + tstr + " ・ 到着 " + arrivalClock(mins) + "頃 ・ " + tollTxt;
   }
@@ -18108,9 +18380,10 @@ syncDestDisplay();
      再取得・差し替えはしない。ルート設定シートやルート選択画面は
      経由しない */
   function startPinNav(){
-    if(!pinCands || pinCandSel < 0 || !pinCands[pinCandSel]) return;
+    var sb0 = $id("btnHtbStart");
+    if(!pinCands || pinCandSel < 0 || !pinCands[pinCandSel]){ if(window.BtnFx && sb0) BtnFx.end(sb0); return; }
     var c = pinCands[pinCandSel];
-    if(!c.route) return;
+    if(!c.route){ if(window.BtnFx && sb0) BtnFx.end(sb0); return; }
     pendingRoute = c.route; pendingFare = c.fare || null;
     pendingTollUnknown = !!c.tollUnknown;
     pendingEstToll = !!c._estToll;
@@ -18556,7 +18829,7 @@ syncDestDisplay();
     showHtbMsg("マイ地点に「" + nm + "」を登録しました。");
     if(typeof refreshSettingsMeta === "function"){ try{ refreshSettingsMeta(); }catch(e){} }
   });
-  var bS = $id("btnHtbStart"); if(bS) bS.addEventListener("click", startPinNav);
+  var bS = $id("btnHtbStart"); if(bS) bS.addEventListener("click", function(){ if(window.BtnFx) BtnFx.begin(this); startPinNav(); });
   var bC = $id("btnHtbClose");
   if(bC) bC.addEventListener("click", function(){
     homeTap = null;
