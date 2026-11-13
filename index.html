@@ -2555,6 +2555,28 @@ body.previewing #previewPane .pv-sheet.folded{transform:translateY(calc(100% - 1
 #homeTapBar.folded{overflow:hidden}
 #homeTapBar.dragging{transition:none}
 #homeTapBar .sheet-grip{margin:-4px 0 1px;padding:6px 0 4px}
+/* ===== v141: 地点カードをボトムシート化（下から生えてくる見た目） =====
+   従来は左右・下に余白のある浮いたカード（全周の枠＋四隅の角丸）で、
+   入場も小さなポップ（rvInBottom：透明度＋10px）だったため、その場に
+   ぴょこんと出る見え方だった。ルート設定シート（.home-sheet）と同じく
+   画面下端に付いたシートへ変える：左右・下の枠を無くし、角丸は上だけ、
+   背景は画面下端まで届かせ、影は上向きにする。入場は transform の
+   スライドアップ（下端の外から生えてくる動き）に差し替え、退場
+   （.rv-out）も下へ沈む量を増やして対にする。畳みは従来どおり高さ方式
+   （foldableHeight）で、transform とは競合しない。下端まで背景が届く
+   分、ボタン列がフローティングタブバーに隠れないよう、下パディングで
+   逃がす（ルート設定シートの .hs-body と同じ考え方・近い値）。
+   対象は地点カード（#homeTapBar）だけで、同じ .home-tapbar を使う
+   地図選択の確定バー（#mapPickBar）は従来の浮いたバーのまま */
+#homeTapBar{left:0;right:0;bottom:0;border-left:none;border-right:none;border-bottom:none;
+  border-radius:20px 20px 0 0;box-shadow:0 -12px 34px rgba(0,0,0,.20);
+  padding:12px 14px calc(100px + env(safe-area-inset-bottom))}
+@keyframes rvInTapSheet{from{transform:translateY(103%)}to{transform:translateY(0)}}
+#homeTapBar:not(.hidden){animation:rvInTapSheet .36s cubic-bezier(.3,.8,.3,1)}
+#homeTapBar.rv-out{transform:translateY(28px)}
+@media (prefers-reduced-motion: reduce){
+  #homeTapBar:not(.hidden){animation:none}
+}
 @media (prefers-reduced-motion: reduce){
   #previewPane .pv-sheet,.pv-mapwrap,.home-sheet,#homeTapBar{transition:none}
 }
@@ -4689,7 +4711,7 @@ var IC_ROADS = [
  {road:"東名高速", dn:"東京方面（上り）", dk:"名古屋方面（下り）", ics:[
   ["東京IC",35.6285,139.6167,"io","io"],["東名川崎",35.5871,139.5677,"io","io"],["横浜青葉",35.543,139.5398,"io","io"],["横浜町田",35.5076,139.4828,"io","io"],["綾瀬スマートIC",35.495,139.440,"io","io"],["海老名JCT",35.4237,139.3771,"-","-"],["厚木",35.4239,139.3621,"io","io"],["伊勢原JCT",35.4124,139.3036,"-","-"],["秦野中井",35.3525,139.2344,"io","io"],["大井松田",35.3437,139.1566,"io","io"],["御殿場JCT",35.2702,138.9134,"-","-"],["裾野",35.22027,138.9079,"io","io"],["長泉JCT",35.14876,138.87619,"-","-"],["沼津",35.14813,138.86528,"io","io"],["沼津岡宮",35.14083,138.86339,"io","io"],["愛鷹スマートIC",35.1432,138.83688,"io","io"],["広見",35.18492,138.67569,"io","io"],["富士",35.17826,138.6764,"io","io"],["富士川スマートIC",35.15763,138.61857,"io","io"],["蒲原西",35.11166,138.57636,"io","io"],["寺尾",35.09361,138.55146,"io","io"],["清水JCT",35.04767,138.48701,"-","-"],["清水",35.04152,138.47448,"io","io"],["能島I.C",35.02552,138.45789,"io","io"],["長崎I.C",35.01787,138.44396,"io","io"],["鳥坂I.C",35.01372,138.43641,"io","io"],["日本平久能山スマートIC",34.96159,138.42218,"io","io"],["静岡",34.94703,138.39435,"io","io"],["焼津",34.8815,138.3001,"io","io"],["大井川焼津藤枝スマートIC",34.81934,138.26707,"io","io"],["吉田",34.79163,138.23493,"io","io"],["相良牧之原",34.76143,138.13924,"io","io"],["菊川",34.7504,138.08597,"io","io"],["掛川",34.76493,138.02387,"io","io"],["沢田I.C",34.76927,137.97728,"io","io"],["袋井",34.75965,137.9009,"io","io"],["磐田",34.74979,137.85998,"io","io"],["遠州豊田スマートIC",34.74804,137.84034,"io","io"],["浜松",34.74789,137.78843,"io","io"],["三方原スマートIC",34.75734,137.73781,"io","io"],["浜松西",34.76512,137.67907,"io","io"],["舘山寺スマートIC",34.77457,137.63782,"io","io"],["三ヶ日",34.79779,137.57997,"io","io"],["三ケ日JCT",34.82563,137.54677,"-","-"],["豊川",34.83874,137.41363,"io","io"],["音羽蒲郡",34.86722,137.30215,"io","io"],["岡崎",34.94244,137.19968,"io","io"],["豊田JCT",35.02135,137.14676,"-","-"],["豊田上郷スマートIC",35.03221,137.13503,"io","io"],["豊田",35.07152,137.11511,"io","io"],["東名三好",35.11163,137.0972,"io","io"],["日進JCT",35.1541,137.04965,"-","-"],["名古屋",35.17066,137.02491,"io","io"],["本郷",35.17439,137.01239,"io","io"],["守山スマートIC",35.2415,137.01129,"io","io"],["春日井",35.27099,136.99361,"io","io"],["小牧JCT",35.28525,136.97986,"-","-"],["小牧",35.30308,136.90842,"io","io"]]},
  {road:"新東名高速（神奈川区間）", dn:"東京方面（上り）", dk:"名古屋方面（下り）", ics:[
-  ["海老名南JCT",35.4079,139.3734,"-","-"],["厚木南",35.4063,139.3562,"io","io"],["伊勢原大山",35.4158,139.2865,"io","io"],["伊勢原JCT",35.4124,139.3036,"-","-"],["秦野丹沢スマートIC",35.388,139.205,"io","io"],["新秦野",35.3849,139.155,"io","io"],["新御殿場",35.3272,138.91674,"io","io"],["御殿場JCT",35.26151,138.91151,"-","-"],["長泉沼津",35.15685,138.86593,"io","io"],["駿河湾沼津スマートIC",35.15373,138.80865,"io","io"],["新富士",35.19993,138.66536,"io","io"],["新清水",35.14642,138.52319,"io","io"],["新清水JCT",35.07865,138.46378,"-","-"],["新静岡",35.04093,138.37953,"io","io"],["下",35.03498,138.37848,"io","io"],["静岡スマートIC",34.97642,138.29376,"io","io"],["藤枝岡部",34.90921,138.2529,"io","io"],["島田金谷",34.85021,138.12195,"io","io"],["森掛川",34.82525,137.94221,"io","io"],["遠州森町スマートIC",34.82568,137.90527,"io","io"],["新磐田スマートIC",34.82532,137.85906,"io","io"],["浜松浜北",34.83485,137.81415,"io","io"],["浜松スマートIC",34.84169,137.75121,"io","io"],["浜松いなさJCT",34.88607,137.65395,"-","-"],["新城",34.92555,137.53744,"io","io"],["岡崎東",34.91935,137.27706,"io","io"],["豊田東JCT",35.04685,137.19912,"-","-"]]},
+  ["海老名南JCT",35.4079,139.3734,"-","-"],["厚木南",35.4063,139.3562,"io","io"],["伊勢原大山",35.4158,139.2865,"io","io"],["伊勢原JCT",35.4124,139.3036,"-","-"],["秦野丹沢スマートIC",35.388,139.205,"io","io"],["新秦野",35.3849,139.155,"io","io"],["新御殿場",35.3272,138.91674,"io","io"],["御殿場JCT",35.26151,138.91151,"-","-"],["長泉沼津",35.15685,138.86593,"io","io"],["駿河湾沼津スマートIC",35.15373,138.80865,"io","io"],["新富士",35.19993,138.66536,"io","io"],["新清水",35.14642,138.52319,"io","io"],["新清水JCT",35.07865,138.46378,"-","-"],["新静岡",35.04093,138.37953,"io","io"],["下",35.03498,138.37848,"io","io"],["静岡スマートIC",34.97642,138.29376,"io","io"],["藤枝岡部",34.90921,138.2529,"io","io"],["島田金谷",34.85021,138.12195,"io","io"],["森掛川",34.82525,137.94221,"io","io"],["遠州森町スマートIC",34.82568,137.90527,"io","io"],["新磐田スマートIC",34.82532,137.85906,"io","io"],["浜松浜北",34.83485,137.81415,"io","io"],["浜松スマートIC",34.84169,137.75121,"io","io"],["浜松いなさJCT",34.88607,137.65395,"-","-"],["新城",34.92555,137.53744,"io","io"],["岡崎東",34.91935,137.27706,"io","io"],["豊田東JCT",35.04132,137.17776,"-","-"]]},
  {road:"中央道", dn:"東京方面（上り）", dk:"甲府・名古屋方面（下り）", ics:[
   ["高井戸IC",35.6805,139.6047,"io","io"],["調布",35.661,139.535,"io","io"],["府中スマートIC",35.6602,139.4931,"io","io"],["国立府中",35.6722,139.4413,"io","io"],["八王子",35.6762,139.3486,"io","io"],["八王子JCT",35.6418,139.2549,"-","-"],["相模湖",35.6207,139.1676,"io","io"],["上野原",35.6217,139.1175,"io","io"],["大月JCT",35.6159,138.9595,"-","-"],["大月",35.60425,138.92095,"io","io"],["勝沼",35.65152,138.73735,"io","io"],["一宮御坂",35.63404,138.67619,"io","io"],["笛吹八代スマートIC",35.62269,138.63541,"io","io"],["落合西ランプ(仮称)",35.60961,138.58613,"io","io"],["甲府南",35.60028,138.58921,"io","io"],["西下条ランプ",35.60237,138.57278,"io","io"],["玉穂東ランプ",35.60345,138.55837,"io","io"],["甲府昭和",35.6443,138.53744,"io","io"],["双葉JCT",35.6894,138.49547,"-","-"],["韮崎",35.71992,138.46578,"io","io"],["須玉",35.77349,138.42427,"io","io"],["長坂",35.83627,138.38826,"io","io"],["小淵沢",35.87098,138.31216,"io","io"],["諏訪南",35.93726,138.21105,"io","io"],["諏訪",36.00239,138.12885,"io","io"],["岡谷JCT",36.05137,138.04307,"-","-"],["伊北",35.94324,137.98277,"io","io"],["伊那",35.86546,137.94296,"io","io"],["小黒川スマートIC",35.84113,137.93268,"io","io"],["駒ヶ根",35.74101,137.91101,"io","io"],["駒ケ岳スマートIC",35.71189,137.90777,"io","io"],["松川",35.60842,137.88513,"io","io"],["座光寺スマートIC",35.5439,137.84234,"io","io"],["飯田",35.49859,137.79519,"io","io"],["飯田山本",35.46719,137.76127,"io","io"],["園原",35.45828,137.67298,"io","io"],["四ツ目ランプ",35.4901,137.51056,"io","io"],["中津川",35.47496,137.48591,"io","io"],["中津川西IC(仮称)",35.46307,137.45882,"io","io"],["大井町",35.45374,137.42842,"io","io"],["永田ランプ",35.44854,137.39929,"io","io"],["恵那",35.45361,137.39507,"io","io"],["中野",35.44849,137.39003,"io","io"],["瑞浪",35.37122,137.23749,"io","io"],["山野内ランプ",35.36658,137.22407,"io","io"],["土岐",35.37466,137.1925,"io","io"],["土岐JCT",35.36126,137.16765,"-","-"],["多治見",35.34794,137.10893,"io","io"],["内津峠",35.3283,137.0685,"io","io"],["小牧東",35.32877,137.02727,"io","io"],["小牧JCT",35.28525,136.97986,"-","-"]]},
  {road:"関越道", dn:"東京方面（上り）", dk:"新潟・前橋方面（下り）", ics:[
@@ -5001,6 +5023,27 @@ var IC_ROADS = [
   ["川西",34.88588,135.39486,"io","io"],
   ["宝塚北スマートIC",34.8655,135.30368,"io","io"],
   ["神戸JCT",34.8488,135.22342,"-","-"]]},
+ /* 伊勢湾岸道（v141追加。生成方法は道東道と同じ） */
+ {road:"伊勢湾岸道", dn:"豊田東JCT方面", dk:"四日市JCT方面", ics:[
+  ["豊田東JCT",35.04132,137.17776,"-","-"],
+  ["豊田東",35.03241,137.16288,"io","io"],
+  ["豊田南",35.0216,137.07368,"io","io"],
+  ["刈谷スマートIC",35.0386,137.04814,"io","io"],
+  ["豊明",35.0408,137.00218,"io","io"],
+  ["名古屋南JCT",35.04614,136.94253,"-","-"],
+  ["大府",35.04575,136.9215,"io","io"],
+  ["東海",35.05054,136.89949,"io","io"],
+  ["名港潮見",35.05407,136.87173,"io","io"],
+  ["名港中央",35.05233,136.84679,"io","io"],
+  ["飛島",35.05195,136.80778,"io","io"],
+  ["飛島JCT",35.05192,136.81371,"-","-"],
+  ["湾岸弥富",35.05019,136.78661,"io","io"],
+  ["弥富木曽岬",35.04376,136.75353,"io","io"],
+  ["湾岸長島",35.03424,136.73104,"io","io"],
+  ["湾岸桑名",35.02492,136.70637,"io","io"],
+  ["みえ川越",35.02181,136.68742,"io","io"],
+  ["みえ朝日",35.03248,136.64396,"io","io"],
+  ["四日市JCT",35.03623,136.63468,"-","-"]]},
  {road:"東名阪道", dn:"千音寺方面", dk:"関方面", ics:[
   ["千音寺出口",35.15721,136.8257,"-","-"],
   ["名古屋西JCT",35.15847,136.81844,"-","-"],
@@ -5463,6 +5506,31 @@ var IC_ROADS = [
   ["比布JCT",43.91962,142.46883,"-","-"],
   ["和寒",44.00855,142.43696,"io","io"],
   ["士別剣淵",44.14084,142.40069,"io","io"]]},
+ /* 道東道・伊勢湾岸道は v141 で追加（OSM 2026-11-13 時点の junction
+    ノードから IC ごとに上下線の平均座標を算出。v130 の全国表と同じ
+    生成方法）。道東道は本別IC以東が無料区間（新直轄方式）で、料金
+    概算側で無料として扱う（estimateTollForChain の分岐） */
+ {road:"道東道", dn:"千歳恵庭JCT方面", dk:"釧路西方面", ics:[
+  ["千歳恵庭JCT",42.84592,141.58662,"-","-"],
+  ["千歳東",42.88214,141.71044,"io","io"],
+  ["追分町",42.89301,141.8158,"io","io"],
+  ["夕張",42.9224,142.03563,"io","io"],
+  ["むかわ穂別",42.91927,142.19558,"io","io"],
+  ["占冠",42.98047,142.40931,"io","io"],
+  ["トマム",43.04373,142.66315,"io","io"],
+  ["十勝清水",42.99528,142.85575,"io","io"],
+  ["芽室",42.96942,143.04489,"io","io"],
+  ["帯広JCT",42.97014,143.09462,"-","-"],
+  ["音更帯広",42.98076,143.1781,"io","io"],
+  ["池田",42.9954,143.43702,"io","io"],
+  ["本別JCT",43.1019,143.55051,"-","-"],
+  ["本別",43.10696,143.57719,"io","io"],
+  ["浦幌",43.12053,143.66285,"io","io"],
+  ["白糠",43.07942,143.96044,"io","io"],
+  ["庶路",43.07752,144.0626,"io","io"],
+  ["阿寒",43.08687,144.1317,"io","io"],
+  ["釧路空港",43.0654,144.22745,"io","io"],
+  ["釧路西",43.03898,144.3192,"io","io"]]},
  {road:"沖縄道", dn:"那覇方面", dk:"許田方面", ics:[
   ["那覇",26.21163,127.72576,"io","io"],
   ["西原JCT",26.22412,127.73817,"-","-"],
@@ -13597,20 +13665,27 @@ function tollPlanFor(res){
    区間距離はIC表座標からの沿道距離に、同梱高速線の実長から求めた
    補正係数（kmScale）を掛けて実距離へ寄せる。割引（深夜・休日等）
    は含まない */
-var TOLL_NEXCO_ROADS = { "東名高速": 1, "新東名高速（神奈川区間）": 1, "中央道": 1, "関越道": 1, "東北道": 1, "常磐道": 1, "東関東道": 1, "館山道": 1, "北関東道": 1, "上信越道（群馬区間）": 1, "秋田道": 1, "山形道": 1, "磐越道": 1, "日本海東北道": 1, "八戸道": 1, "北陸道": 1, "名神高速": 1, "新名神高速": 1, "東海北陸道": 1, "近畿道": 1, "阪和道": 1, "中国道": 1, "山陽道": 1, "九州道": 1, "東九州道": 1, "宮崎道": 1, "大分道": 1, "長崎道": 1, "道央道": 1, "高松道": 1, "松山道": 1, "徳島道": 1, "高知道": 1, "舞鶴若狭道": 1, "仙台東部道": 1, "広島道": 1 };
+var TOLL_NEXCO_ROADS = { "東名高速": 1, "新東名高速（神奈川区間）": 1, "中央道": 1, "関越道": 1, "東北道": 1, "常磐道": 1, "東関東道": 1, "館山道": 1, "北関東道": 1, "上信越道（群馬区間）": 1, "秋田道": 1, "山形道": 1, "磐越道": 1, "日本海東北道": 1, "八戸道": 1, "北陸道": 1, "名神高速": 1, "新名神高速": 1, "東海北陸道": 1, "近畿道": 1, "阪和道": 1, "中国道": 1, "山陽道": 1, "九州道": 1, "東九州道": 1, "宮崎道": 1, "大分道": 1, "長崎道": 1, "道央道": 1, "道東道": 1, "伊勢湾岸道": 1, "高松道": 1, "松山道": 1, "徳島道": 1, "高知道": 1, "舞鶴若狭道": 1, "仙台東部道": 1, "広島道": 1, "東京外環道": 1 };
+/* 無料区間として知られている路線（新直轄方式）。料金は 0 円で、
+   概算を null にしない。東北中央道は福島〜米沢〜山形〜湯沢〜横手の
+   全区間が無料（国交省・ドラぷらで確認）。福島JCT〜桑折JCTの接続部
+   だけは実走では東北道を通るが、距離が短く概算の誤差範囲内 */
+var TOLL_FREE_ROADS = { "東北中央道": 1 };
 /* 大都市近郊区間（普通車29.52円/km）。from/to は IC_ROADS の名称 */
 var TOLL_URBAN_ZONES = [
   { road: "東北道", from: "川口JCT", to: "加須" },
   { road: "関越道", from: "練馬", to: "東松山" },
   { road: "東名高速", from: "東京IC", to: "厚木" },
   { road: "常磐道", from: "三郷JCT", to: "谷田部" },
-  { road: "中央道", from: "高井戸IC", to: "八王子" }
+  { road: "中央道", from: "高井戸IC", to: "八王子" },
+  { road: "東京外環道", from: "大泉JCT", to: "高谷JCT" }
 ];
 function tollRoadClass(roadName){
   if(!roadName) return null;
   if(roadName.indexOf("首都高") === 0) return "shuto";
   if(roadName === "東京湾アクアライン") return "aqua";
   if(roadName === "圏央道") return "keno";
+  if(TOLL_FREE_ROADS[roadName]) return "free";
   if(TOLL_NEXCO_ROADS[roadName]) return "nexco";
   return null;
 }
@@ -13639,6 +13714,26 @@ function estimateTollForChain(segs, eIdx, xIdx, kmScale){
     if(runs[i].cls == null && runs[i].km > 0.5) return null;
   /* 連続する同種区間を1ランにまとめる（NEXCOは連続走行で料金計算
      は1回分、首都高・圏央道は通し距離で1回計算する） */
+  /* 道東道は本別IC以東が無料区間（新直轄方式）。本別を跨ぐランは
+     本別で分割し、以東を無料クラスにする。本別以東だけのランも無料 */
+  var splitRuns = [];
+  runs.forEach(function(r){
+    if(r.road.road === "道東道"){
+      var hb = -1;
+      r.road.ics.forEach(function(ic, ii){ if(ic[0] === "本別") hb = ii; });
+      if(hb >= 0){
+        var lo = Math.min(r.from, r.to), hi = Math.max(r.from, r.to);
+        if(hb > lo && hb < hi){
+          splitRuns.push({ road: r.road, from: r.from, to: hb, km: Math.abs(icAlongDist(r.road, r.from, hb)) * scale, cls: r.cls });
+          splitRuns.push({ road: r.road, from: hb, to: r.to, km: Math.abs(icAlongDist(r.road, hb, r.to)) * scale, cls: "free" });
+          return;
+        }
+        if(lo >= hb) r.cls = "free";
+      }
+    }
+    splitRuns.push(r);
+  });
+  runs = splitRuns;
   var groups = [];
   runs.forEach(function(r){
     var g = groups[groups.length - 1];
@@ -13648,6 +13743,14 @@ function estimateTollForChain(segs, eIdx, xIdx, kmScale){
   var total = 0, parts = [];
   groups.forEach(function(g){
     if(g.cls === "aqua"){ total += 800; parts.push("東京湾アクアライン（ETC割引） " + yen(800)); return; }
+    if(g.cls === "free"){
+      if(g.km >= 0.5){
+        var fnames = [];
+        g.parts.forEach(function(r){ if(fnames.indexOf(r.road.road) < 0) fnames.push(r.road.road); });
+        parts.push(fnames.join("・") + " 無料区間");
+      }
+      return;
+    }
     if(g.km < 0.05) return;
     if(g.cls === "nexco"){
       var charge = 0, names = [];
@@ -13680,6 +13783,140 @@ function estimateTollForChain(segs, eIdx, xIdx, kmScale){
   });
   if(!(total > 0)) return null;
   return { total: total, parts: parts };
+}
+/* 実ペア（乗り口IC・降り口IC・間の区間列・高速実長）からICプランを
+   組み立てる共通処理。localPairPlan（組み立て時の実ペア）と
+   geomPairPlan（実形状から導出した実ペア）の両方が使う。料金は
+   料金グラフの確定値ではなく公式料金体系ベースの概算（estTollFor）
+   とし、出せない回廊では null のまま「料金不明」に倒す */
+/* ペアプランの組み立て。segs は「検証済み区間（スパン）」の配列の
+   配列（groups）。複合行程では形状が一般道を挟んで複数の高速区間を
+   走るため、プランは複数スパンを束ねて持つ。料金概算はスパンごと
+   に取引として算出して合算する（一般道を挟めば別取引になるのが
+   実料金）。単一スパンの場合は従来の buildPairPlan と等価 */
+function buildSpanPlan(eRef, xRef, groups, hwKm){
+  var e = eRef, x = xRef;
+  var flat = [];
+  groups.forEach(function(g){ g.forEach(function(sg){ flat.push(sg); }); });
+  var chainTotal = 0;
+  flat.forEach(function(sg){ chainTotal += icAlongDist(sg.road, sg.entry, sg.exit); });
+  if(!(chainTotal > 0)) return null;
+  /* 公式料金体系ベースの概算（料金グラフがペアをカバーしない長距離
+     向け）。IC表座標からの沿道距離は実距離とずれるため、同梱高速線
+     の実長（この候補の hwKm）との比で補正してから単価を掛ける */
+  var kmScale = 1;
+  if(hwKm > 0 && chainTotal > 0){
+    var scT = hwKm / chainTotal;
+    if(scT > 0.8 && scT < 1.25) kmScale = scT;
+  }
+  function groupAlong(g, eIdx, xIdx){
+    var first = g[0], last = g[g.length - 1];
+    var fe = (eIdx != null) ? eIdx : first.entry;
+    var lx = (xIdx != null) ? xIdx : last.exit;
+    if(g.length === 1) return Math.abs(icAlongDist(first.road, fe, lx));
+    var t = 0;
+    g.forEach(function(sg){ t += icAlongDist(sg.road, sg.entry, sg.exit); });
+    t = t - icAlongDist(first.road, first.entry, first.exit)
+          - icAlongDist(last.road, last.entry, last.exit)
+          + icAlongDist(first.road, fe, first.exit)
+          + icAlongDist(last.road, last.entry, lx);
+    return Math.max(0.1, t);
+  }
+  function estGroup(g, eIdx, xIdx){
+    var est = null;
+    try{ est = estimateTollForChain(g, eIdx, xIdx, kmScale); }catch(err){ est = null; }
+    if(est) return est;
+    /* 全セグメントが無料クラスのスパンは概算0円として確定させる
+       （estimateTollForChain は合計0を null で返すため） */
+    var allFree = g.length > 0;
+    g.forEach(function(sg){ if(tollRoadClass(sg.road.road) !== "free") allFree = false; });
+    if(allFree){
+      var names = [];
+      g.forEach(function(sg){ if(names.indexOf(sg.road.road) < 0) names.push(sg.road.road); });
+      return { total: 0, parts: [names.join("・") + " 無料区間"] };
+    }
+    return null;
+  }
+  var estCache = {};
+  function estFor(eIdx, xIdx){
+    var key = eIdx + ":" + xIdx;
+    if(!(key in estCache)){
+      var total = 0, parts = [], okAll = true;
+      groups.forEach(function(g, gi){
+        var ge = (gi === 0) ? eIdx : g[0].entry;
+        var gx = (gi === groups.length - 1) ? xIdx : g[g.length - 1].exit;
+        var est = estGroup(g, ge, gx);
+        if(!est){ okAll = false; return; }
+        total += est.total;
+        if(est.parts) parts = parts.concat(est.parts);
+      });
+      estCache[key] = okAll ? { total: total, parts: parts } : null;
+    }
+    return estCache[key];
+  }
+  var baseEst = estFor(e.idx, x.idx);
+  function alongWith(eIdx, xIdx){
+    var t = 0;
+    groups.forEach(function(g, gi){
+      t += groupAlong(g, gi === 0 ? eIdx : null, gi === groups.length - 1 ? xIdx : null);
+    });
+    return Math.max(0.1, t);
+  }
+  function options(road, def, kind, toward){
+    var out = [];
+    for(var d = -5; d <= 5; d++){
+      var idx = def + d;
+      if(idx < 0 || idx >= road.ics.length) continue;
+      if(icUsable(road, idx, kind, toward)) out.push(idx);
+    }
+    if(out.indexOf(def) < 0 && icUsable(road, def, kind, toward)) out.push(def);
+    out.sort(function(a, b){ return Math.abs(a - def) - Math.abs(b - def); });
+    return out;
+  }
+  var g0 = groups[0], gL = groups[groups.length - 1];
+  var eToward = (groups.length === 1 && g0.length === 1) ? x.idx
+    : (g0[0].road === e.road ? g0[0].exit : null);
+  var xToward = (groups.length === 1 && g0.length === 1) ? e.idx
+    : (gL[gL.length - 1].road === x.road ? gL[gL.length - 1].entry : null);
+  var plan = {
+    chain: { segs: flat, total: chainTotal }, segGroups: groups,
+    baseToll: 0, tollUnknown: true, fromPair: true,
+    entryRoad: e.road, exitRoad: x.road, defEntry: e.idx, defExit: x.idx,
+    entries: options(e.road, e.idx, "entry", eToward),
+    exits: options(x.road, x.idx, "exit", xToward),
+    entryName: function(i){ return e.road.ics[i][0]; },
+    exitName: function(i){ return x.road.ics[i][0]; },
+    alongKm: function(eIdx, xIdx){ return alongWith(eIdx, xIdx); },
+    baseAlongKm: alongWith(e.idx, x.idx),
+    betweenNames: function(eIdx, xIdx){
+      var names = [];
+      groups.forEach(function(g, gi){
+        g.forEach(function(sg, si){
+          var from = (gi === 0 && si === 0) ? eIdx : sg.entry;
+          var to = (gi === groups.length - 1 && si === g.length - 1) ? xIdx : sg.exit;
+          if(from == null || to == null) return;
+          var step = from <= to ? 1 : -1;
+          for(var i2 = from; ; i2 += step){
+            var nm = sg.road.ics[i2][0];
+            if(names[names.length - 1] !== nm) names.push(nm);
+            if(i2 === to) break;
+          }
+        });
+      });
+      return names;
+    },
+    tollFor: function(){ return 0; },
+    /* 概算（公式料金体系ベース）。出せない回廊では null のままにし、
+       表示側は「料金不明」に倒す */
+    estTollFor: function(eIdx, xIdx){ return estFor(eIdx, xIdx); },
+    baseEstToll: baseEst ? baseEst.total : null,
+    baseEstParts: baseEst ? baseEst.parts : null
+  };
+  if(!plan.entries.length || !plan.exits.length) return null;
+  return plan;
+}
+function buildPairPlan(eRef, xRef, segs, hwKm){
+  return buildSpanPlan(eRef, xRef, [segs], hwKm);
 }
 function localPairPlan(cand){
   var lp = cand && cand.localIcPair; if(!lp) return null;
@@ -13736,82 +13973,453 @@ function localPairPlan(cand){
     if(e.road === x.road) segs = [{ road: e.road, entry: e.idx, exit: x.idx }];
     else return null;
   }
-  var chainTotal = 0;
-  segs.forEach(function(sg){ chainTotal += icAlongDist(sg.road, sg.entry, sg.exit); });
-  if(!(chainTotal > 0)) return null;
-  /* 公式料金体系ベースの概算（料金グラフがペアをカバーしない長距離
-     向け）。IC表座標からの沿道距離は実距離とずれるため、同梱高速線
-     の実長（この候補の hwKm）との比で補正してから単価を掛ける */
-  var kmScale = 1;
-  if(lp.hwKm > 0 && chainTotal > 0){
-    var scT = lp.hwKm / chainTotal;
-    if(scT > 0.8 && scT < 1.25) kmScale = scT;
-  }
-  var estCache = {};
-  function estFor(eIdx, xIdx){
-    var key = eIdx + ":" + xIdx;
-    if(!(key in estCache)){
-      var est = null;
-      try{ est = estimateTollForChain(segs, eIdx, xIdx, kmScale); }catch(err){ est = null; }
-      estCache[key] = est;
-    }
-    return estCache[key];
-  }
-  var baseEst = estFor(e.idx, x.idx);
-  function alongWith(eIdx, xIdx){
-    if(segs.length === 1) return icAlongDist(segs[0].road, eIdx, xIdx);
-    var first = segs[0], last = segs[segs.length - 1];
-    var t = chainTotal
-      - icAlongDist(first.road, first.entry, first.exit)
-      - icAlongDist(last.road, last.entry, last.exit)
-      + icAlongDist(first.road, eIdx, first.exit)
-      + icAlongDist(last.road, last.entry, xIdx);
-    return Math.max(0.1, t);
-  }
-  function options(road, def, kind, toward){
-    var out = [];
-    for(var d = -5; d <= 5; d++){
-      var idx = def + d;
-      if(idx < 0 || idx >= road.ics.length) continue;
-      if(icUsable(road, idx, kind, toward)) out.push(idx);
-    }
-    if(out.indexOf(def) < 0 && icUsable(road, def, kind, toward)) out.push(def);
-    out.sort(function(a, b){ return Math.abs(a - def) - Math.abs(b - def); });
-    return out;
-  }
-  var plan = {
-    chain: { segs: segs, total: chainTotal }, baseToll: 0, tollUnknown: true, fromPair: true,
-    entryRoad: e.road, exitRoad: x.road, defEntry: e.idx, defExit: x.idx,
-    entries: options(e.road, e.idx, "entry", segs.length === 1 ? x.idx : segs[0].exit),
-    exits: options(x.road, x.idx, "exit", segs.length === 1 ? e.idx : segs[segs.length - 1].entry),
-    entryName: function(i){ return e.road.ics[i][0]; },
-    exitName: function(i){ return x.road.ics[i][0]; },
-    alongKm: function(eIdx, xIdx){ return alongWith(eIdx, xIdx); },
-    baseAlongKm: alongWith(e.idx, x.idx),
-    betweenNames: function(eIdx, xIdx){
-      var names = [];
-      segs.forEach(function(sg, si){
-        var from = (si === 0) ? eIdx : sg.entry;
-        var to = (si === segs.length - 1) ? xIdx : sg.exit;
-        if(from == null || to == null) return;
-        var step = from <= to ? 1 : -1;
-        for(var i = from; ; i += step){
-          var nm = sg.road.ics[i][0];
-          if(names[names.length - 1] !== nm) names.push(nm);
-          if(i === to) break;
-        }
-      });
-      return names;
-    },
-    tollFor: function(){ return 0; },
-    /* 概算（公式料金体系ベース）。出せない回廊では null のままにし、
-       表示側は「料金不明」に倒す */
-    estTollFor: function(eIdx, xIdx){ return estFor(eIdx, xIdx); },
-    baseEstToll: baseEst ? baseEst.total : null,
-    baseEstParts: baseEst ? baseEst.parts : null
-  };
-  if(!plan.entries.length || !plan.exits.length) return null;
+  return buildPairPlan(e, x, segs, lp.hwKm);
+}
+/* ============ 実形状からICプランを導出する（出典を問わない実ペア） ============
+   【再発の根本原因】実ペアでプランを作り直す従来の対策（pairPlanAdopt）は
+   localIcPair を持つローカル生成候補にしか発動しなかった。API由来の候補
+   （OSRM／TomTom）は料金グラフの res を借りて tollPlanFor でプランを作る
+   ため、グラフの有料区間が途中で打ち切られる長距離OD（東京→鹿角・
+   北海道など）では「降りる 宇都宮」のピンと、その区間分だけの料金が
+   再発した。確定ゲートの detectIcPairFromGeom も、打ち切られたペアは
+   形状の途中にあるため「検出できた」と判定してしまい止められなかった。
+   【対策】有料候補のプランは出典を問わず、その候補の実形状全体から
+   導出する。料金グラフはペアの「値付け」専用にし、ペア自体の決定には
+   使わない。導出の手順：
+   1. 形状が実際に高速を走っている証拠（同梱高速線との照合か、
+      ステップの有料フラグ区間）があることを確認する
+   2. 全国IC表の全ICを形状へ射影（空間グリッドで近傍セグメントだけを
+      見て高速化）し、形状が実際に通るIC（700m以内）を集める
+   3. 通過IC列の先頭側／末尾側の乗り口／降り口候補（各最大4件）の
+      組み合わせについて、ICネットワークの経路を引き、経路の各区間が
+      形状沿いの距離で説明できる割合（カバレッジ85%以上）と境界誤差
+      で検証する。通過したペアだけを実ペアとして採用するため、
+      検証できないペアが表示に残ることはない */
+function geomPairPlan(cand){
+  if(!cand) return null;
+  if(cand._geomPairPlan !== undefined) return cand._geomPairPlan;
+  var plan = null;
+  try{ plan = geomPairPlanImpl(cand); }catch(err){ plan = null; }
+  cand._geomPairPlan = plan;
   return plan;
+}
+/* geomPairPlan 専用のICネット（検証用に接続を補った複製）。
+   ICネット本体では、交差する路線側に同名ノードが無いJCTは接続を
+   持たない（例：北関東道の栃木都賀JCTは東北道側に同名ノードが無く、
+   東北道→北関東道西行きの経路が引けない）。そのままだと形状が
+   実際にその回廊を走っていても検証用の経路が引けず、正しいペアを
+   導出できない。そこで複製側でのみ、JCT名ノードから他路線の最寄り
+   ノード（3km以内）への接続を補う。料金グラフ等の本体には影響
+   させない（検証は実形状との照合で担保する） */
+var geomNetCache = null;
+function geomNetNodes(){
+  if(geomNetCache) return geomNetCache;
+  var base = null;
+  try{ base = icNetBuild(); }catch(e){ base = null; }
+  if(!base) return null;
+  var nodes = {};
+  Object.keys(base).forEach(function(id){
+    var bn = base[id], adj = {};
+    for(var k in bn.adj) adj[k] = bn.adj[k];
+    nodes[id] = { id: bn.id, name: bn.name, lat: bn.lat, lng: bn.lng, road: bn.road, ic: bn.ic, adj: adj };
+  });
+  var list = Object.keys(nodes).map(function(id){ return nodes[id]; });
+  list.forEach(function(nd){
+    if(!nd.name || nd.name.indexOf("JCT") < 0) return;
+    var bestByRoad = {};
+    list.forEach(function(o){
+      if(o === nd || o.road === nd.road) return;
+      var d = haversine(nd.lat, nd.lng, o.lat, o.lng);
+      if(d > 3000) return;
+      var cur = bestByRoad[o.road.road];
+      if(!cur || d < cur.d) bestByRoad[o.road.road] = { o: o, d: d };
+    });
+    Object.keys(bestByRoad).forEach(function(rn){
+      var t = bestByRoad[rn], km = Math.max(0.05, t.d / 1000 * 1.15);
+      if(nd.adj[t.o.id] == null || km < nd.adj[t.o.id]) nd.adj[t.o.id] = km;
+      if(t.o.adj[nd.id] == null || km < t.o.adj[nd.id]) t.o.adj[nd.id] = km;
+    });
+  });
+  geomNetCache = nodes;
+  return nodes;
+}
+function geomPairPlanImpl(cand){
+  var geom = cand.route && cand.route.geomPts;
+  if(!geom || geom.length < 8) return null;
+  var n = geom.length;
+  var cum = [0];
+  for(var i = 1; i < n; i++) cum.push(cum[i - 1] + haversine(geom[i - 1][0], geom[i - 1][1], geom[i][0], geom[i][1]));
+  var total = cum[n - 1];
+  if(!(total > 3000)) return null;
+  /* 1. 有料走行の証拠確認。この候補の形状が実際に高速を走っている
+     ことの裏付けが無いままペアを作らないための前提条件で、同梱
+     高速線との照合で3km以上の一致ランがあるか、ステップの有料
+     フラグ区間が3km以上あればよい。スパンの境界そのものは候補の
+     選定には使わない（同梱線・IC表とも欠落区間があり、境界を
+     どちらか一方のデータで決めると長距離で誤るため） */
+  var hasHwSpan = false;
+  var m = null;
+  try{ m = (typeof window !== "undefined" && window.__hwMatchRoute) ? window.__hwMatchRoute(geom) : null; }catch(e){}
+  if(m && m.tollKmLong >= 3) hasHwSpan = true;
+  if(!hasHwSpan){
+    var steps = (cand.route.steps || []).filter(function(s){ return s.lat != null; });
+    var tIdx = [];
+    steps.forEach(function(s, si){ if(s.toll) tIdx.push(si); });
+    if(tIdx.length){
+      var pf = projOnGeom(geom, [steps[tIdx[0]].lat, steps[tIdx[0]].lng]);
+      var afterStep = steps[tIdx[tIdx.length - 1] + 1] || steps[tIdx[tIdx.length - 1]];
+      var pa = projOnGeom(geom, [afterStep.lat, afterStep.lng]);
+      if(pf && pa && pa.chain - pf.chain >= 3000) hasHwSpan = true;
+    }
+  }
+  if(!hasHwSpan) return null;
+  /* 2. 全ICの形状への射影（セル約0.01度のグリッドで近傍だけを見る） */
+  var CELL = 0.01, grid = {};
+  for(var si2 = 0; si2 < n - 1; si2++){
+    var a = geom[si2], b = geom[si2 + 1];
+    var x0 = Math.floor(Math.min(a[1], b[1]) / CELL), x1 = Math.floor(Math.max(a[1], b[1]) / CELL);
+    var y0 = Math.floor(Math.min(a[0], b[0]) / CELL), y1 = Math.floor(Math.max(a[0], b[0]) / CELL);
+    for(var cx = x0; cx <= x1; cx++) for(var cy = y0; cy <= y1; cy++){
+      var k = cx + ":" + cy;
+      (grid[k] || (grid[k] = [])).push(si2);
+    }
+  }
+  function projIc(lat, lng){
+    var ccx = Math.floor(lng / CELL), ccy = Math.floor(lat / CELL), best = null, seen = {};
+    for(var gx = ccx - 1; gx <= ccx + 1; gx++) for(var gy = ccy - 1; gy <= ccy + 1; gy++){
+      var cell = grid[gx + ":" + gy]; if(!cell) continue;
+      for(var ci = 0; ci < cell.length; ci++){
+        var sj = cell[ci]; if(seen[sj]) continue; seen[sj] = 1;
+        var a = geom[sj], b = geom[sj + 1];
+        var kx = 111320 * Math.cos(a[0] * Math.PI / 180), ky = 110540;
+        var px = (lng - a[1]) * kx, py = (lat - a[0]) * ky;
+        var bx = (b[1] - a[1]) * kx, by = (b[0] - a[0]) * ky;
+        var l2 = bx * bx + by * by;
+        var t = l2 > 0 ? Math.max(0, Math.min(1, (px * bx + py * by) / l2)) : 0;
+        var dx = px - t * bx, dy = py - t * by, d2 = dx * dx + dy * dy;
+        if(!best || d2 < best.d2) best = { d2: d2, d: Math.sqrt(d2), chain: cum[sj] + (cum[sj + 1] - cum[sj]) * t };
+      }
+    }
+    return best;
+  }
+  /* 広域版の射影：IC表の座標誤り（数km級）があるICでは、形状の最近傍
+     セグメントが3×3セルの外にある。半径を広げながら探し、十分近い
+     点が見つかるか、探索範囲の外にそれ以上近い点があり得なくなった
+     時点で打ち切る。経路検証（segCov）専用 */
+  function projIcWide(lat, lng){
+    var ccx = Math.floor(lng / CELL), ccy = Math.floor(lat / CELL), best = null, seen = {};
+    var radii = [1, 2, 3, 5, 7, 9];
+    for(var ri2 = 0; ri2 < radii.length; ri2++){
+      var rad = radii[ri2];
+      for(var gx = ccx - rad; gx <= ccx + rad; gx++) for(var gy = ccy - rad; gy <= ccy + rad; gy++){
+        var cell = grid[gx + ":" + gy]; if(!cell) continue;
+        for(var ci = 0; ci < cell.length; ci++){
+          var sj = cell[ci]; if(seen[sj]) continue; seen[sj] = 1;
+          var a = geom[sj], b = geom[sj + 1];
+          var kx = 111320 * Math.cos(a[0] * Math.PI / 180), ky = 110540;
+          var px = (lng - a[1]) * kx, py = (lat - a[0]) * ky;
+          var bx = (b[1] - a[1]) * kx, by = (b[0] - a[0]) * ky;
+          var l2 = bx * bx + by * by;
+          var t = l2 > 0 ? Math.max(0, Math.min(1, (px * bx + py * by) / l2)) : 0;
+          var dx = px - t * bx, dy = py - t * by, d2 = dx * dx + dy * dy;
+          if(!best || d2 < best.d2) best = { d2: d2, d: Math.sqrt(d2), chain: cum[sj] + (cum[sj + 1] - cum[sj]) * t };
+        }
+      }
+      if(best && (best.d <= 900 || best.d < rad * 750)) break;
+    }
+    return best;
+  }
+  var passed = [], passedSet = {};
+  IC_ROADS.forEach(function(road, ri){
+    road.ics.forEach(function(ic, ii){
+      if(ic[1] == null) return;
+      var pr = projIc(ic[1], ic[2]);
+      if(pr && pr.d <= 700){
+        var rec = { ri: ri, road: road, idx: ii, d: pr.d, chain: pr.chain };
+        passed.push(rec); passedSet[ri + ":" + ii] = rec;
+      }
+    });
+  });
+  if(passed.length < 2) return null;
+  /* 3. 形状に沿ったペア導出。検証は「区間（スパン）」ごとに行う。
+     通過IC列を45km超の空白で区間に分け、各区間について両端IC間の
+     ICネット経路が実形状と一致するか（カバレッジ）を区間単独で
+     判定する。検証できた区間を全て繋ぎ、最初の区間の乗り口から
+     最後の区間の降り口までをペアとする。
+     【なぜ区間ごと】全体を1本のネット経路で検証する方式では、
+     一般道を挟む複合行程（鹿角＝東北道＋無料の東北中央道、青森＝
+     十文字区間＋十和田〜青森区間、北海道＝本州＋道央道＋道東道）
+     で単一経路のカバレッジが閾値を割り、「検証できた主区間だけ」
+     のペア（十文字・一戸など主区間の降り口）に化けて、降り口が
+     目的地より大きく手前に残った（即おりる判定の再発要因）。
+     区間ごとに検証すれば、形状がその先も高速を続けている限り
+     ペアは先へ伸びる。
+     【検証の考え方】経路の各ICを形状へ射影し、隣り合うIC同士の
+     区間が「形状沿いの距離（射影位置の差）で説明できる」割合を
+     カバレッジとする。IC間を結ぶ直線はカーブで形状から離れる
+     ため距離そのものは見ず、射影位置の単調性と区間長の整合だけ
+     を見る。IC表の座標誤り（数km級）でも射影位置は前後関係を
+     保つため、正しい回廊ではカバレッジは高くなる。別回廊では
+     射影位置が潰れたり距離が開いたりして区間が説明できず落ちる。
+     ネット最短路が別回廊を選ぶ場合に備え、形状が通るICを優先
+     する割引付き再探索の経路も候補にする。
+     区間検証でペアが組めなかった場合のみ、従来の全体検証
+     （単一経路）にフォールバックする */
+  passed.sort(function(p, q){ return p.chain - q.chain; });
+  var eRef = passed[0].chain, xRef = passed[passed.length - 1].chain;
+  var sections = [[passed[0]]];
+  for(var si3 = 1; si3 < passed.length; si3++){
+    if(passed[si3].chain - passed[si3 - 1].chain > 45000) sections.push([passed[si3]]);
+    else sections[sections.length - 1].push(passed[si3]);
+  }
+  var nodes = geomNetNodes();
+  if(!nodes) return null;
+  /* 経路（ICノード列）のカバレッジ：隣り合うIC同士の区間のうち、
+     両端の射影位置が単調で、形状沿いの区間長がIC間直線距離と
+     大きく矛盾せず、両端とも形状から8km以内にある区間を「説明
+     できた」とし、その形状沿い長の合計／経路全体の形状沿い長 */
+  function segCov(pathNodes){
+    if(!pathNodes || pathNodes.length < 2) return 0;
+    var prs = pathNodes.map(function(nd){
+      var pr = projIcWide(nd.lat, nd.lng);
+      return pr ? pr : { d: Infinity, chain: null };
+    });
+    var first = prs[0], last = prs[prs.length - 1];
+    if(first.chain == null || last.chain == null) return 0;
+    var totalLen = last.chain - first.chain;
+    if(!(totalLen > 0)) return 0;
+    var covered = 0;
+    for(var j = 0; j < prs.length - 1; j++){
+      var A = prs[j], B = prs[j + 1];
+      if(A.chain == null || B.chain == null) continue;
+      var gl = B.chain - A.chain;
+      if(gl <= 0) continue;
+      if(A.d > 8000 || B.d > 8000) continue;
+      var crow = haversine(pathNodes[j].lat, pathNodes[j].lng, pathNodes[j + 1].lat, pathNodes[j + 1].lng);
+      if(gl <= 1.8 * crow + 1500) covered += gl;
+    }
+    return covered / totalLen;
+  }
+  function spanSegsOf(pathNodes){
+    var bn = pathNodes.slice();
+    for(var ci = 1; ci + 2 < bn.length; ci++){
+      if(bn[ci].name === bn[ci - 1].name && bn[ci + 1].name === bn[ci + 2].name &&
+         bn[ci - 1].road === bn[ci + 2].road && bn[ci].road === bn[ci + 1].road &&
+         bn[ci].road !== bn[ci - 1].road){
+        bn.splice(ci, 2);
+        ci = 0;
+      }
+    }
+    var segs = [];
+    bn.forEach(function(nd){
+      var nIdx = parseInt(String(nd.id).split(":")[1], 10);
+      var last = segs[segs.length - 1];
+      if(last && last.road === nd.road) last.exit = nIdx;
+      else segs.push({ road: nd.road, entry: nIdx, exit: nIdx });
+    });return segs;
+  }
+  /* validate one span: net path(s) between the span's end ICs must
+     agree with this span's shape (coverage >= 0.85 within the span) */
+  function validateSpanNet(h, t){
+    var fromId = h.ri + ":" + h.idx, toId = t.ri + ":" + t.idx;
+    var spanKm = (t.chain - h.chain) / 1000;
+    if(!(spanKm >= 3)) return null;
+    var list = [];
+    try{ var pA = icNetPathNodes(nodes, fromId, toId); if(pA && pA.nodes) list.push(pA); }catch(e){}
+    try{
+      var pB = icNetPathNodes(nodes, fromId, toId, function(a, b){
+        if(passedSet[a.id] && passedSet[b.id]) return 0.1;
+        return passedSet[b.id] ? 0.45 : 1;
+      });
+      if(pB && pB.nodes) list.push(pB);
+    }catch(e){}
+    var bestV = null;
+    for(var li = 0; li < list.length; li++){
+      var pn = list[li];
+      if(!pn.nodes || pn.nodes.length < 2) continue;
+      var realKm = 0;
+      for(var rk = 1; rk < pn.nodes.length; rk++)
+        realKm += haversine(pn.nodes[rk - 1].lat, pn.nodes[rk - 1].lng, pn.nodes[rk].lat, pn.nodes[rk].lng) / 1000 * 1.15;
+      var ratio = realKm / spanKm;
+      if(ratio < 0.5 || ratio > 1.8) continue;
+      var cov = segCov(pn.nodes);
+      if(cov < 0.85) continue;
+      if(!bestV || cov > bestV.cov) bestV = { nodes: pn.nodes, cov: cov };
+    }
+    return bestV;
+  }
+  var spanPlans = [];
+  sections.forEach(function(sec){
+    var spanKm = (sec[sec.length - 1].chain - sec[0].chain) / 1000;
+    if(spanKm < 8) return;
+    var heads = sec.slice(0, 3), tails = sec.slice(-3).reverse();
+    var combos = [];
+    heads.forEach(function(h){ tails.forEach(function(t){
+      if(t.chain - h.chain >= 5000) combos.push({ h: h, t: t, sp: t.chain - h.chain });
+    }); });
+    combos.sort(function(a, b){ return b.sp - a.sp; });
+    var got = null;
+    for(var ci2 = 0; ci2 < combos.length && !got; ci2++){
+      var v = validateSpanNet(combos[ci2].h, combos[ci2].t);
+      if(v) got = { h: combos[ci2].h, t: combos[ci2].t, nodes: v.nodes, cov: v.cov };
+    }
+    if(!got) return;
+    spanPlans.push({ sec: sec, h: got.h, t: got.t, nodes: got.nodes, cov: got.cov });
+  });
+  if(spanPlans.length){
+    function spanEntry(span){
+      var road0 = span.nodes[0].road;
+      var idx0 = parseInt(String(span.nodes[0].id).split(":")[1], 10);
+      if(icUsable(road0, idx0, "entry", null)) return { road: road0, idx: idx0, chain: span.h.chain };
+      for(var i = 0; i < span.sec.length; i++){
+        var r = span.sec[i];
+        if(r.chain > span.h.chain + 30000) break;
+        if(r.road === road0 && icUsable(r.road, r.idx, "entry", null))
+          return { road: r.road, idx: r.idx, chain: r.chain };
+      }
+      return null;
+    }
+    function spanExit(span){
+      var roadL = span.nodes[span.nodes.length - 1].road;
+      var idxL = parseInt(String(span.nodes[span.nodes.length - 1].id).split(":")[1], 10);
+      if(icUsable(roadL, idxL, "exit", null)) return { road: roadL, idx: idxL, chain: span.t.chain };
+      for(var i = span.sec.length - 1; i >= 0; i--){
+        var r = span.sec[i];
+        if(r.chain < span.t.chain - 30000) break;
+        if(r.road === roadL && icUsable(r.road, r.idx, "exit", null))
+          return { road: r.road, idx: r.idx, chain: r.chain };
+      }
+      return null;
+    }
+    var eSpan = null, xSpan = null, eSel = null, xSel = null;
+    for(var ei = 0; ei < spanPlans.length; ei++){
+      var pe = spanEntry(spanPlans[ei]);
+      if(pe){ eSpan = spanPlans[ei]; eSel = pe; break; }
+    }
+    for(var xi2 = spanPlans.length - 1; xi2 >= 0; xi2--){
+      var px = spanExit(spanPlans[xi2]);
+      if(px){ xSpan = spanPlans[xi2]; xSel = px; break; }
+    }
+    if(eSel && xSel && spanPlans.indexOf(xSpan) >= spanPlans.indexOf(eSpan) &&
+       xSel.chain - eSel.chain >= 8000){
+      var groups = [], hwSum = 0;
+      for(var gi2 = spanPlans.indexOf(eSpan); gi2 <= spanPlans.indexOf(xSpan); gi2++){
+        var sp = spanPlans[gi2];
+        var gs = spanSegsOf(sp.nodes);
+        if(!gs.length) continue;
+        if(sp === eSpan && gs[0].road !== eSel.road)
+          gs.unshift({ road: eSel.road, entry: eSel.idx, exit: eSel.idx });
+        if(sp === eSpan) gs[0].entry = eSel.idx;
+        if(sp === xSpan && gs[gs.length - 1].road !== xSel.road)
+          gs.push({ road: xSel.road, entry: xSel.idx, exit: xSel.idx });
+        if(sp === xSpan) gs[gs.length - 1].exit = xSel.idx;
+        groups.push(gs);
+        hwSum += (sp.t.chain - sp.h.chain) / 1000;
+      }
+      if(groups.length){
+        var spanPlan = buildSpanPlan({ road: eSel.road, idx: eSel.idx },
+          { road: xSel.road, idx: xSel.idx }, groups, hwSum);
+        if(spanPlan) return spanPlan;
+      }
+    }
+  }
+  /* ---- フォールバック：従来の全体検証（単一経路） ---- */
+  var eCands = [], xCands = [], xSeen = {};
+  passed.forEach(function(p){
+    if(p.chain <= eRef + 30000 && icUsable(p.road, p.idx, "entry", null)) eCands.push(p);
+  });
+  function pushX(p){
+    if(!p || !icUsable(p.road, p.idx, "exit", null)) return;
+    var k = p.ri + ":" + p.idx;
+    if(xSeen[k]) return;
+    xSeen[k] = 1; xCands.push(p);
+  }
+  for(var xi = passed.length - 1; xi >= 0 && xCands.length < 3; xi--) pushX(passed[xi]);
+  sections.forEach(function(sec){
+    for(var xj = sec.length - 1; xj >= 0; xj--){ if(icUsable(sec[xj].road, sec[xj].idx, "exit", null)){ pushX(sec[xj]); break; } }
+  });
+  if(!eCands.length || !xCands.length) return null;
+  function eErr(p){ return p.chain - eRef; }
+  function xErr(p){ return xRef - p.chain; }
+  eCands.sort(function(p, q){ return eErr(p) - eErr(q); });
+  xCands.sort(function(p, q){ return xErr(p) - xErr(q); });
+  eCands = eCands.slice(0, 4); xCands = xCands.slice(0, 6);
+  var pairList = [];
+  eCands.forEach(function(ep){
+    xCands.forEach(function(xp){
+      if(xp.chain - ep.chain < 8000) return;
+      pairList.push({ e: ep, x: xp, err: eErr(ep) + xErr(xp) });
+    });
+  });
+  pairList.sort(function(p, q){ return p.err - q.err; });
+  var best = null, evals = 0;
+  for(var pi2 = 0; pi2 < pairList.length; pi2++){
+    if(evals >= 40) break;
+    if(best && best.cov >= 0.97 && best.err <= 4000) break;
+    /* スコア（err − cov×2000）の下限は err − 2000。既に best を
+       上回れない誤差のペアは評価しない */
+    if(best && pairList[pi2].err - 2000 >= best.score) break;
+    var pr3 = pairList[pi2], ep2 = pr3.e, xp2 = pr3.x;
+    var fromId = ep2.ri + ":" + ep2.idx, toId = xp2.ri + ":" + xp2.idx;
+    var pnList = [];
+    try{ var pnA = icNetPathNodes(nodes, fromId, toId); if(pnA && pnA.nodes) pnList.push(pnA); }catch(e){}
+    try{
+      /* 形状が通るIC同士の辺を強く割引く再探索。通らないICへの辺を
+         割り増す方式だと、通るICが点在するだけの正しい回廊でも累積
+         コストが爆発して大迂回を選んでしまうため、割引方式にする。
+         両端とも通る辺（実際に走った回廊の連続区間）を最安にする */
+      var pnB = icNetPathNodes(nodes, fromId, toId, function(a, b){
+        if(passedSet[a.id] && passedSet[b.id]) return 0.1;
+        return passedSet[b.id] ? 0.45 : 1;
+      });
+      if(pnB && pnB.nodes && (!pnList.length || pnB.nodes.length !== pnList[0].nodes.length ||
+          pnB.nodes.some(function(nd, ni){ return !pnList[0].nodes[ni] || pnList[0].nodes[ni].id !== nd.id; })))
+        pnList.push(pnB);
+    }catch(e){}
+    for(var pj = 0; pj < pnList.length; pj++){
+      evals++;
+      var pn = pnList[pj];
+      if(!pn.nodes || pn.nodes.length < 2) continue;
+      /* 経路長はノード座標から実距離で測り直す（割引付き再探索の
+         pn.km は重み付きコストで、実距離ではないため） */
+      var realKm = 0;
+      for(var rk = 1; rk < pn.nodes.length; rk++)
+        realKm += haversine(pn.nodes[rk - 1].lat, pn.nodes[rk - 1].lng, pn.nodes[rk].lat, pn.nodes[rk].lng) / 1000 * 1.15;
+      var ratio = realKm / ((xp2.chain - ep2.chain) / 1000);
+      if(ratio < 0.5 || ratio > 1.8) continue;
+      var cov = segCov(pn.nodes);
+      if(cov < 0.85) continue;
+      var score = pr3.err - cov * 2000;
+      if(!best || score < best.score) best = { e: ep2, x: xp2, nodes: pn.nodes, score: score, cov: cov, err: pr3.err };
+    }
+  }
+  if(!best) return null;
+  /* 「A路線のJCT → B路線の同名JCT → B路線の次のJCT → A路線の同名JCT」
+     という往復乗り換えは、実走では A 路線を直通しているだけの
+     見かけの区間（例：東北道 福島JCT→桑折JCT を東北中央道のノードで
+     辿ってしまう）。チェーンに残すと料金概算がそこで分断され、
+     ターミナルチャージと逓減が二重にかかって大きくずれるため、
+     区間列を作る前に取り除く */
+  var bn = best.nodes.slice();
+  for(var ci = 1; ci + 2 < bn.length; ci++){
+    if(bn[ci].name === bn[ci - 1].name && bn[ci + 1].name === bn[ci + 2].name &&
+       bn[ci - 1].road === bn[ci + 2].road && bn[ci].road === bn[ci + 1].road &&
+       bn[ci].road !== bn[ci - 1].road){
+      bn.splice(ci, 2);
+      ci = 0;
+    }
+  }
+  var segs = [];
+  bn.forEach(function(nd){
+    var nIdx = parseInt(String(nd.id).split(":")[1], 10);
+    var last = segs[segs.length - 1];
+    if(last && last.road === nd.road) last.exit = nIdx;
+    else segs.push({ road: nd.road, entry: nIdx, exit: nIdx });
+  });
+  if(!segs.length) return null;
+  segs[0].entry = best.e.idx;
+  segs[segs.length - 1].exit = best.x.idx;
+  return buildPairPlan({ road: best.e.road, idx: best.e.idx }, { road: best.x.road, idx: best.x.idx }, segs, (best.x.chain - best.e.chain) / 1000);
 }
 /* 2つのICの間隔（km）：同一路線なら沿道距離、別路線ならICネット
    ワークの経路長（取れなければ直線距離） */
@@ -13825,43 +14433,66 @@ function icPairGapKm(roadA, idxA, roadB, idxB){
   }catch(err){}
   return haversine(a[1], a[2], b[1], b[2]) / 1000;
 }
-/* ローカル生成候補について、料金グラフ側プランが実ペアから大きく
-   ずれている（＝グラフの有料区間が途中で打ち切られている）場合に、
-   実ペアのプランへ差し替える。差し替え済みなら二度目は触らない
-   （ユーザーがレールでICをずらした後の選択を初期化しないため）。
-   グラフと実ペアが近い候補（関東内など）では従来どおりグラフ側
-   プラン（料金計算つき）を使う */
+/* 有料候補（出典を問わない）について、料金グラフ側プランが実ペアから
+   大きくずれている（＝グラフの有料区間が途中で打ち切られている）場合
+   に、実ペアのプランへ差し替える。実ペアは、ローカル生成候補では
+   組み立て時のペア（localPairPlan）、それ以外の候補では実形状全体
+   からの導出（geomPairPlan）を使う。料金グラフはペアの値付け専用で、
+   ペア自体の決定には使わない。差し替え済みならプランは二度と作り
+   直さない（ユーザーがレールでICをずらした後の選択を初期化しない
+   ため）。グラフと実ペアが近い候補（関東内など）では従来どおり
+   グラフ側プラン（料金計算つき）を使う */
 function pairPlanAdopt(cand){
-  if(!cand || !cand.localIcPair) return false;
-  if(cand._pairAdopted) return true;
-  var pp = null;
-  try{ pp = localPairPlan(cand); }catch(err){ pp = null; }
-  if(!pp) return false;
-  var gp = null;
-  try{ gp = tollPlanFor(cand.res); }catch(err){ gp = null; }
-  var adopt = !gp;
-  if(gp){
-    if(icPairGapKm(gp.exitRoad, gp.defExit, pp.exitRoad, pp.defExit) > 30) adopt = true;
-    else if(icPairGapKm(gp.entryRoad, gp.defEntry, pp.entryRoad, pp.defEntry) > 30) adopt = true;
+  if(!cand) return false;
+  if(!cand._pairAdopted){
+    var pp = null;
+    try{ pp = cand.localIcPair ? localPairPlan(cand) : geomPairPlan(cand); }catch(err){ pp = null; }
+    if(!pp) return false;
+    var gp = null;
+    try{ gp = tollPlanFor(cand.res); }catch(err){ gp = null; }
+    var adopt = !gp;
+    if(gp){
+      if(icPairGapKm(gp.exitRoad, gp.defExit, pp.exitRoad, pp.defExit) > 30) adopt = true;
+      else if(icPairGapKm(gp.entryRoad, gp.defEntry, pp.entryRoad, pp.defEntry) > 30) adopt = true;
+    }
+    if(!adopt) return false;
+    cand.icPlan = pp;
+    cand.icSel = { e: pp.defEntry, x: pp.defExit };
+    cand._icNone = false;
+    cand._pairAdopted = true;
+    /* 実ペアのプランを採用した。候補が持つ料金（fare／res／icToll）は
+       料金グラフ側ペアか組み立て時の推定ペアの値付けであり、採用
+       ペアの料金とは限らない。料金は下の反映処理で必ず採用ペアから
+       算出し直す（概算 or 料金不明）。ローカル生成候補も例外では
+       ない（その icToll も組み立てペアの額で、採用ペアと一致する
+       保証はないため） */
+    cand.tollUnknown = true;
   }
-  if(!adopt) return false;
-  cand.icPlan = pp;
-  cand.icSel = { e: pp.defEntry, x: pp.defExit };
-  cand._icNone = false;
-  cand._pairAdopted = true;
-  /* 概算が出せるペアは、候補カード・プレビュー見出し・案内シート
-     にも「概算」として金額を出す（料金グラフの確定料金とは区別
-     する）。グラフ料金で引けている候補（tollUnknown でないもの）
-     には使わない。推奨の付け替えスコア計算より後に呼ばれる用途
-     （finalizeCandidateList末尾・パネル描画）でのみ fare へ反映し、
-     スコアへは影響させない */
-  if(cand.tollUnknown && pp.baseEstToll != null){
-    cand._estToll = true;
-    cand.priceText = "概算 " + yen(pp.baseEstToll);
-    var estGate = [[pp.entryRoad.road + " " + pp.entryName(pp.defEntry) + " → " + pp.exitName(pp.defExit) + "（概算）", pp.baseEstToll]];
-    cand.fare = { toll: pp.baseEstToll, gates: estGate };
-    cand.baseGates = estGate;
-    if(cand.route){ cand.route.toll = pp.baseEstToll; cand.route.gates = estGate; }
+  if(!cand._pairFareDone){
+    cand._pairFareDone = true;
+    var plan2 = cand.icPlan;
+    /* 料金は必ず採用ペアから算出し直す。採用ペア＝ピンのペア＝
+       料金算出のペア を機械的に一致させるため、概算が出せるペアは
+       その額を fare／route.toll／icToll の全てに反映し、出せない
+       ペアはグラフ側の金額を消して料金不明に倒す。候補の出所
+       （ローカル生成／API）では分岐しない */
+    if(plan2 && plan2.baseEstToll != null){
+      cand._estToll = true;
+      cand.icToll = plan2.baseEstToll;
+      cand.priceText = "概算 " + yen(plan2.baseEstToll);
+      var estGate = [[plan2.entryRoad.road + " " + plan2.entryName(plan2.defEntry) + " → " + plan2.exitName(plan2.defExit) + "（概算）", plan2.baseEstToll]];
+      cand.fare = { toll: plan2.baseEstToll, gates: estGate };
+      cand.baseGates = estGate;
+      if(cand.route){ cand.route.toll = plan2.baseEstToll; cand.route.gates = estGate; }
+    } else if(plan2){
+      cand.priceText = "有料区間あり";
+      cand.icToll = null;
+      var ng = [["有料道路を含む（料金不明）", 0]];
+      if(cand.fare){ cand.fare.toll = 0; cand.fare.gates = ng; }
+      else cand.fare = { toll: 0, gates: ng };
+      cand.baseGates = ng;
+      if(cand.route){ cand.route.toll = 0; cand.route.gates = ng; }
+    }
   }
   return true;
 }
@@ -14084,7 +14715,7 @@ function renderPvIcPanel(){
   if(pvIcLayer) pvIcLayer.clearLayers(); /* 前の候補のIC表示を消す（この後、対象候補なら applyIcSelection が描き直す） */
   var cand = (pendingCandidates && selectedCand >= 0) ? pendingCandidates[selectedCand] : null;
   if(!cand || !cand.res || !(cand.res.toll > 0) || !cand.fare) return;
-  if(cand.localIcPair) pairPlanAdopt(cand);
+  pairPlanAdopt(cand);
   if(!cand.icPlan) cand.icPlan = tollPlanFor(cand.res);
   var plan = cand.icPlan; if(!plan) return;
   if(!cand.icSel && !cand._icNone){
@@ -15841,10 +16472,12 @@ function finalizeCandidateList(cands){
   cands.forEach(function(c){
     if(c.kind === "custom" || !c.res || !(c.res.toll > 0) || c.tollUnknown) return;
     if(!c.route || !c.route.geomPts || c.route.geomPts.length < 2) return;
-    /* ローカル生成候補で実ペアがグラフ側ペアから大きくずれている
-       ものは、実ペアのプランを正としてゲートを通す（グラフ側ペアで
+    /* 実ペアがグラフ側ペアから大きくずれている候補（出典を問わない）
+       は、実ペアのプランを正としてゲートを通す（グラフ側ペアで
        検証すると、形状が秋田まで走っているのに宇都宮のペアで
-       「検出できた」ことになり、誤ったIC表示が残ってしまう） */
+       「検出できた」ことになり、誤ったIC表示が残ってしまう。
+       打ち切られたペアは形状の途中にあるため、グラフ側ペアでの
+       検出は常に成功してしまい、この分岐が再発防止の要になる） */
     if(pairPlanAdopt(c)) return;
     var plan = null;
     try{ plan = tollPlanFor(c.res); }catch(err){ plan = null; }
@@ -15932,7 +16565,7 @@ function finalizeCandidateList(cands){
       /* IC選択の状態は共有元のものを引き継がず、距離優先自身として
          検出し直す（形状は同じなので検出結果も同じになる） */
       delete nc.icSel; delete nc.icPlan; delete nc.icToll; delete nc._icNone;
-      delete nc._pairAdopted;
+      delete nc._pairAdopted; delete nc._pairFareDone;
       delete nc._icEls; delete nc._icGeomPair; delete nc._icHomePair;
       delete nc._icBaseSnap; delete nc._icOpt; delete nc._icReoptTimer; delete nc._icReoptSeq;
       return nc;
@@ -15947,11 +16580,11 @@ function finalizeCandidateList(cands){
       else cands.push(distClone(holder));
     }
   })();
-  /* ローカル生成の長距離候補：実ペアのプランをここで確定させ、
+  /* 長距離候補（出典を問わない）：実ペアのプランをここで確定させ、
      公式料金体系ベースの概算（出せる場合）を候補カードの表示へ
      反映する。推奨スコア計算の後に行うので、概算がスコア計算へ
      混ざることはない */
-  cands.forEach(function(c){ if(c.localIcPair && c.tollUnknown) pairPlanAdopt(c); });
+  cands.forEach(function(c){ if(c._pairAdopted || (c.localIcPair && c.tollUnknown)) pairPlanAdopt(c); });
 }
 function proceedDecide(from){
   /* 出発地が変更されている場合はGPSではなくその地点を起点にする（変更時のみ） */
@@ -17133,10 +17766,43 @@ syncDestDisplay();
     try{ if(typeof addrSeq !== "undefined") addrSeq++; }catch(e){}
     if(document.activeElement && document.activeElement.blur){ try{ document.activeElement.blur(); }catch(e){} }
   }
+  /* v141: 「選択済み地点」の保持状態まで初期状態へ戻す。
+     ホーム検索バーの表示は入力文字列からではなく、選択済み地点
+     （destNode／destLabel 等）から syncTopBar が描く。syncTopBar は
+     500ms 間隔の定期同期でも走るため、入力欄の値だけ消しても選択状態が
+     残っている限りバーには地名と選択済みスタイル（.has-value）が
+     出続け、「空っぽ」にならない（過去2回のリセット漏れの正体はこれ。
+     消していたのはピッカー側の入力欄だけで、表示の出どころである
+     選択状態には触れていなかった）。シートを×で閉じるときは、
+     目的地・追加目的地・経由地・出発地の選択をすべて未設定へ戻し、
+     スロット表示・隠しセレクト・区間ごとの設定・検索ピンも同期して
+     空にして、バーを未選択の初期表示（プレースホルダ）へ戻す */
+  function clearPickedPlaceState(){
+    try{
+      if(typeof destNode !== "undefined"){ destNode = null; destLabel = null; destCoord = null; }
+      if(typeof destExtra !== "undefined") destExtra.length = 0;
+      if(typeof viaSlots !== "undefined"){ viaSlots.length = 0; viaLabels.length = 0; viaCoords.length = 0; }
+      if(typeof fromNode !== "undefined"){ fromNode = null; fromLabel = null; fromCoord = null; }
+    }catch(e){}
+    try{ if(typeof renderFromSlot === "function") renderFromSlot(); }catch(e){}
+    try{ if(typeof syncDestDisplay === "function") syncDestDisplay(); }catch(e){}
+    try{ if(typeof renderDestExtra === "function") renderDestExtra(); }catch(e){}
+    try{ if(typeof renderViaSlots === "function") renderViaSlots(); }catch(e){}
+    /* syncHiddenFromSlots は隠しセレクトと区間設定（renderSlotLegPrefs）の
+       同期も担う。目的地が無い状態では selTo はここでは触られないため、
+       旧値が残らないよう明示的に空へ戻す */
+    try{ if(typeof syncHiddenFromSlots === "function") syncHiddenFromSlots(); }catch(e){}
+    var st = $id("selTo"); if(st) st.value = "";
+    var dn = $id("decideNote"); if(dn){ dn.textContent = ""; dn.classList.add("hidden"); }
+    var sm = $id("saveRouteMsg"); if(sm){ sm.textContent = ""; sm.classList.add("hidden"); }
+    try{ clearSearchPin(); }catch(e){}
+  }
   var sc = $id("btnHomeSheetClose");
   if(sc) sc.addEventListener("click", function(){
     setSheet(false);
     resetAllSearchState();
+    clearPickedPlaceState();
+    syncTopBar();
   });
   if(topBar) topBar.addEventListener("click", function(){
     if(sheetOpen) return;
