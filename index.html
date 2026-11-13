@@ -286,7 +286,7 @@ window.__ROAD_PACKS = {"kanto":{"bbox":[34.55,138.35,37.15,141.15],"km":32806,"q
      回廊では、線が無い区間で正直に失敗する）。 */
   var _hwGraph = null; /* {key, pts, adj} のキャッシュ（bbox単位） */
   function hwPtKey(p){ return Math.round(p[0] * 100000) + ":" + Math.round(p[1] * 100000); }
-  function buildHwGraph(guide){
+  function buildHwGraph(guide, corrM){
     var idx = getHwIdx(); if(!idx) return null;
     var minLa = 90, maxLa = -90, minLn = 180, maxLn = -180;
     guide.forEach(function(p){
@@ -298,7 +298,7 @@ window.__ROAD_PACKS = {"kanto":{"bbox":[34.55,138.35,37.15,141.15],"km":32806,"q
        ガイド依存のため。bboxだけだと別回廊のグラフを返す恐れ） */
     var gh = 0;
     guide.forEach(function(p){ gh = ((gh * 31) + Math.round(p[0] * 1000)) | 0; gh = ((gh * 31) + Math.round(p[1] * 1000)) | 0; });
-    var key = [minLa.toFixed(1), minLn.toFixed(1), maxLa.toFixed(1), maxLn.toFixed(1)].join(":") + "#" + guide.length + "#" + gh;
+    var key = [minLa.toFixed(1), minLn.toFixed(1), maxLa.toFixed(1), maxLn.toFixed(1)].join(":") + "#" + guide.length + "#" + gh + "#" + (corrM || 5000);
     if(_hwGraph && _hwGraph.key === key) return _hwGraph;
     var pts = [], nodeId = {}, adj = [];
     /* 回廊制限：ガイド折れ線から5km以内のセグメントだけをグラフ化
@@ -329,7 +329,7 @@ window.__ROAD_PACKS = {"kanto":{"bbox":[34.55,138.35,37.15,141.15],"km":32806,"q
     idx.segs.forEach(function(sg){
       var mLa = (sg.a[0] + sg.b[0]) / 2, mLn = (sg.a[1] + sg.b[1]) / 2;
       if(mLa < minLa || mLa > maxLa || mLn < minLn || mLn > maxLn) return;
-      if(distToGuide([mLa, mLn]) > 5000) return;
+      if(distToGuide([mLa, mLn]) > (corrM || 5000)) return;
       var ia = nid(sg.a), ib = nid(sg.b);
       var w = havM(sg.a[0], sg.a[1], sg.b[0], sg.b[1]);
       if(!(w > 0)) return;
@@ -451,15 +451,15 @@ window.__ROAD_PACKS = {"kanto":{"bbox":[34.55,138.35,37.15,141.15],"km":32806,"q
         if(g && g.pt){ guide.push(g.pt); hints.push(g.road || null); }
         else { guide.push(g); hints.push(null); }
       });
-      var G = buildHwGraph(guide);
-      if(!G) return null;
-      var idx = G.idx;
+      var G = null;
+      var idx = null;
       var bundle = window.__HW_BUNDLE;
       /* 各ガイド点を本線へ吸着する（仮想ノードとしてグラフへ一時登録）。
          中間点は、座標が本線から大きくずれているIC（実測：関越道・
          駒寄スマートICは約4.7km）が混ざっても回廊全体を落とさない
          よう、吸着できなければ読み飛ばす。両端（乗車・降車IC）は
          回廊の要なので、許容を広げて本線への射影で吸着する */
+      function buildSnaps(){
       var snaps = [];
       for(var gi = 0; gi < guide.length; gi++){
         var isEnd = (gi === 0 || gi === guide.length - 1);
@@ -472,9 +472,19 @@ window.__ROAD_PACKS = {"kanto":{"bbox":[34.55,138.35,37.15,141.15],"km":32806,"q
         snaps.push({ pt: sn.pt, ia: ia, ib: ib, ta: segLen * sn.t, tb: segLen * (1 - sn.t) });
       }
       if(snaps.length < 2) return null;
+      return snaps;
+      }
+      /* 脚の組み立ては assembleLegs に分離する。到達不能な脚が
+         あった場合は failLeg（その脚の添字）を返す。中間スナップが
+         分岐側のセグメントへ吸着すると、その脚だけ到達不能になる
+         ことがある（実測：安代JCTのガイド点が八戸道側へ吸着し、
+         仙台→鹿角の組み立て全体が落ちた）。中間点は読み飛ばし
+         可能な設計なので、呼び出し側でその中間スナップを落として
+         組み直す。両端（乗車・降車IC）は落とさない（v142） */
+      function assembleLegs(snapsArr){
       var out = [], totalM = 0;
-      for(var s2 = 0; s2 + 1 < snaps.length; s2++){
-        var A = snaps[s2], Bp = snaps[s2 + 1];
+      for(var s2 = 0; s2 + 1 < snapsArr.length; s2++){
+        var A = snapsArr[s2], Bp = snapsArr[s2 + 1];
         /* A の射影点→ B の射影点：両端のセグメント端点を介して Dijkstra */
         var startCosts = [[A.ia, A.ta], [A.ib, A.tb]];
         var goalCosts = {}; goalCosts[Bp.ia] = Bp.ta; goalCosts[Bp.ib] = Bp.tb;
@@ -513,9 +523,9 @@ window.__ROAD_PACKS = {"kanto":{"bbox":[34.55,138.35,37.15,141.15],"km":32806,"q
             if(dist[to] == null || nd < dist[to]){ dist[to] = nd; prev[to] = cid; hpush(to, nd + heur(to)); }
           }
         }
-        if(goalId === null) return null;
+        if(goalId === null) return { failLeg: s2 };
         var chainIds = [], node = goalId;
-        while(node != null){ chainIds.unshift(node); node = prev[node]; if(node != null && chainIds.length > 200000) return null; }
+        while(node != null){ chainIds.unshift(node); node = prev[node]; if(node != null && chainIds.length > 200000) return { failLeg: s2 }; }
         var segPts = [A.pt];
         chainIds.forEach(function(id){ segPts.push(G.pts[id]); });
         segPts.push(Bp.pt);
@@ -525,7 +535,40 @@ window.__ROAD_PACKS = {"kanto":{"bbox":[34.55,138.35,37.15,141.15],"km":32806,"q
           out.push(segPts[q]);
         }
       }
-      if(out.length < 8 || !(totalM > 0)) return null;
+      if(out.length < 8 || !(totalM > 0)) return { failLeg: -1 };
+      return { pts: out, totalM: totalM };
+      }
+      /* 組み立て本体：グラフ構築→吸着→脚組み立て（中間スナップの
+         落とし直し込み）。回廊の幅を変えて最大2回試す */
+      function tryAssemble(corrM){
+        G = buildHwGraph(guide, corrM);
+        if(!G) return null;
+        idx = G.idx;
+        var snaps = buildSnaps();
+        if(!snaps) return null;
+        var dropGuard = 0;
+        while(dropGuard++ <= 6){
+          var att = assembleLegs(snaps);
+          if(att.pts) return att;
+          var fl = att.failLeg;
+          if(fl == null || fl < 0) return null;
+          if(fl + 1 < snaps.length - 1) snaps.splice(fl + 1, 1);
+          else if(fl > 0) snaps.splice(fl, 1);
+          else return null;
+          if(snaps.length < 2) return null;
+        }
+        return null;
+      }
+      var assembled = tryAssemble(0);
+      if(!assembled){
+        /* v142: 通常回廊（ガイド折れ線±5km）では、本線が弦から
+           大きく膨らむ区間（実測：松尾八幡平〜安代JCTで本線が弦の
+           最大5.3km西を通る）のセグメントが回廊から外れてグラフが
+           分断し、組み立てが落ちる。回廊を広げて組み直す */
+        assembled = tryAssemble(12000);
+      }
+      if(!assembled) return null;
+      var out = assembled.pts, totalM = assembled.totalM;
       /* 往復スパー除去：分岐部で行き止まり側の枝へ回り込んだ経路は、
          同じ頂点を往路・復路で2回通る形になる（実測：高崎玉村付近で
          約4kmの往復）。ほぼ同じ点へ戻ってくる区間は、その間を
@@ -804,7 +847,7 @@ body.navlock #view-nav{
 .mv-head .mv-dir{color:#d8d8de}
 .mv-to{font-size:clamp(17px,4.6vw,21px);font-weight:800;line-height:1.35;margin-top:4px;opacity:.95}
 .prog{height:7px;background:rgba(255,255,255,.28);border-radius:99px;margin-top:11px;overflow:hidden}
-.prog i{display:block;height:100%;background:#fff;border-radius:99px;transition:width .5s linear}
+.prog i{display:block;height:100%;background:#1a73e8;border-radius:99px;transition:width .5s linear}
 
 /* lanes — at a glance */
 .lanewrap{margin-top:10px;flex:none;background:transparent;border:none;border-top:1px solid rgba(255,255,255,.18);border-radius:0;padding:10px 4px 4px}
@@ -873,9 +916,6 @@ body.navlock #view-nav{
 .step .nm{font-weight:900;font-size:14px}
 .step .dt{font-size:12.5px;color:var(--ink2);line-height:1.55;margin-top:1px}
 .step .d{font-family:var(--mono);font-weight:700;font-size:13px;white-space:nowrap}
-.simspeed{display:flex;gap:6px;align-items:center;font-size:13px;font-weight:800;flex-wrap:wrap}
-.simspeed button{border:1.5px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:8px 12px;font-weight:800}
-.simspeed button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
 .voicebox{background:var(--surface2);border-radius:12px;padding:12px 14px;font-size:13px;line-height:1.65}
 .voicebox b{font-size:13.5px}
 
@@ -1066,6 +1106,10 @@ select,.dm-row input{border-radius:10px}
 .headrow{display:flex;gap:8px;margin-top:8px}
 .headrow button{flex:1;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:11px;font-weight:900;font-size:14px}
 .headrow button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+/* nav sheet: route-kind switch, directly below the zoom row */
+.navkindrow{display:flex;gap:8px;margin-top:8px}
+.navkindrow button{flex:1;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:11px;font-weight:900;font-size:14px}
+.navkindrow button:disabled{opacity:.45}
 /* --- simple destination slots --- */
 .slot-from{display:flex;align-items:center;gap:10px;border:1.5px solid var(--line);border-radius:12px;padding:13px 14px;background:var(--surface2)}
 .slot-tag{font-size:11.5px;font-weight:900;color:var(--sign);letter-spacing:.04em;flex:none}
@@ -1088,7 +1132,7 @@ select,.dm-row input{border-radius:10px}
 .dialog .dlg-bg{position:absolute;inset:0;background:rgba(0,0,0,.5)}
 /* 操作対象（タブ・検索欄・候補リスト）が画面下部に寄りすぎないよう、カードは上部に寄せて表示する。
    下部には背景（ルート選択画面）が見え、背景タップで閉じられる。キーボード表示時は
-   syncDlgToViewport が可視領域に合わせて上位置と高さを調整する。 */
+   syncDlgToViewport が位置を固定したまま高さだけを可視領域へ収める。 */
 .dlg-card{position:absolute;left:10px;right:10px;top:calc(env(safe-area-inset-top,0px) + 10px);max-width:640px;margin:0 auto;
   max-height:calc(100dvh - env(safe-area-inset-top,0px) - 22px);overflow-y:auto;
   background:var(--surface);color:var(--ink);border-radius:20px;padding:14px 16px 18px;
@@ -1337,7 +1381,7 @@ select,.dm-row input{border-radius:10px}
 :root[data-theme="light"] .panel,:root[data-theme="light"] .lanewrap,:root[data-theme="light"] .nextpreview{
   background:rgba(255,255,255,.94);color:#1c1c1e;box-shadow:0 8px 24px rgba(0,0,0,.20)}
 :root[data-theme="light"] .panel .prog{background:rgba(0,0,0,.14)}
-:root[data-theme="light"] .panel .prog i{background:#1c1c1e}
+:root[data-theme="light"] .panel .prog i{background:#1a73e8}
 :root[data-theme="light"] .lanewrap{border-top:none}
 :root[data-theme="light"] .lane{background:#dcdce2;color:#6e6e76;box-shadow:none}
 :root[data-theme="light"] .lane svg{opacity:.6}
@@ -1371,10 +1415,11 @@ select,.dm-row input{border-radius:10px}
 /* 下部シートの覗き部分は「到着」と「終了」だけにし、文字を大きくする。
    残り距離・時間・料金などはスワイプで開くシート内だけに残す。 */
 .sheet{transform:translateY(calc(100% - 92px))}
-.sheet .handle{padding:12px 16px 11px}
+.sheet .handle{padding:12px 28px 11px}
 .sheet .peek{gap:14px}
 .sheet .peek .pk{font-size:13px}
 .sheet .peek .pv.big{font-size:31px;line-height:1.15}
+.sheet .peek .pv.big .koro{font-size:16px;font-family:var(--sans);font-weight:800;margin-left:4px}
 .btn-end{font-size:18px;padding:16px 30px;border-radius:12px}
 .controls{padding-bottom:110px}
 @media(max-width:520px){.sheet .peek{gap:12px}}
@@ -1530,12 +1575,13 @@ html,body{overscroll-behavior:none}
 }
 
 /* ===== ボタン上の読み込み表示（iOS風スピナー）と、条件据え置き時の無効化 =====
-   処理中は、そのボタン自体の中央に放射状セグメントのスピナーを重ねる
+   処理中は、そのボタンの文字の直右に放射状セグメントのスピナーを重ねる
+   （位置は BtnFx.begin が実測して入れる。v157で中央重ねから変更）
    （.btn-spin のバーを JS が12本差し込む）。計算・検索が終わったボタンは、
    条件が変わるまで .is-stale ＋ disabled で暗く無効化する（BtnFx が管理）。 */
 .btn{position:relative}
-.btn-spin{position:absolute;left:50%;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;
-  pointer-events:none;color:inherit;z-index:3;animation:btnSpinSteps 1s steps(12) infinite}
+.btn-spin{position:absolute;left:50%;top:50%;width:26px;height:26px;margin:-13px 0 0 0;
+  pointer-events:none;color:inherit;z-index:3;animation:btnSpinSteps 1s steps(12) infinite} /* v157: 横位置は BtnFx.begin が文字の直右へ inline で入れる（これはフォールバック） */
 .btn-spin i{position:absolute;left:calc(50% - 1.4px);top:calc(50% - 12px);width:2.8px;height:7.5px;
   border-radius:2px;background:currentColor;transform-origin:50% 12px}
 button.btn-busy{pointer-events:none}
@@ -1972,7 +2018,7 @@ body.navlock #view-nav{height:var(--app-h,100dvh)}
    ではどちらも 0 で従来どおり。 */
 :root{--sat:max(env(safe-area-inset-top,0px),var(--app-top,0px))}
 .wrap{padding-top:var(--sat)}
-.home-top-search{top:calc(10px + var(--sat))}
+.home-top-search{top:calc(36px + var(--sat))} /* v158: 検索バーをさらに下げる。v155 の 10→20px は監査プローブ実測で上端 20px と効いていたが、キャプチャ比較では判別できない差だったため、36px まで下げて実測で前後比較できる量にした（チップ行・通知も同量 +16px 下げ、バー下端→チップ行の間隔とステータスバー側の余裕は従来比で維持） */
 .mappick-banner{top:calc(12px + var(--sat))}
 .dlg-card{top:calc(var(--sat) + 10px);
   max-height:calc(100dvh - var(--sat) - env(safe-area-inset-bottom,0px) - 118px)}
@@ -1989,7 +2035,7 @@ body.navlock #view-nav{height:var(--app-h,100dvh)}
 #homeTapBar .htb-info{padding-right:44px}
 #homeTapBar .htb-route{padding-right:44px}
 /* --- 検索バーのすぐ下・左寄せのカテゴリチップ行（フロストガラス調ピル） --- */
-.home-cat-chips{position:absolute;top:calc(70px + var(--sat));left:12px;right:12px;z-index:1200;
+.home-cat-chips{position:absolute;top:calc(96px + var(--sat));left:12px;right:12px;z-index:1200;
   display:flex;gap:7px;overflow-x:auto;overflow-y:hidden;padding:2px 10px 5px 2px;
   scrollbar-width:none;-webkit-overflow-scrolling:touch;
   /* 横スワイプは行自身の横スクロールとして処理させる（縦方向は渡さない）。
@@ -2470,7 +2516,7 @@ html.lens-ok .tab-ind.bubble .tab-ind-in::after{
 /* 【3】カテゴリ検索のステータス表示：候補リストのパネルは廃止し、
    結果は地図上のピンで出す。ここは検索中／0件／失敗の通知だけを
    チップ行の下へ小さく出す一時表示（リストではない） */
-.home-cat-status{position:absolute;top:calc(116px + var(--sat));left:50%;transform:translateX(-50%);
+.home-cat-status{position:absolute;top:calc(142px + var(--sat));left:50%;transform:translateX(-50%);
   z-index:1190;max-width:calc(100% - 24px);padding:7px 14px;border-radius:999px;white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis;
   background:var(--glass-3);-webkit-backdrop-filter:var(--glass-blur);backdrop-filter:var(--glass-blur);
@@ -2479,7 +2525,7 @@ html.lens-ok .tab-ind.bubble .tab-ind-in::after{
 
 /* 【v127-1】カテゴリ選択中でもズームが約12未満の間はピンを出さず、
    画面上部に小さく端的な注意だけを出す（目立ちすぎない小さい表示） */
-.home-cat-zoomnote{position:absolute;top:calc(150px + var(--sat));left:50%;transform:translateX(-50%);
+.home-cat-zoomnote{position:absolute;top:calc(176px + var(--sat));left:50%;transform:translateX(-50%);
   z-index:1190;padding:5px 11px;border-radius:999px;white-space:nowrap;pointer-events:none;
   background:var(--glass-3);-webkit-backdrop-filter:var(--glass-blur);backdrop-filter:var(--glass-blur);
   border:1px solid var(--line);color:var(--ink2);font-size:11.5px;font-weight:700}
@@ -2598,6 +2644,261 @@ body.previewing #previewPane .pv-sheet.folded{transform:translateY(calc(100% - 1
 @media (prefers-reduced-motion: reduce){
   #previewPane .pv-sheet,.pv-mapwrap,.home-sheet,#homeTapBar{transition:none}
 }
+
+/* ===== v155: 副次ボタン（目立たない方）を無地に寄せる =====
+   対象はタブバー以外の「副」のボタン群（v116/v126 で主／副を分けた
+   区分に沿う）：.btn.ghost 系・mini-btn・入れ替え・ダイアログの追加／
+   削除・目的地追加・シート内の切替ボタン（headrow/navkindrow）・
+   テーマ切替tgl・現在地ボタン・ピル型の選択チップ（カテゴリ／候補／
+   区間方針／ICチップ。未選択＝副、選択中の反転は各 [aria-pressed=
+   "true"] ルールが上位特異度で従来どおり勝つ）。
+   主ボタン（.btn：決定・案内開始など）は現行維持。
+   - ライト：背景は真っ白（#fff・色味なし）、枠は 1px のごく薄いグレー
+   - ダーク：背景は真っ黒（#000）、枠は 1px のごく薄い白グレー
+   枠の色は「めちゃ薄く」に寄せ、ライト rgba(0,0,0,.06)／
+   ダーク rgba(255,255,255,.09) とした */
+.btn.ghost,.mini-btn,.slot-swap button,.from-cur-btn,.leg-bulk button,
+.dlg-add,.dlg-del,.headrow button,.navkindrow button,.tgl,.locate-btn,
+.cat-chip,.htb-chip,.lp-chip,.icr-chip{
+  background:#ffffff;border:1px solid rgba(0,0,0,.06)}
+.dest2-add{background:#ffffff;border:1px solid rgba(0,0,0,.06)}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]) .dest2-add{border-color:rgba(0,0,0,.06)}
+}
+:root[data-theme="light"] .dest2-add{border-color:rgba(0,0,0,.06)}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]) .btn.ghost,:root:not([data-theme="light"]) .mini-btn,
+  :root:not([data-theme="light"]) .slot-swap button,:root:not([data-theme="light"]) .from-cur-btn,
+  :root:not([data-theme="light"]) .leg-bulk button,:root:not([data-theme="light"]) .dlg-add,
+  :root:not([data-theme="light"]) .dlg-del,:root:not([data-theme="light"]) .headrow button,
+  :root:not([data-theme="light"]) .navkindrow button,:root:not([data-theme="light"]) .tgl,
+  :root:not([data-theme="light"]) .locate-btn,:root:not([data-theme="light"]) .cat-chip,
+  :root:not([data-theme="light"]) .htb-chip,:root:not([data-theme="light"]) .lp-chip,
+  :root:not([data-theme="light"]) .icr-chip,:root:not([data-theme="light"]) .dest2-add{
+    background:#000000;border:1px solid rgba(255,255,255,.09);color:#ffffff}
+}
+:root[data-theme="dark"] .btn.ghost,:root[data-theme="dark"] .mini-btn,
+:root[data-theme="dark"] .slot-swap button,:root[data-theme="dark"] .from-cur-btn,
+:root[data-theme="dark"] .leg-bulk button,:root[data-theme="dark"] .dlg-add,
+:root[data-theme="dark"] .dlg-del,:root[data-theme="dark"] .headrow button,
+:root[data-theme="dark"] .navkindrow button,:root[data-theme="dark"] .tgl,
+:root[data-theme="dark"] .locate-btn,:root[data-theme="dark"] .cat-chip,
+:root[data-theme="dark"] .htb-chip,:root[data-theme="dark"] .lp-chip,
+:root[data-theme="dark"] .icr-chip,:root[data-theme="dark"] .dest2-add{
+  background:#000000;border:1px solid rgba(255,255,255,.09);color:#ffffff}
+
+/* v155補足：選択中（反転）の表現は従来どおり維持する。ダーク側の
+   一括指定は :root 接頭辞で特異度が上がり、既存の [aria-pressed]
+   ルールを上書きしてしまうため、ここで同等以上の特異度で再assert
+   する（ライト側は元のルールが勝つが、値が同一なので害はない） */
+.cat-chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.lp-chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.tgl[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.headrow button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.navkindrow button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.htb-chip[aria-pressed="true"]{background:#1a73e8;border-color:#1a73e8;color:#fff}
+.icr-chip[aria-pressed="true"]{background:transparent;color:var(--bg);border-color:transparent}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]) .cat-chip[aria-pressed="true"],
+  :root:not([data-theme="light"]) .lp-chip[aria-pressed="true"],
+  :root:not([data-theme="light"]) .tgl[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+  :root:not([data-theme="light"]) .headrow button[aria-pressed="true"],
+  :root:not([data-theme="light"]) .navkindrow button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+  :root:not([data-theme="light"]) .htb-chip[aria-pressed="true"]{background:#1a73e8;border-color:#1a73e8;color:#fff}
+  :root:not([data-theme="light"]) .icr-chip[aria-pressed="true"]{background:transparent;color:var(--bg);border-color:transparent}
+}
+:root[data-theme="dark"] .cat-chip[aria-pressed="true"],
+:root[data-theme="dark"] .lp-chip[aria-pressed="true"],
+:root[data-theme="dark"] .tgl[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+:root[data-theme="dark"] .headrow button[aria-pressed="true"],
+:root[data-theme="dark"] .navkindrow button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+:root[data-theme="dark"] .htb-chip[aria-pressed="true"]{background:#1a73e8;border-color:#1a73e8;color:#fff}
+:root[data-theme="dark"] .icr-chip[aria-pressed="true"]{background:transparent;color:var(--bg);border-color:transparent}
+
+/* ===== v156: 傾けたホーム地図でもピンを潰さない（部分補正） =====
+   ホーム地図の傾きは地図要素ごとの rotateX で、地平面に張り付いた
+   ピンは縦に潰れて（cosθ 倍）寝て見える。ピン要素側でアンカー
+   （先端／ドットの中心）を基点に縦を 1/cosθ へ伸ばし直し、潰れを
+   相殺して画面に対して立った比率に戻す。JS（applyHomeTransform）が
+   傾きに応じて --pin-sy を #homeMap へ入れる（無傾斜では 1 で無変化）。
+   限界：地図要素側に overflow:hidden 等のグループ化があるため、
+   ピンを地平面から真に起こす（ビルボード化）ことはできず、補正は
+   「潰れの相殺」まで。遠近の効き方までは位置ごとに異なるため、
+   伸ばし率は上限 1.75 で頭打ちにしている。
+   タップ判定は Leaflet 側のアイコン枠（外側要素）が担い不変。
+   先端の位置も基点がアンカーなのでずれない */
+#homeMap{--pin-sy:1}
+#homeMap .cat-pin{transform:scaleY(var(--pin-sy,1));transform-origin:50% 30px}
+#homeMap .poi-pin{transform:scaleY(var(--pin-sy,1));transform-origin:50% 7px}
+#homeMap img.leaflet-marker-icon{scale:1 var(--pin-sy,1);transform-origin:50% 100%}
+
+/* ===== v157: 上部カードのタブ選択を濃く／カード下部の余分な余白を詰める =====
+   目的地／経由地ピッカー（.dlg-card）など、上部に開くタブ付きカードの
+   選択中タブは、従来 var(--surface) の塗り＋薄い影だけで、すりガラス
+   の地の上ではほとんど読めなかった。他の選択表現（区間方針チップ等）
+   と同じ反転（地＝--ink／文字＝--bg）に揃えて視認できる濃さにする。
+   同じ作りのフィルタタブ（.tabs 内 .tab）も同仕様に揃える */
+.dlg-modes button[aria-selected="true"]{background:var(--ink);color:var(--bg);box-shadow:none}
+.tab[aria-selected="true"]{background:var(--ink);color:var(--bg);box-shadow:none}
+/* カード下部の余白：v52 で付けた下パディング（20px＋セーフエリア）は、
+   カードの高さ自体がタブバーの上で止まるよう max-height 側で差し引か
+   れており、末尾の内容の下にただ空くだけの余白になっていた。
+   通常の内側余白（14px）に詰める */
+.dlg-card{padding-bottom:14px}
+
+/* ===== v158: 副次ボタンの全画面適用／ピッカーのすりガラス強化／2種の元色復帰 =====
+   【副次ボタン】v155 の指定は、ホーム以外の画面のボタンや、特異度で
+   負ける既存ルール（.mini-btn.primary の v116 ダーク指定 (0,4,0)、
+   .controls .btn.ghost (0,3,0)、v126 の .dest2-add ライト指定 等）
+   には届いていなかった。本ブロックで対象を全画面に広げ、各テーマ
+   形（無指定／メディア／data-theme 明示）の全てで従来ルール以上の
+   特異度になるよう再assert する。指定は色のロングハンドのみ
+   （background-color／border-color／border-width）で行い、各要素の
+   枠線スタイル（.via-add の破線など）・角丸・影は壊さない。
+   - ライト：背景 #fff（真っ白）／枠 1px rgba(0,0,0,.06)／文字 #1c1c1e
+   - ダーク：背景 #000（真っ黒）／枠 1px rgba(255,255,255,.09)／文字 #fff
+   主ボタン（.btn 本体・.btn.dark・.btn-end・終了系）は対象外で従来
+   どおり。選択中（反転）の表現は末尾で再assert して維持する。
+   タブバー（.tabbar 配下）は一切対象に含めない。
+   【対象外（意図的に従来どおり）】×系ボタン（背景なしが v116 の仕様）、
+   トラック型セグメントの未選択側（.seg button／.dlg-modes button／
+   .tab：地のトラックの上で透明なのが構造）、.bg-sw（サムネイル選択）、
+   .mgmt-main（行カード上の透明なタップ領域）、.pill（状態表示）。
+   【元色復帰】カテゴリチップ（.cat-chip）と現在地に戻るボタン
+   （.locate-btn）は、ユーザーの指示で v155 の無地化から外し、
+   変更前のすりガラス系（チップ=glass-3＋blur／現在地=--surface＋影）
+   へ戻す。選択中チップの反転は従来どおり（v155 の再assert が
+   特異度で勝つため維持される）。
+   【ピッカーのすりガラス】「目的地を設定」カード（.dlg-card）は
+   glass-3 指定だったが、背後の暗幕（.dlg-bg 50%黒）と暗い地図の
+   合成で実質不透明な黒に見えていた。カード側を一段透ける専用
+   ガラス（--glass-dlg）にし、ぼかしを強め（18px）、暗幕も 38% に
+   弱めて、他の浮動カードと同じ「地図がほんのり透ける」見え方に
+   する。文字・タブ（選択反転は v157）・入力欄の境界線は従来どおり
+   で視認性は維持する */
+
+/* --- 【ピッカー】すりガラス強化 --- */
+:root{--glass-dlg:rgba(255,255,255,.66)}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){--glass-dlg:rgba(38,38,42,.58)}
+}
+:root[data-theme="dark"]{--glass-dlg:rgba(38,38,42,.58)}
+.dlg-card{background:var(--glass-dlg);
+  -webkit-backdrop-filter:blur(18px) saturate(1.15);backdrop-filter:blur(18px) saturate(1.15)}
+.dialog .dlg-bg{background:rgba(0,0,0,.38)}
+
+/* --- 【復帰】カテゴリチップ／現在地ボタンは元の色へ --- */
+.cat-chip{background:var(--glass-3);border:1.5px solid var(--line);color:var(--ink);
+  -webkit-backdrop-filter:var(--glass-blur);backdrop-filter:var(--glass-blur)}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]) .cat-chip{background:var(--glass-3);border:1.5px solid var(--line);color:var(--ink)}
+}
+:root[data-theme="dark"] .cat-chip{background:var(--glass-3);border:1.5px solid var(--line);color:var(--ink)}
+:root[data-theme="light"] .cat-chip{background:var(--glass-3);border:1.5px solid var(--line);color:var(--ink)}
+.locate-btn{background:var(--surface);border:1px solid var(--line);color:var(--ink);
+  box-shadow:0 4px 14px rgba(0,0,0,.20)}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]) .locate-btn{background:var(--surface);border:1px solid var(--line);color:var(--ink)}
+}
+:root[data-theme="dark"] .locate-btn{background:var(--surface);border:1px solid var(--line);color:var(--ink)}
+:root[data-theme="light"] .locate-btn{background:var(--surface);border:1px solid var(--line);color:var(--ink)}
+
+/* --- 【副次ボタン】全画面へ適用（ライト） --- */
+.btn.ghost,.mini-btn,.mini-btn.primary,.slot-swap button,.from-cur-btn,.leg-bulk button,
+.dlg-add,.dlg-del,.dest2-add,.via-add,.chip,.tgl,.htb-chip,.lp-chip,.icr-chip,
+.headrow button,.navkindrow button,.slot-btn,.slot-gps,.pv-cand,
+.nav-head .back,.nav-head .vtgl,.controls .btn.ghost{
+  background-color:#ffffff;border-color:rgba(0,0,0,.06);border-width:1px;color:#1c1c1e}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]) .btn.ghost,:root:not([data-theme="dark"]) .mini-btn,
+  :root:not([data-theme="dark"]) .mini-btn.primary,:root:not([data-theme="dark"]) .slot-swap button,
+  :root:not([data-theme="dark"]) .from-cur-btn,:root:not([data-theme="dark"]) .leg-bulk button,
+  :root:not([data-theme="dark"]) .dlg-add,:root:not([data-theme="dark"]) .dlg-del,
+  :root:not([data-theme="dark"]) .dest2-add,:root:not([data-theme="dark"]) .via-add,
+  :root:not([data-theme="dark"]) .chip,:root:not([data-theme="dark"]) .tgl,
+  :root:not([data-theme="dark"]) .htb-chip,:root:not([data-theme="dark"]) .lp-chip,
+  :root:not([data-theme="dark"]) .icr-chip,:root:not([data-theme="dark"]) .headrow button,
+  :root:not([data-theme="dark"]) .navkindrow button,:root:not([data-theme="dark"]) .slot-btn,
+  :root:not([data-theme="dark"]) .slot-gps,:root:not([data-theme="dark"]) .pv-cand,
+  :root:not([data-theme="dark"]) .nav-head .back,:root:not([data-theme="dark"]) .nav-head .vtgl,
+  :root:not([data-theme="dark"]) .controls .btn.ghost{
+    background-color:#ffffff;border-color:rgba(0,0,0,.06);border-width:1px;color:#1c1c1e}
+}
+:root[data-theme="light"] .btn.ghost,:root[data-theme="light"] .mini-btn,
+:root[data-theme="light"] .mini-btn.primary,:root[data-theme="light"] .slot-swap button,
+:root[data-theme="light"] .from-cur-btn,:root[data-theme="light"] .leg-bulk button,
+:root[data-theme="light"] .dlg-add,:root[data-theme="light"] .dlg-del,
+:root[data-theme="light"] .dest2-add,:root[data-theme="light"] .via-add,
+:root[data-theme="light"] .chip,:root[data-theme="light"] .tgl,
+:root[data-theme="light"] .htb-chip,:root[data-theme="light"] .lp-chip,
+:root[data-theme="light"] .icr-chip,:root[data-theme="light"] .headrow button,
+:root[data-theme="light"] .navkindrow button,:root[data-theme="light"] .slot-btn,
+:root[data-theme="light"] .slot-gps,:root[data-theme="light"] .pv-cand,
+:root[data-theme="light"] .nav-head .back,:root[data-theme="light"] .nav-head .vtgl,
+:root[data-theme="light"] .controls .btn.ghost{
+  background-color:#ffffff;border-color:rgba(0,0,0,.06);border-width:1px;color:#1c1c1e}
+
+/* --- 【副次ボタン】全画面へ適用（ダーク） --- */
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]) .btn.ghost,:root:not([data-theme="light"]) .mini-btn,
+  :root:not([data-theme="light"]) .mini-btn.primary,:root:not([data-theme="light"]) .slot-swap button,
+  :root:not([data-theme="light"]) .from-cur-btn,:root:not([data-theme="light"]) .leg-bulk button,
+  :root:not([data-theme="light"]) .dlg-add,:root:not([data-theme="light"]) .dlg-del,
+  :root:not([data-theme="light"]) .dest2-add,:root:not([data-theme="light"]) .via-add,
+  :root:not([data-theme="light"]) .chip,:root:not([data-theme="light"]) .tgl,
+  :root:not([data-theme="light"]) .htb-chip,:root:not([data-theme="light"]) .lp-chip,
+  :root:not([data-theme="light"]) .icr-chip,:root:not([data-theme="light"]) .headrow button,
+  :root:not([data-theme="light"]) .navkindrow button,:root:not([data-theme="light"]) .slot-btn,
+  :root:not([data-theme="light"]) .slot-gps,:root:not([data-theme="light"]) .pv-cand,
+  :root:not([data-theme="light"]) .nav-head .back,:root:not([data-theme="light"]) .nav-head .vtgl,
+  :root:not([data-theme="light"]) .controls .btn.ghost{
+    background-color:#000000;border-color:rgba(255,255,255,.09);border-width:1px;color:#ffffff}
+}
+:root[data-theme="dark"] .btn.ghost,:root[data-theme="dark"] .mini-btn,
+:root[data-theme="dark"] .mini-btn.primary,:root[data-theme="dark"] .slot-swap button,
+:root[data-theme="dark"] .from-cur-btn,:root[data-theme="dark"] .leg-bulk button,
+:root[data-theme="dark"] .dlg-add,:root[data-theme="dark"] .dlg-del,
+:root[data-theme="dark"] .dest2-add,:root[data-theme="dark"] .via-add,
+:root[data-theme="dark"] .chip,:root[data-theme="dark"] .tgl,
+:root[data-theme="dark"] .htb-chip,:root[data-theme="dark"] .lp-chip,
+:root[data-theme="dark"] .icr-chip,:root[data-theme="dark"] .headrow button,
+:root[data-theme="dark"] .navkindrow button,:root[data-theme="dark"] .slot-btn,
+:root[data-theme="dark"] .slot-gps,:root[data-theme="dark"] .pv-cand,
+:root[data-theme="dark"] .nav-head .back,:root[data-theme="dark"] .nav-head .vtgl,
+:root[data-theme="dark"] .controls .btn.ghost{
+  background-color:#000000;border-color:rgba(255,255,255,.09);border-width:1px;color:#ffffff}
+
+/* --- 【維持】選択中（反転）の表現は上記の無地化より優先する --- */
+.lp-chip[aria-pressed="true"],.tgl[aria-pressed="true"],
+.headrow button[aria-pressed="true"],.navkindrow button[aria-pressed="true"]{
+  background-color:var(--ink);color:var(--bg);border-color:var(--ink)}
+.htb-chip[aria-pressed="true"]{background-color:#1a73e8;border-color:#1a73e8;color:#fff}
+.icr-chip[aria-pressed="true"]{background-color:transparent;color:var(--bg);border-color:transparent}
+.pv-cand.sel{border-color:var(--ink)}
+.nav-head .vtgl[aria-pressed="true"]{background-color:#1c1c1e;color:#ffffff;border-color:#1c1c1e}
+:root[data-theme="light"] .lp-chip[aria-pressed="true"],:root[data-theme="light"] .tgl[aria-pressed="true"],
+:root[data-theme="light"] .headrow button[aria-pressed="true"],:root[data-theme="light"] .navkindrow button[aria-pressed="true"]{
+  background-color:var(--ink);color:var(--bg);border-color:var(--ink)}
+:root[data-theme="light"] .htb-chip[aria-pressed="true"]{background-color:#1a73e8;border-color:#1a73e8;color:#fff}
+:root[data-theme="light"] .icr-chip[aria-pressed="true"]{background-color:transparent;color:var(--bg);border-color:transparent}
+:root[data-theme="light"] .pv-cand.sel{border-color:var(--ink)}
+:root[data-theme="light"] .nav-head .vtgl[aria-pressed="true"]{background-color:#1c1c1e;color:#ffffff;border-color:#1c1c1e}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]) .lp-chip[aria-pressed="true"],:root:not([data-theme="light"]) .tgl[aria-pressed="true"],
+  :root:not([data-theme="light"]) .headrow button[aria-pressed="true"],:root:not([data-theme="light"]) .navkindrow button[aria-pressed="true"]{
+    background-color:var(--ink);color:var(--bg);border-color:var(--ink)}
+  :root:not([data-theme="light"]) .htb-chip[aria-pressed="true"]{background-color:#1a73e8;border-color:#1a73e8;color:#fff}
+  :root:not([data-theme="light"]) .icr-chip[aria-pressed="true"]{background-color:transparent;color:var(--bg);border-color:transparent}
+  :root:not([data-theme="light"]) .pv-cand.sel{border-color:var(--ink)}
+  :root:not([data-theme="light"]) .nav-head .vtgl[aria-pressed="true"]{background-color:#ffffff;color:#1c1c1e;border-color:#ffffff}
+}
+:root[data-theme="dark"] .lp-chip[aria-pressed="true"],:root[data-theme="dark"] .tgl[aria-pressed="true"],
+:root[data-theme="dark"] .headrow button[aria-pressed="true"],:root[data-theme="dark"] .navkindrow button[aria-pressed="true"]{
+  background-color:var(--ink);color:var(--bg);border-color:var(--ink)}
+:root[data-theme="dark"] .htb-chip[aria-pressed="true"]{background-color:#1a73e8;border-color:#1a73e8;color:#fff}
+:root[data-theme="dark"] .icr-chip[aria-pressed="true"]{background-color:transparent;color:var(--bg);border-color:transparent}
+:root[data-theme="dark"] .pv-cand.sel{border-color:var(--ink)}
+:root[data-theme="dark"] .nav-head .vtgl[aria-pressed="true"]{background-color:#ffffff;color:#1c1c1e;border-color:#ffffff}
 
 </style>
 <script>
@@ -2721,7 +3022,7 @@ body.previewing #previewPane .pv-sheet.folded{transform:translateY(calc(100% - 1
     <div class="gpscard hidden" id="gGps">
       <div style="flex:1;min-width:200px">
         <div class="big" id="posText">現在地 未取得</div>
-        <div class="sub" id="posSub">デモ走行でも試せます。</div>
+        <div class="sub" id="posSub">現在地を使うには位置情報を取得してください。</div>
       </div>
       <button class="btn" id="btnGps">位置情報を取得</button>
       <button class="btn ghost hidden" id="btnGpsStop">追従を止める</button>
@@ -2903,6 +3204,7 @@ body.previewing #previewPane .pv-sheet.folded{transform:translateY(calc(100% - 1
         <span class="set-k">音声案内<small>分岐の読み上げ</small></span>
         <button type="button" class="tgl" id="setVoiceBtn" aria-pressed="true">音声 ON</button>
       </div>
+      <p class="mgmt-msg" style="margin:0;padding:2px 15px 13px">音楽を聴きながらの案内について：Audio Session API 対応端末（iOS 16.4 以降の Safari）では、音声案内が有効な間オーディオセッションを「割り込み型（transient）」に設定し、Apple Music など他アプリの再生を止めずに音量だけ下げるよう試みます。ただし、読み上げ音声にこの設定が効くかどうかは Apple の文書で保証されていません。<b>Apple Music 再生中の実機確認が必要です。</b><br><span id="audioSessionStatus">オーディオセッション：—</span></p>
       <div class="set-row">
         <span class="set-k">スリープ防止<small>案内中は画面を消灯しません</small></span>
         <span class="set-v">常時 ON</span>
@@ -2999,13 +3301,6 @@ body.previewing #previewPane .pv-sheet.folded{transform:translateY(calc(100% - 1
         <span class="set-v" id="setRoadCount"></span>
       </div>
       <p class="mgmt-msg" id="setDataMsg" style="margin:0;padding:2px 15px 13px"></p>
-    </div>
-    <div class="set-group">
-      <div class="set-h">開発用</div>
-      <div class="set-row">
-        <span class="set-k">案内プレビュー<small>収録ルートで案内画面の表示を確認します</small></span>
-        <button type="button" class="mini-btn" id="btnPreview">開く</button>
-      </div>
     </div>
   </div>
 </div>
@@ -3197,6 +3492,11 @@ body.previewing #previewPane .pv-sheet.folded{transform:translateY(calc(100% - 1
           <input type="range" id="zoomRange" min="8" max="20" step="1" value="16" aria-label="地図の倍率">
           <span class="zv" id="zoomVal">16</span>
         </div>
+        <div class="navkindrow" role="group" aria-label="ルート種別の切り替え（現在地から再検索）">
+          <button type="button" data-navkind="surface">一般道</button>
+          <button type="button" data-navkind="rec">推奨</button>
+          <button type="button" data-navkind="dist">距離優先</button>
+        </div>
         <div class="headrow">
           <button type="button" id="btnHeadUp" aria-pressed="true">進行方向</button>
           <button type="button" id="btnHeadNorth" aria-pressed="false">北向き</button>
@@ -3232,9 +3532,6 @@ body.previewing #previewPane .pv-sheet.folded{transform:translateY(calc(100% - 1
 
         <h3>この先の分岐</h3>
         <div id="stepList"></div>
-        <div style="margin-top:10px;display:flex;gap:8px">
-          <button class="btn ghost" id="btnPrev" style="flex:1;padding:10px">前の分岐へ</button>
-        </div>
 
         <h3>音声</h3>
         <div class="voicebox">
@@ -3243,6 +3540,8 @@ body.previewing #previewPane .pv-sheet.folded{transform:translateY(calc(100% - 1
             <button class="btn ghost" id="btnVoiceSheetToggle" style="padding:10px 14px;font-size:13.5px">音声 ON / OFF</button>
           </div>
           <div style="margin-top:8px">使用中の声：<span id="voiceName">端末の標準ボイス</span></div>
+          <div style="margin-top:6px" id="audioSessionStatusSheet">オーディオセッション：—</div>
+          <div style="margin-top:4px">対応端末では案内音声を「割り込み型」に設定し、Apple Music 等の再生を止めず音量だけ下げるよう試みます（読み上げへの適用は Apple の文書で保証外のため、実機確認が必要です）。</div>
           <div style="margin-top:6px">最も自然な日本語の女性音声を自動で選びます。高品質・拡張音声が端末に入っていれば、そちらを優先します。</div>
           <div style="margin-top:8px"><b>高品質音声の入れ方</b><br>
           iPhone／iPad：設定 → アクセシビリティ → 読み上げコンテンツ → 声 → 日本語 →「きょうこ」などの拡張音声をダウンロード<br>
@@ -3260,13 +3559,6 @@ body.previewing #previewPane .pv-sheet.folded{transform:translateY(calc(100% - 1
           <div id="mmTestOut" style="margin-top:8px;font-size:12.5px;line-height:1.7"></div>
         </div>
 
-        <h3>デモ走行</h3>
-        <div class="simspeed" id="simBar">
-          <button data-sim="0" aria-pressed="true">停止</button>
-          <button data-sim="1" aria-pressed="false">▶ 再生</button>
-          <button data-sim="10" aria-pressed="false">10倍速</button>
-          <button data-sim="40" aria-pressed="false">40倍速</button>
-        </div>
         
       </div>
     </div>
@@ -3376,6 +3668,31 @@ window.BtnFx = (function(){
       else if(w.owned){ b.disabled = false; b.classList.remove("is-stale"); w.owned = false; }
     });
   }
+  /* v157: スピナーはボタンの文字の真上ではなく、文字の直右に置く。
+     追加前にボタン内容（テキスト等）の矩形を測り、その右端＋8px を
+     左位置にする。絶対配置なのでボタン寸法は変わらない。文字が長い／
+     右寄せで右に余地が無いボタンでは、右端の内側に収まるようクランプ
+     する（はみ出してレイアウトが崩れることはない） */
+  function placeSpin(btn, s){
+    try{
+      var bw = btn.clientWidth; if(!bw) return;
+      var SIZE = 26, GAP = 8;
+      var range = document.createRange();
+      range.selectNodeContents(btn);
+      var rects = range.getClientRects();
+      var br = btn.getBoundingClientRect();
+      var right = 0;
+      for(var i = 0; i < rects.length; i++){
+        if(rects[i].width > 0 && rects[i].right > right) right = rects[i].right;
+      }
+      var left;
+      if(right > br.left) left = (right - br.left) - (btn.clientLeft || 0) + GAP;
+      else left = bw - SIZE - 10;
+      left = Math.max(2, Math.min(left, bw - SIZE - 2));
+      s.style.left = left + "px";
+      s.style.marginLeft = "0";
+    }catch(e){}
+  }
   function begin(btn){
     if(!btn || btn._btnBusy) return;
     btn._btnBusy = true; depth++; window.__btnBusyDepth = depth;
@@ -3384,7 +3701,11 @@ window.BtnFx = (function(){
     btn._btnWasDisabled = !!btn.disabled;
     btn.disabled = true;
     btn.classList.add("btn-busy"); btn.setAttribute("aria-busy", "true");
-    if(!btn.querySelector(".btn-spin")) btn.appendChild(makeSpin());
+    if(!btn.querySelector(".btn-spin")){
+      var sp = makeSpin();
+      placeSpin(btn, sp); /* スピナー自身の矩形が測定に入らないよう、追加前に測る */
+      btn.appendChild(sp);
+    }
   }
   function end(btn){
     if(!btn || !btn._btnBusy) return;
@@ -4059,7 +4380,7 @@ window.__GUIDE_BUNDLE = {"v":1,"fmt":2,"date":"2026-11-13","exit":[["あきる�
 /* ================= STATE / HELPERS ================= */
 var state = {
   route:null, stepIdx:0, remaining:0, legTotal:0,
-  running:false, simSpeed:0, simTimer:null,
+  running:false,
   voice:true, announced:{}, finished:false,
   gps:{watchId:null, lat:null, lng:null, speed:null, acc:null, active:false},
   wakeLock:null,
@@ -4136,7 +4457,9 @@ function lanePhrase(step){
   return "左から" + rec.join("・") + "車線目を走行します";
 }
 function navProfile(){
-  if(state.route && state.route.type==="surface") return {far:300, mid:100, now:40, adv:15, lane:600};
+  /* 一般道：予告は300mの1回に整理し（mid=farで中間ステージを無効化）、
+     最終案内は交差点まで約30mで方向のみ。高速：1km／300m／まもなく の従来どおり */
+  if(state.route && state.route.type==="surface") return {far:320, mid:320, now:30, adv:15, lane:600};
   return {far:1000, mid:300, now:110, adv:35, lane:1200};
 }
 function laneActive(){
@@ -4208,6 +4531,31 @@ function refreshVoiceName(){
   var el = $("voiceName");
   if(el) el.textContent = v ? v.name + voiceTierLabel(v) : "端末の標準ボイス";
 }
+/* ===== Audio Session API（iOS Safari 16.4+ の navigator.audioSession）=====
+   案内音声の割り込みで Apple Music 等の他アプリ再生が止まらないよう、
+   音声案内が有効な間は navigator.audioSession.type = "transient"
+   （他アプリの音を止めず、一時的に音量を下げる＝ダッキングを意図する
+   種別）に設定し、音声OFF時は "auto" に戻す。未対応環境では何もしない。
+   注意：読み上げ（SpeechSynthesis）の発話がこのセッション種別の影響を
+   受けるかは Apple の文書に明記がなく確実ではない。Apple Music 再生中の
+   実機確認が必要（現在の状態は設定タブと案内シートに表示する）。 */
+function applyAudioSession(){
+  var supported = false, cur = "";
+  try{
+    if("audioSession" in navigator && navigator.audioSession){
+      supported = true;
+      navigator.audioSession.type = state.voice ? "transient" : "auto";
+      cur = navigator.audioSession.type || "";
+    }
+  }catch(e){}
+  var label = !supported
+    ? "オーディオセッション：この端末・ブラウザは Audio Session API 未対応です"
+    : "オーディオセッション：" + cur + (state.voice ? "（割り込み型：他アプリの音を止めずに下げる設定）" : "（自動）");
+  ["audioSessionStatus", "audioSessionStatusSheet"].forEach(function(id){
+    var el = document.getElementById(id); if(el) el.textContent = label;
+  });
+  return supported;
+}
 function speak(text){
   var at = $("announceText"); if(at) at.textContent = text;
   if(!state.voice) return;
@@ -4221,26 +4569,130 @@ function speak(text){
   }catch(e){}
 }
 if("speechSynthesis" in window){ window.speechSynthesis.onvoiceschanged = refreshVoiceName; refreshVoiceName(); }
+applyAudioSession(); /* 起動時点の音声設定（既定ON）をオーディオセッションへ反映 */
 
+/* ===== 案内文の言い回し（トヨタ式に統一） =====
+   - 方向は「右方向／左方向」と言う（「右折です」とは言わない。
+     分岐は従来どおり「分岐を右／左」、直進は「直進」）
+   - 距離は「300m」「3キロ」の言い方にする（「3.0 km」のような
+     小数＋km表記は表示専用で、読み上げには使わない）
+   - 交差点の名称が分かるステップでは名称を案内に含める。同梱の
+     名称付き信号交差点データから付けた xname を優先し、無ければ
+     ステップ名を使う。汎称の「交差点」だけのときは名称を省く
+   - 一般道の交差点名の後には「を」を付ける（「中野坂上交差点を、
+     左方向です」）。高速のJCT名など交差点名でない名称は「、」のまま */
+function dirSpeech(step){
+  switch(step && step.dir){
+    case "left": return "左方向";
+    case "right": return "右方向";
+    case "fork-left": return "分岐を左";
+    case "fork-right": return "分岐を右";
+    default: return "直進";
+  }
+}
+function placeName(step){
+  if(!step) return "";
+  return step.xname || step.name || "";
+}
+/* その名称が交差点名かどうか。同梱の名称付き交差点データから付けた
+   xname が表示名になっている場合と、名称自体が「交差点」で終わる場合 */
+function isXingName(step, n){
+  if(step && step.xname && n === step.xname) return true;
+  return /交差点$/.test(n);
+}
+function namePart(step){
+  var n = placeName(step);
+  if(!n || n === "交差点") return "";
+  /* 一般道の交差点名の後には「を」を付ける（「2.8キロ先、中野坂上
+     交差点を、左方向です」）。高速のJCT名・IC名など、交差点名でない
+     名称の文型は従来どおり「、」でつなぐ */
+  if(!isHwyStep(step) && isXingName(step, n)) return n + "を、";
+  return n + "、";
+}
+function voiceDist(m){
+  if(m == null || isNaN(m)) return "";
+  if(m < 1000){
+    /* 音声の距離は100m単位の四捨五入（847m→800m、850m→900m）。
+       丸めて1000mに達したらキロ表記にする */
+    var r100 = Math.round(m / 100) * 100;
+    if(r100 >= 1000) return "1キロ";
+    if(r100 <= 0) return m > 0 ? "100m" : "0m";
+    return r100 + "m";
+  }
+  var km = m / 1000;
+  if(km >= 10) return Math.round(km) + "キロ";
+  var k1 = Math.round(km * 10) / 10;
+  return (k1 % 1 === 0 ? String(Math.floor(k1)) : String(k1)) + "キロ";
+}
+/* 高速・有料道路のステップか（分岐案内の従来仕様を維持する判定）。
+   ステップ単位で有料かどうか分かる場合はそちらを優先する */
+function isHwyStep(step){
+  if(step && step.toll != null) return !!step.toll;
+  return !!(state.route && state.route.type === "hw");
+}
+function isFinalStep(step){
+  if(!step || !state.route || !state.route.steps.length) return false;
+  var steps = state.route.steps;
+  return steps[steps.length - 1] === step && step.to === "目的地到着";
+}
+/* 曲がった先ですぐ次の分岐が来るときの「その先○○mで○方向です」。
+   次のステップまで1km未満で、方向のある分岐のときは必ず付ける
+   （距離は既存の読み上げ表記 voiceDist に合わせる） */
+function sonosakiSuffix(step){
+  if(!state.route) return "";
+  var idx = state.route.steps.indexOf(step);
+  if(idx < 0) return "";
+  var nx = state.route.steps[idx + 1];
+  if(!nx || nx.leg == null || nx.leg >= 1000) return "";
+  if(["left", "right", "fork-left", "fork-right"].indexOf(nx.dir) < 0) return "";
+  return "その先" + voiceDist(nx.leg) + "で" + dirSpeech(nx) + "です。";
+}
 function announceFor(step, when){
-  var d = dirInfo(step.dir);
   var lane = laneGuidanceOn(step) ? " " + lanePhrase(step) + "。" : "";
-  var p = navProfile();
+  var hw = isHwyStep(step);
   /* 一般道では道路種別（国道・都道など）も読み上げる */
-  var rc = (state.route && state.route.type==="surface") ? roadClassShort(step) : "";
+  var rc = !hw ? roadClassShort(step) : "";
   var rcp = rc ? rc + "、" : "";
   var dest = step.dest ? " 行き先表示は「" + step.dest + "」です。" : "";
-  if(when==="1km") return (p.far>=1000 ? "1km" : p.far+"m")+"先、"+rcp+step.name+"、"+d.kind+"です。"+dest+lane;
-  if(when==="300m") return p.mid+"m先、"+step.name+"、"+d.kind+"です。"+lane;
-  if(when==="now") return "まもなく、"+step.name+"、"+d.kind+"です。";
-  if(when==="start") return "案内開始。"+rcp+distText(state.remaining)+"先、"+step.name+"、"+d.kind+"です。"+dest+lane;
+  var nm = namePart(step), ds = dirSpeech(step);
+  if(when === "far"){
+    if(hw) return "1km先、" + nm + ds + "です。" + dest + lane;
+    return "300m先、" + rcp + nm + ds + "です。" + dest + lane + sonosakiSuffix(step);
+  }
+  if(when === "mid"){
+    if(!hw) return ""; /* 一般道の中間予告は置かない（300m予告→30mの最終案内に整理） */
+    return "300m先、" + nm + ds + "です。" + lane + sonosakiSuffix(step);
+  }
+  if(when === "now"){
+    if(hw) return "まもなく、" + nm + ds + "です。";
+    if(isFinalStep(step)) return "まもなく目的地です。";
+    return ds + "です。"; /* 一般道の最終案内（交差点まで約30m）は方向のみ */
+  }
+  if(when === "start"){
+    if(isFinalStep(step)) return "案内開始。" + voiceDist(state.remaining) + "先、目的地です。";
+    return "案内開始。" + rcp + voiceDist(state.remaining) + "先、" + nm + ds + "です。" + dest + lane + sonosakiSuffix(step);
+  }
   return "";
 }
+/* 曲がった直後の予告（トヨタ式）：
+   - 次の分岐まで5km未満なら「3キロ先、左方向です」と距離で予告する
+   - 5km以上道なりなら「5キロ以上道なりです」
+   - 高速の分岐は従来どおり名称（JCT名等）で予告する */
 function announceNextPreview(){
   var nxt = state.route.steps[state.stepIdx];
   if(!nxt){ speak("到着しました。"); return; }
-  var d = dirInfo(nxt.dir);
-  speak("次は "+distText(nxt.leg)+"先、"+nxt.name+"、"+d.kind+"です。");
+  if(isFinalStep(nxt)){ speak(voiceDist(nxt.leg) + "先、目的地です。"); return; }
+  if(!isHwyStep(nxt)){
+    if(nxt.leg >= 5000){ speak("5キロ以上道なりです。"); return; }
+    /* 次の次が1km未満に迫るときの「その先○○mで○方向です」は必須：
+       この予告でも必ず付ける。すぐ先（350m以下）の分岐ではこの予告が
+       300m案内を兼ねるため、300mステージの発話は重ねない
+       （30mの最終案内だけ残す） */
+    speak(voiceDist(nxt.leg) + "先、" + namePart(nxt) + dirSpeech(nxt) + "です。" + sonosakiSuffix(nxt));
+    if(nxt.leg <= 350){ state.announced.k1 = true; state.announced.m300 = true; }
+    return;
+  }
+  speak("次は " + voiceDist(nxt.leg) + "先、" + placeName(nxt) + "、" + dirSpeech(nxt) + "です。" + sonosakiSuffix(nxt));
 }
 
 /* ================= CHEAPEST ROUTE FINDER ================= */
@@ -6459,16 +6911,6 @@ renderRoutes("all");
 /* ================= iOS-STYLE BOTTOM TABS ================= */
 var TAB_GROUPS = {};
 function showTab(){ /* 目的地設定は1画面に集約（従来のタブ切替は廃止） */ }
-/* 開発用：ワンタップで案内プレビューを表示確認 */
-function openPreview(){
-  var r=null; ROUTES.forEach(function(x){ if(x.id==="r1") r=x; });
-  if(!r) return;
-  state.fare=null; openRoute(r);
-  state.remaining = 800;
-  renderNav();
-}
-$("btnPreview").addEventListener("click", openPreview);
-
 /* ================= ROUTE CHOICE + PREVIEW =================
    ルートを選ぶと「プレビュー／案内開始」を出す。
    プレビューでは操作中の画面が下に引っ込み、上部にルート全体を表示する。 */
@@ -6778,12 +7220,21 @@ function drawPreviewRoute(){
       if(cc && cc.icPlan && cc.icSel) drawPvIcMarkers(cc.icPlan, cc.icSel.e, cc.icSel.x);
     }, true);
   }
+  /* 印は「有料⇔一般道の切り替わり点」「出発地点」「目的地」にだけ置く。
+     ステップ・ICの内部データ（料金計算・ペア導出・案内）は従来どおり
+     保持し、変えるのは地図への表示だけ */
+  var pvTollOf = function(s){ return s.toll != null ? !!s.toll : (r.type === "hw"); };
   r.steps.forEach(function(s, i){
     if(s.lat == null) return;
     var last = i === r.steps.length - 1;
-    var m = L.circleMarker([s.lat, s.lng], {radius: last ? 8 : 6, color:"#1c1c1e", weight:2, fillColor: last ? "#1c1c1e" : "#8e8e93", fillOpacity:0.95}).addTo(previewLayer);
+    var trans = i > 0 && pvTollOf(r.steps[i - 1]) !== pvTollOf(s);
+    if(!last && !trans) return;
+    var m = L.circleMarker([s.lat, s.lng], {radius: last ? 8 : 6.5, color:"#1c1c1e", weight:2, fillColor: last ? "#1c1c1e" : "#ffffff", fillOpacity:0.95}).addTo(previewLayer);
     m.bindTooltip((i + 1) + ". " + s.name, {direction:"top"});
   });
+  /* 出発地点の印（形状の始点＝実際の出発点に置く） */
+  if(pvPts && pvPts.length)
+    L.circleMarker(pvPts[0], {radius:7, color:"#ffffff", weight:3, fillColor:"#1a73e8", fillOpacity:1}).addTo(previewLayer);
   /* 現在地が取れていれば、ホーム地図と同じ青ドット（白フチ付き）を
      プレビュー地図にも出す。取れていない場合は何も出さない */
   try{
@@ -6906,10 +7357,9 @@ function drawPvIcMarkers(plan, eIdx, xIdx){
      ルート線から外れた直線の帯になり、「そのIC区間を通っていない
      ルートが通っているように見える」表示破綻の原因だった。ピンだけは
      実座標に残し、不一致をごまかさない */
-  dispPts.forEach(function(p, i){
-    if(i === 0 || i === dispPts.length - 1) return;
-    L.circleMarker(p, {radius:3.5, color:"#ffffff", weight:1.5, fillColor:"#8e8e93", fillOpacity:1}).addTo(pvIcLayer);
-  });
+  /* 中間のICには丸印を置かない（表示だけの変更）。印を置くのは
+     切り替わり点である両端＝「乗るIC」「降りるIC」のピンだけで、
+     ICチェーン・ペア導出・料金計算の内部データは従来どおり保持する */
   function pin(ll, label){
     if(!ll) return;
     var icon = L.divIcon({className:"pv-ic-pinwrap", iconSize:null,
@@ -6997,7 +7447,7 @@ $("btnGps").addEventListener("click", function(){
     }
   }, function(err){
     $("posText").textContent = "取得できませんでした";
-    $("posSub").textContent = "許可を確認。デモ走行でも試せます。";
+    $("posSub").textContent = "ブラウザの許可設定を確認してください。";
     var pill = $("gpsPill"); if(pill){ pill.className = "pill warn"; $("gpsPillText").textContent = "GPS 取得失敗"; }
   }, {enableHighAccuracy:true, maximumAge:2000, timeout:15000});
 });
@@ -7103,9 +7553,15 @@ function enrichRouteSteps(route){
           if(rec.length && rec.length < ln[2]){ s.lanes = ln[2]; s.rec = rec; s.osmLane = true; }
         }
       } else {
-        if(!s.name || s.name === "交差点"){
-          var xn = guideNearestXing(s.lat, s.lng, 90);
-          if(xn) s.name = xn;
+        var xn = guideNearestXing(s.lat, s.lng, 90);
+        if(xn){
+          /* 交差点名で名称を付けたステップは xname にも同じ名前を持たせ、
+             案内文で「交差点名」と判定できるようにする（表示名は不変） */
+          if(!s.name || s.name === "交差点"){ s.name = xn; s.xname = xn; }
+          /* 名称が道路名（曲がる先の通り名など）のステップでは、交差点名を
+             xname として別に持つ。案内文・案内表示ではそちらを優先する
+             （placeName）。既に交差点名が付いているステップは書き換えない */
+          else if(/通り|街道|国道|都道|県道|府道|道道|市道|町道|村道|号線|バイパス|環状|道路$|線$/.test(s.name)) s.xname = xn;
         }
         /* 一般道の車線：実データ（turn:lanes）がある箇所だけ扱う。
            走行する車線そのものの案内は一般道では原則出さず、
@@ -7150,7 +7606,7 @@ function openRoute(r){
      （マッチャーのチェーンもこの形状から作られるため揃う） */
   var anchPts = anchoredGeomPts(r);
   if(anchPts && anchPts !== r.geomPts) r.geomPts = anchPts;
-  state.announced = {}; state.running = false; state.simSpeed = 0;
+  state.announced = {}; state.running = false;
   state.__navEndedEarly = false;
   resetArrGate(); /* 到着判定の有効化ゲートを案内ごとに初期化する */
   document.body.classList.add("navlock");
@@ -7160,12 +7616,11 @@ function openRoute(r){
   $("navRouteName").textContent = (r.fromLabel || r.from) + " → " + r.to + (r.simple ? "（簡易案内）" : "");
   var _mp1 = $("modePill"); if(_mp1) _mp1.textContent = "案内中";
   setSheet(false);
-  setSimButtons(0);
   snapToGps(true);
   renderNav(); renderSteps();
 }
 function backHome(){
-  stopSim(); state.running = false;
+  state.running = false;
   navQueue = []; navDestNo = 1; pendingNavDestNo = 0; /* 次の目的地への続き案内は破棄する */
   document.body.classList.remove("navlock");
   $("view-nav").setAttribute("aria-hidden","true");
@@ -7183,7 +7638,7 @@ function backHome(){
      (a) 目的地から 250m 以上離れたことを一度確認する、または
      (b) GPSの実移動距離（オドメーター）が、総延長の3割（上限2km・
          下限150m、ただし総延長の6割を超えない）に達する
-   のどちらかを満たすまで有効化しない。GPSの無いデモ走行では (b) を
+   のどちらかを満たすまで有効化しない。GPS未取得の間は (b) を
    残距離ベースの進行度で代替する。目的地が 250m より遠い通常ルート
    では最初の測位で (a) を満たすため、到着判定の確実さは従来どおり */
 function resetArrGate(){
@@ -7230,7 +7685,7 @@ function onNavEndPressed(){
   if(navQueue && navQueue.length && state.route && !state.finished){
     /* 案内はここで止めるがホームへは戻らず、同じパネルで
        「案内開始（次の目的地）」に切り替える */
-    stopSim(); state.running = false;
+    state.running = false;
     if("speechSynthesis" in window) window.speechSynthesis.cancel();
     state.__navEndedEarly = true;
     state.finished = true;
@@ -7669,7 +8124,13 @@ function doReroute(manual){
     $("navMain").classList.remove("hidden"); $("navFinish").classList.add("hidden");
     renderNav(); renderSteps();
     showRerouteToast("ルートを再計算しました");
-    speak("ルートを再計算しました。");
+    /* 再計算が完了した段階で音声案内する。完了の通知だけでなく、新しい
+       ルートの最初の案内（次の分岐・交差点までの距離と方向、「その先」を
+       含む開始時と同じ文）までを続けて読み上げる。announced は上で
+       リセット済みなので、以降の距離ステージ案内は通常どおり段階的に出る */
+    var fstStep = currentStep();
+    var fstGuide = fstStep ? announceFor(fstStep, "start").replace(/^案内開始。/, "") : "";
+    speak("ルートを再計算しました。" + fstGuide);
     /* 再計算できたら、その位置・目的地のままでは再計算ボタンを無効化
        して暗くする（位置が動く／目的地が変われば再度押せる） */
     if(manual && window.BtnFx){ BtnFx.end($("btnReroute")); BtnFx.done($("btnReroute")); }
@@ -7694,6 +8155,94 @@ function doReroute(manual){
   } else {
     buildOsrmRouteForCoords(state.route.from, state.route.to, chain, "re" + Date.now(), adopt);
   }
+}
+
+/* ================= 案内中のルート種別切替 =================
+   案内シートの種別ボタン（一般道／推奨／距離優先）を押したら、その
+   時点の現在地を出発地として、目的地（未到達の経由地があればそれも）
+   へ、初回のルート検索と同一のパイプライン（グラフ候補の生成 →
+   API候補の組み立て → 健全性ゲート → 最終整形・採用）をそのまま
+   通し、選んだ種別の候補を案内ルートへ差し替える。逸脱時の
+   doReroute（残り区間の部分的な引き直し）は流用しない */
+var navSwitching = false;
+function setNavKindBusy(busy){
+  document.querySelectorAll("[data-navkind]").forEach(function(b){ b.disabled = busy; });
+}
+function navSwitchRouteKind(kind){
+  if(navSwitching || rerouting || !state.route || state.finished) return;
+  var pos = (state.gps.active && state.gps.lat != null) ? [state.gps.lat, state.gps.lng] : navCurrentPos();
+  if(!pos){ showRerouteToast("現在地が取得できていません"); return; }
+  /* 残りの目的地列：現在の案内ルートの destCoords のうち、現在地から
+     200m超離れた未到達の点だけを残し、最終目的地は必ず含める
+     （doReroute の残経由地の扱いと同じ物差し） */
+  var chain = [pos];
+  var dc = state.route.destCoords;
+  if(dc && dc.length){
+    for(var i = 1; i < dc.length; i++){
+      if(haversine(pos[0], pos[1], dc[i][0], dc[i][1]) > 200) chain.push(dc[i]);
+    }
+    var lastC = dc[dc.length - 1];
+    if(chain[chain.length - 1] !== lastC) chain.push(lastC);
+  } else {
+    var ls = state.route.steps[state.route.steps.length - 1];
+    if(ls && ls.lat != null) chain.push([ls.lat, ls.lng]);
+  }
+  if(chain.length < 2){ showRerouteToast("目的地が近すぎます"); return; }
+  navSwitching = true; rerouting = true; /* 検索中は逸脱リルートと競合させない */
+  setNavKindBusy(true);
+  showRerouteToast("ルートを検索中…");
+  var destName = state.route.to;
+  lastGpsOrigin = pos.slice(); /* 候補生成の起点は実際の現在地（初回検索と同じ扱い） */
+  var fromNode = nearestNode(pos[0], pos[1]).node;
+  var viaNodes = [];
+  for(var vi = 1; vi < chain.length - 1; vi++) viaNodes.push(nearestNode(chain[vi][0], chain[vi][1]).node);
+  var destNodeName = nearestNode(chain[chain.length - 1][0], chain[chain.length - 1][1]).node;
+  var graphCands = buildCandidates(fromNode, viaNodes, destNodeName, "現在地");
+  var byKind = {};
+  graphCands.forEach(function(c){ if(c.kind !== "custom" && !byKind[c.kind]) byKind[c.kind] = c; });
+  function fail(msg){
+    navSwitching = false; rerouting = false;
+    setNavKindBusy(false);
+    showRerouteToast(msg || "ルートを取得できませんでした");
+  }
+  function adopt(cands){
+    finalizeCandidateList(cands); /* 初回検索と同じ最終整形（IC・料金の整合ゲート、推奨の付け替え、距離優先の不変条件） */
+    var pick = null;
+    cands.forEach(function(c){ if(c.kind === kind) pick = c; });
+    if(!pick || !pick.route){ fail("その種別のルートが見つかりませんでした"); return; }
+    var nr = pick.route;
+    upgradeRoute(nr, function(){
+      navSwitching = false; rerouting = false;
+      setNavKindBusy(false);
+      /* 到着判定ゲートの実移動積算は引き継ぐ（切替直後に開始直後扱いに
+         ならないようにする。doReroute の引き継ぎと同じ） */
+      var prevOdo = state.arrGate ? state.arrGate.odo : 0;
+      state.fare = pick.fare || null;
+      openRoute(nr);
+      if(state.arrGate){ state.arrGate.odo = prevOdo; updateArrGate(); }
+      state.running = true; /* openRoute で止まる案内状態を継続に戻す */
+      offRouteCount = 0; lastRerouteAt = Date.now();
+      showRerouteToast("ルートを変更しました");
+      /* 完了時の音声は「ルートを変更しました。」から始め、新ルートの
+         最初の案内（開始時と同じ文。「案内開始。」の代わりに変更の
+         通知を置く）を続けて読み上げる。逸脱時の「ルートを再計算
+         しました。」とは文言を分ける。announced は openRoute で
+         リセット済みなので、以降の段階案内は通常どおり出る */
+      var fstStep = currentStep();
+      var fstGuide = fstStep ? announceFor(fstStep, "start").replace(/^案内開始。/, "") : "";
+      speak("ルートを変更しました。" + fstGuide);
+      if(laneActive()) state.announced.lane = true;
+    });
+  }
+  assembleApiCandidates(chain, byKind, "現在地", destName, null, function(cands){
+    cands = (cands || []).filter(apiCandidateSane); /* 初回検索と同じ最終ゲート */
+    if(cands.length){ adopt(cands); return; }
+    /* 全滅時の最終フォールバックも初回検索と同じ経路を通す */
+    lastResortCandidate(chain, byKind, "現在地", destName, function(lr){
+      if(lr && lr.route && lr.route.geomPts && lr.route.geomPts.length >= 8) adopt([lr]);
+      else fail();
+    });
+  });
 }
 function checkOffRoute(){
   if(!state.route || !state.running || state.finished || rerouting) return;
@@ -10345,13 +10894,26 @@ function assembleApiCandidates(chain, byKind, fromDisp, destName, customInfo, cb
         var straight = haversine(chain[0][0], chain[0][1], chain[1][0], chain[1][1]) / 1000;
         curMidOff = routeMidOffKm(out.toll.route);
         curTailOff = routeTailOffKm(out.toll.route);
-        /* 発動条件（v133で拡張）：有料比率が87%未満、途中の一般道
-           区間が20km以上、または降りたまま目的地まで25km以上。
+        /* 発動条件（v133で拡張、v142で途中降りの閾値を組み立て候補と
+           同じ12kmへ統一）：有料比率が87%未満、途中の一般道区間が
+           12km超、または降りたまま目的地まで25km以上。
            比率だけでは「北上まで乗って残り150kmが一般道」（比率は
            7割前後）を取りこぼすため、末尾の降りっぱなしも見る */
-        if(tot > 0 && straight >= 120 && ((tk != null && tk < tot * 0.87) || curMidOff >= 20 || curTailOff >= 25)) partialLong = true;
+        if(tot > 0 && straight >= 120 && ((tk != null && tk < tot * 0.87) || curMidOff > 12 || curTailOff >= 25)) partialLong = true;
       }
-      if(!out.toll || partialLong){
+      /* v142: 推奨も同じ物差しで見る。推奨と有料第一候補は同じ
+         OSRM生形状を掴むことが多く（実測：東京→鹿角の最速形状は
+         途中に129kmの一般道区間を含む）、有料だけ差し替えても
+         推奨の案内は途中降りのまま残るため、推奨が有料区間を
+         含むのに途中で長く降りている場合も組み立て候補の生成を
+         発動させる */
+      var recDirty = false;
+      if(out.rec && chain && chain.length === 2 && out.rec.route){
+        var rStraight = haversine(chain[0][0], chain[0][1], chain[1][0], chain[1][1]) / 1000;
+        if(rStraight >= 120 && tollWorthy(out.rec.route.tollShareOsrm, out.rec.route.tollKmOsrm) &&
+           routeMidOffKm(out.rec.route) > 12) recDirty = true;
+      }
+      if(!out.toll || partialLong || recDirty){
         tryLocalTollCandidate(chain, byKind, fromDisp, destName, out, function(lc){
           if(lc){
             if(!out.toll) out.toll = lc;
@@ -10361,6 +10923,25 @@ function assembleApiCandidates(chain, byKind, fromDisp, destName, customInfo, cb
                      (curTailOff >= 25 && routeTailOffKm(lc.route) <= Math.max(8, curTailOff - 15)))){
               if(!out.alt) out.alt = out.toll;
               out.toll = lc;
+            }
+            else if(curMidOff > 12 && routeMidOffKm(lc.route) <= 12 && routeTailOffKm(lc.route) <= 20 &&
+                    candMin(lc) <= candMin(out.toll) * 1.6){
+              /* v142: 途中降りの大きい有料候補は、多少遅くても
+                 降りていない候補へ差し替える。一般道を長く走る
+                 「有料」は速さのトレードオフではなく形状の誤り */
+              if(!out.alt) out.alt = out.toll;
+              out.toll = lc;
+            }
+            if(recDirty && out.rec && routeMidOffKm(lc.route) <= 12 && routeTailOffKm(lc.route) <= 20 &&
+               candMin(lc) <= candMin(out.rec)){
+              /* v142: 推奨も同じ途中降り形状で、組み立て候補が
+                 アプリの所要時間でも劣らないなら、そちらを推奨
+                 として採用し直す（旧推奨は別ルートへ退避） */
+              if(!out.alt) out.alt = out.rec;
+              var recCopy = {};
+              for(var rk2 in lc) recCopy[rk2] = lc[rk2];
+              recCopy.kind = "rec"; recCopy.label = "推奨";
+              out.rec = recCopy;
             }
           }
           finishAssembly();
@@ -11349,7 +11930,7 @@ function navOnHw(){ return !!(state.route && state.route.type === "hw"); }
 function navRoutePts(){
   return state.route.steps.filter(function(s){ return s.lat != null; }).map(function(s){ return [s.lat, s.lng]; });
 }
-/* GPSが無いときは、進み具合からルート線上の現在位置を推定する（デモ走行でも現在位置が動く） */
+/* GPSが無いときは、進み具合からルート線上の現在位置を推定する */
 function navPosAlongRoute(){
   var steps = state.route.steps, pts = navRoutePts();
   if(!pts.length) return null;
@@ -11546,17 +12127,86 @@ var navLineW = null, navLineB = null, navDrawnRoute = null;
    GPSの speed/heading が取れている間は、最終フィックスからの経過時間分
    だけ目標を前方へ予測し、更新間隔の空白を埋める（最大約2.2秒）。
    静止・低速時は精度半径に応じた不感帯を設け、小刻みなブレを止める。
-   ここで動かすのは表示位置だけで、進捗（chainage）計算には触れない。 */
+   ここで動かすのは表示位置だけで、進捗（chainage）計算には触れない。
+   v160: それでも残った細かいブルブル対策として、目標点そのものを
+   表示専用の α-β フィルタ（createPosSmoother）に通してから渡す。
+   生フィックスは数m〜十数m跳ぶので、τ=200ms の追従だけでは各フィックスに
+   ほぼ追随してしまい震えが残っていた。フィルタ側で精度・速度に応じて
+   観測をならし（静止時は精度内をほぼノイズとして捨てる）、速度も
+   平滑化して持つ。前方予測は生の heading でなく平滑化速度で行い、
+   先行量も最大約1秒分に抑えた（旧版は最大2.2秒先行→次フィックスで
+   引き戻る鋸歯状の震えになっていた）。判定系（逸脱・到着・進捗）は
+   従来どおり生フィックスで処理し、ここには一切関与しない。 */
+function createPosSmoother(){
+  return {
+    ax: null, ay: 0, x: 0, y: 0, vx: 0, vy: 0, t: 0, lastRaw: null, lastOut: null,
+    reset: function(){ this.ax = null; this.x = 0; this.y = 0; this.vx = 0; this.vy = 0; this.t = 0; this.lastRaw = null; this.lastOut = null; },
+    /* 生フィックスを1つ入れ、平滑化した表示位置 [lat,lng] を返す */
+    push: function(lat, lng, acc, spd, now){
+      if(this.lastRaw && this.lastRaw[0] === lat && this.lastRaw[1] === lng && now - this.t < 600 && this.lastOut) return this.lastOut;
+      if(this.ax == null){
+        this.ax = lat; this.ay = lng; this.x = 0; this.y = 0; this.vx = 0; this.vy = 0; this.t = now;
+        this.lastRaw = [lat, lng]; this.lastOut = [lat, lng]; return this.lastOut;
+      }
+      var kx = 111320 * Math.cos(this.ax * Math.PI / 180), ky = 110540;
+      var mx = (lng - this.ay) * kx, my = (lat - this.ax) * ky;
+      var dt = Math.min(5, Math.max(0.15, (now - this.t) / 1000));
+      var px = this.x + this.vx * dt, py = this.y + this.vy * dt;
+      var rx = mx - px, ry = my - py, r = Math.sqrt(rx * rx + ry * ry);
+      if(r > 150){ /* 大きな跳び（再測位・ルート切替）はそのまま初期化する */
+        this.ax = lat; this.ay = lng; this.x = 0; this.y = 0; this.vx = 0; this.vy = 0; this.t = now;
+        this.lastRaw = [lat, lng]; this.lastOut = [lat, lng]; return this.lastOut;
+      }
+      var sig = Math.min(30, Math.max(3, acc || 10)); /* 測位誤差の目安（m） */
+      var vmag = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+      var effSpd = (spd != null && !isNaN(spd)) ? spd : vmag;
+      var alpha, beta;
+      var dband = Math.max(3, sig * 0.9);
+      if(effSpd < 1.5 && r < dband){
+        /* 静止・微速で精度範囲内の揺れはノイズとしてほぼ捨てる。
+           ただし重心はゆっくり追うので、本物の微小移動には遅れて付く。
+           不感帯の縁に近づくほど追従と速度学習を強め、渋滞の這行速度でも
+           表示が置いていかれないようにする（中心付近は dead のまま） */
+        var q = r / dband;
+        alpha = 0.10 + 0.45 * q * q; beta = 0.05 * q;
+        this.vx *= 0.75; this.vy *= 0.75;
+      } else {
+        /* 移動中：速度が上がるほど時定数を短くし、表示遅れを抑える */
+        var tau = effSpd >= 10 ? 0.45 : effSpd >= 4 ? 0.65 : effSpd >= 1.5 ? 0.85 : 0.6;
+        alpha = 1 - Math.exp(-dt / tau);
+        beta = alpha * alpha / Math.max(0.05, 2 - alpha) * 0.6;
+      }
+      this.x = px + alpha * rx; this.y = py + alpha * ry;
+      if(beta > 0){
+        this.vx += (beta / dt) * rx; this.vy += (beta / dt) * ry;
+        var vmax = Math.max(35, effSpd * 1.7 + 6), vm = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+        if(vm > vmax){ this.vx *= vmax / vm; this.vy *= vmax / vm; }
+      }
+      if(spd != null && spd < 0.5){ this.vx *= 0.6; this.vy *= 0.6; }
+      this.t = now; this.lastRaw = [lat, lng];
+      this.lastOut = [this.ax + this.y / ky, this.ay + this.x / kx];
+      return this.lastOut;
+    },
+    vel: function(){ return [this.vx, this.vy]; } /* 平滑化速度 m/s（東, 北） */
+  };
+}
+var navSm = createPosSmoother();
 var navDisp = { pos: null, tgt: null, raf: 0, lastTs: 0 };
 function navPredictedTarget(){
   var t = navDisp.tgt; if(!t) return null;
   var g = state.gps;
-  if(g && g.active && g.t && g.speed != null && g.speed >= 3 && g.heading != null && !isNaN(g.heading)){
-    var el = Date.now() - g.t;
-    if(el > 120 && el < 2600){
-      var d = g.speed * Math.min(el, 2200) / 1000 * 0.9, hr = g.heading * Math.PI / 180;
-      var kx = 111320 * Math.cos(t[0] * Math.PI / 180), ky = 110540;
-      return [t[0] + Math.cos(hr) * d / ky, t[1] + Math.sin(hr) * d / kx];
+  /* 前方予測は平滑化した速度ベクトルで、最大約1.1秒分まで。
+     生 heading の瞬時値で先行させると針路のブレがそのまま横揺れになり、
+     先行し過ぎると次フィックスで引き戻されて鋸歯状に震える */
+  if(g && g.active && g.t){
+    var v = navSm.vel(), vm = Math.sqrt(v[0] * v[0] + v[1] * v[1]);
+    if(vm >= 3){
+      var el = Date.now() - g.t;
+      if(el > 100 && el < 2400){
+        var adv = Math.min(el, 1100) / 1000 * 0.9;
+        var kx = 111320 * Math.cos(t[0] * Math.PI / 180), ky = 110540;
+        return [t[0] + v[1] * adv / ky, t[1] + v[0] * adv / kx];
+      }
     }
   }
   return t;
@@ -11575,7 +12225,10 @@ function navAnimFrame(ts){
     /* 静止・低速時のジッタ抑制：精度に応じた不感帯の中では動かさない */
     var holdR = (spd == null || spd < 1.2) ? Math.max(4, Math.min(14, (state.gps.acc || 10) * 0.6)) : 0;
     if(dist > holdR){
-      var k = 1 - Math.exp(-dt / 200); /* 時定数200msの指数平滑 */
+      /* 追従の時定数も速度適応：低速ほど長く（滑らかに）、高速ほど短く（遅れを抑える）。
+         目標点は navSm で平滑化済みなので、ここは仕上げの滑走 */
+      var tauF = (spd == null || spd < 1.5) ? 260 : spd < 6 ? 210 : 170;
+      var k = 1 - Math.exp(-dt / tauF);
       navDisp.pos = [navDisp.pos[0] + (tgt[0] - navDisp.pos[0]) * k,
                      navDisp.pos[1] + (tgt[1] - navDisp.pos[1]) * k];
     }
@@ -11591,13 +12244,19 @@ function navAnimFrame(ts){
   }
   var remain = haversine(disp[0], disp[1], navDisp.tgt[0], navDisp.tgt[1]);
   var g2 = state.gps;
-  var predicting = g2 && g2.active && g2.t && g2.speed != null && g2.speed >= 3 && (Date.now() - g2.t) < 2600;
+  var vv = navSm.vel(), vmag2 = Math.sqrt(vv[0] * vv[0] + vv[1] * vv[1]);
+  var predicting = g2 && g2.active && g2.t && vmag2 >= 3 && (Date.now() - g2.t) < 2400;
   if(remain > 0.5 || predicting) navDisp.raf = requestAnimationFrame(navAnimFrame);
   else navDisp.lastTs = 0;
 }
 function navSetTarget(pos){
   if(!pos) return;
-  navDisp.tgt = [pos[0], pos[1]];
+  /* GPS稼働中は、目標点をまず表示専用フィルタに通してから保持する。
+     逸脱検知・進捗・到着判定は生フィックス側で処理済みで、ここは表示のみ。
+     GPSが無いときのルート推定位置は元々滑らかなので素通しする */
+  var g = state.gps;
+  var sm = (g && g.active) ? navSm.push(pos[0], pos[1], g.acc, g.speed, Date.now()) : pos;
+  navDisp.tgt = [sm[0], sm[1]];
   if(!navDisp.raf) navDisp.raf = requestAnimationFrame(navAnimFrame);
 }
 /* v128: 案内地図でも、同梱高速データと照合した有料区間をオレンジ線で
@@ -11622,6 +12281,7 @@ function drawNavHwBands(pts){
 }
 function drawNavMapRoute(){
   navDisp.pos = null; navDisp.tgt = null; /* 線を引き直したら表示位置も作り直す */
+  navSm.reset(); /* 表示平滑化フィルタも新しいルートの始点から作り直す */
   navMapLayer.clearLayers(); navMapPos = null; navLineW = null; navLineB = null; navHwLines = [];
   navDrawnRoute = state.route;
   var pts = navRoutePts(); if(!pts.length) return;
@@ -11653,13 +12313,20 @@ function drawNavMapRoute(){
       }, true);
     }
   }
+  /* 印は「有料⇔一般道の切り替わり点」「出発地点」「目的地」にだけ置く
+     （プレビューと同じ方針。ステップ・ICの内部データは変えない） */
+  var nvTollOf = function(s){ return s.toll != null ? !!s.toll : (state.route.type === "hw"); };
   state.route.steps.forEach(function(s, i){
     if(s.lat == null) return;
     var last = i === state.route.steps.length - 1;
-    var cur = i === state.stepIdx;
-    var m = L.circleMarker([s.lat, s.lng], {radius: (last || cur) ? 8 : 5.5, color:"#1c1c1e", weight:2, fillColor: last ? "#1c1c1e" : (cur ? "#ffffff" : "#8e8e93"), fillOpacity:0.95}).addTo(navMapLayer);
-    if(cur || last) m.bindTooltip(s.name, {direction:"top"});
+    var trans = i > 0 && nvTollOf(state.route.steps[i - 1]) !== nvTollOf(s);
+    if(!last && !trans) return;
+    var m = L.circleMarker([s.lat, s.lng], {radius: last ? 8 : 6.5, color:"#1c1c1e", weight:2, fillColor: last ? "#1c1c1e" : "#ffffff", fillOpacity:0.95}).addTo(navMapLayer);
+    m.bindTooltip(s.name, {direction:"top"});
   });
+  /* 出発地点の印（形状の始点＝実際の出発点に置く） */
+  if(drawPts.length)
+    L.circleMarker(drawPts[0], {radius:7, color:"#ffffff", weight:3, fillColor:"#1a73e8", fillOpacity:1}).addTo(navMapLayer);
   navMapPos = L.marker(navCurrentPos() || pts[0], {zIndexOffset:1000, interactive:false, keyboard:false,
     icon: L.divIcon({className:"nav-plane-icon", iconSize:[46,46], iconAnchor:[23,23],
       html:'<div class="nav-plane"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.6 L12 17.4 L1.6 22.4 Z" fill="#636366"/><path d="M12 1.6 L22.4 22.4 L12 17.4 Z" fill="#1c1c1e"/><path d="M12 1.6 L22.4 22.4 L12 17.4 L1.6 22.4 Z" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/></svg></div>'})
@@ -11704,11 +12371,18 @@ function renderNav(){
   $("sbDist").textContent = f[0]; $("sbUnit").textContent = f[1] || "";
   var shSvg = shieldFor(step), shEl = $("sbShield");
   if(shSvg){ shEl.innerHTML = shSvg; shEl.classList.remove("hidden"); } else { shEl.innerHTML = ""; shEl.classList.add("hidden"); }
-  $("sbName").textContent = step.name;
+  $("sbName").textContent = placeName(step);
   $("sbArrow").innerHTML = d.arrow;
   $("sbDir").textContent = d.label;
   $("sbTo").textContent = step.to;
-  var pct = state.legTotal>0 ? Math.max(0, Math.min(100, (1 - state.remaining/state.legTotal)*100)) : 0;
+  /* 進捗バーは「次の操作点へ到達した時点でちょうど100%（MAX）」に較正する。
+     ステップは残り adv（一般道15m／高速35m）で次へ進み、その瞬間に
+     バーは次区間の0%へ切り替わる。分母を legTotal のままにすると
+     満タンになる前に切り替わってしまい、最後まで満ちない。そこで
+     分母を legTotal - adv とし、到達判定の時点でちょうど満タンに
+     なるようにする（残りは chainage 基準で操作点で0になる） */
+  var advM = navProfile().adv;
+  var pct = state.legTotal>0 ? Math.max(0, Math.min(100, (state.legTotal - state.remaining) / Math.max(1, state.legTotal - advM) * 100)) : 0;
   $("sbProg").style.width = pct + "%";
   /* lanes — 車線案内は手前の分岐を過ぎて、約1.2km手前になるまで出さない */
   var lActive = laneActive() && step.rec.length < step.lanes;
@@ -11730,14 +12404,14 @@ function renderNav(){
   var nxt = state.route.steps[state.stepIdx+1];
   if(nxt){ var nd = dirInfo(nxt.dir);
     $("nextArrow").innerHTML = nd.arrow;
-    $("nextPreviewText").textContent = distText(nxt.leg)+"先 "+nxt.name+" "+nd.kind;
+    $("nextPreviewText").textContent = distText(nxt.leg)+"先 "+placeName(nxt)+" "+nd.kind;
   } else {
     $("nextArrow").innerHTML = "";
     $("nextPreviewText").textContent = "目的地はすぐ先";
   }
   /* stats */
   var eta = etaInfo();
-  $("stEta").textContent = eta.text + " 頃";
+  $("stEta").innerHTML = eta.text + '<span class="koro">頃</span>';
   $("stRemain").textContent = (eta.rem/1000).toFixed(1);
   $("stLeft").textContent = eta.min;
   /* sheet peek + body */
@@ -11767,9 +12441,9 @@ function renderNav(){
   maybeRefreshTtNav();
   $("kvRemain").textContent = (eta.rem/1000).toFixed(1) + " km";
   $("kvLeft").textContent = "約 " + fmtDur(eta.min);
-  $("kvSpeed").textContent = state.gps.active && state.gps.speed!=null ? Math.round(state.gps.speed*3.6) + " km/h" : (state.simSpeed>0 ? "デモ走行中" : "—");
+  $("kvSpeed").textContent = state.gps.active && state.gps.speed!=null ? Math.round(state.gps.speed*3.6) + " km/h" : "—";
   $("kvAcc").textContent = state.gps.active && state.gps.acc!=null ? "約 " + Math.round(state.gps.acc) + " m" : "—";
-  $("kvStep").textContent = "分岐 " + (state.stepIdx+1) + " / " + state.route.steps.length + "（" + step.name + "）";
+  $("kvStep").textContent = "分岐 " + (state.stepIdx+1) + " / " + state.route.steps.length + "（" + placeName(step) + "）";
   updateNavMap();
   renderStepsActive();
 }
@@ -11780,7 +12454,7 @@ function renderSteps(){
     row.className = "step"; row.id = "step-row-"+i;
     var dd = dirInfo(s.dir);
     row.innerHTML = '<span class="n">'+(i+1)+'</span><span class="body"><span class="nm"></span><span class="dt" style="display:block"></span></span><span class="d"></span>';
-    row.querySelector(".nm").textContent = s.name + " ― " + dd.kind;
+    row.querySelector(".nm").textContent = placeName(s) + " ― " + dd.kind;
     row.querySelector(".dt").textContent = roadDisplay(s) + " ／ " + s.to +
       (s.laneCaution ? " ／ " + s.laneCaution : ((state.route.type === "hw" || s.laneHard) ? " ／ " + laneText(s) : ""));
     row.querySelector(".d").textContent = distText(s.leg);
@@ -11808,7 +12482,7 @@ function advanceStep(passed){
         state.remaining = Math.max(state.remaining, 80);
         renderNav(); return;
       }
-      state.finished = true; state.running = false; stopSim();
+      state.finished = true; state.running = false;
       speak("到着しました。");
       renderNav(); return;
     }
@@ -11821,14 +12495,26 @@ function tickAnnounce(){
   updateArrGate(); /* 到着判定の有効化（離脱／進行度）を毎回更新する */
   var a = state.announced; var step = currentStep(); var r = state.remaining;
   var p = navProfile();
-  if(r <= p.lane && !a.lane){ a.lane = true; if(state.running && laneGuidanceOn(step)) speak(step.name+"、"+lanePhrase(step)+"。"); }
+  if(r <= p.lane && !a.lane){ a.lane = true; if(state.running && laneGuidanceOn(step)) speak(placeName(step)+"、"+lanePhrase(step)+"。"); }
   /* 一般道の軽い注意は600m手前で一度だけ読み上げる（車線案内する
      例外箇所ではそちらが優先するので重ねない） */
-  if(r <= 600 && !a.caution){ a.caution = true; if(state.running && step.laneCaution && !laneGuidanceOn(step)) speak(step.name + "、" + step.laneCaution + "。"); }
-  if(r <= p.far + 50 && r > p.mid + 100 && !a.k1){ a.k1 = true; speak(announceFor(step,"1km")); }
-  if(r <= p.mid + 20 && r > p.now && !a.m300){ a.m300 = true; speak(announceFor(step,"300m")); }
-  /* 精度が50mより悪い間は「まもなく」の新規発話を抑える（回復後に改めて判定する） */
-  if(r <= p.now && !a.now && !(state.gps.acc != null && state.gps.acc > 50)){ a.now = true; speak(announceFor(step,"now")); }
+  if(r <= 600 && !a.caution){ a.caution = true; if(state.running && step.laneCaution && !laneGuidanceOn(step)) speak(placeName(step) + "、" + step.laneCaution + "。"); }
+  /* 直進中に次の分岐まで5km未満へ入ったときの予告（「3キロ先、左方向です」）。
+     曲がった直後は advanceStep 側の予告が担当するため、区間が5km以上で
+     始まったステップで、5kmを割り込んだ最初のタイミングだけ出す。
+     1km／300mステージと重ならないよう、残り1500mより手前では出さない */
+  if(!a.k5 && state.legTotal >= 5000 && r < 5000 && r > 1500 && step.dir !== "straight" && !isFinalStep(step)){
+    a.k5 = true; speak(voiceDist(r) + "先、" + namePart(step) + dirSpeech(step) + "です。" + sonosakiSuffix(step));
+  }
+  /* 距離ステージは1ティックに1つだけ発話する（GPS位置の跳びで予告が
+     重なると、読み上げが互いを打ち消して聞き取れなくなるため）。
+     優先度は 最終案内 ＞ 300m ＞ 予告。予告ステージは、その距離を
+     上から割り込んだときにだけ出す（短い区間では曲がった直後の
+     予告が済んでいる） */
+  var gpsOk = !(state.gps.acc != null && state.gps.acc > 50); /* 精度が50mより悪い間は最終案内の新規発話を抑える */
+  if(r <= p.now && !a.now && gpsOk){ a.now = true; speak(announceFor(step,"now")); }
+  else if(p.mid < p.far && r <= p.mid + 20 && r > p.now && !a.m300){ a.m300 = true; var tMid = announceFor(step,"mid"); if(tMid) speak(tMid); }
+  else if(r <= p.far + 50 && r > p.mid + 20 && !a.k1 && state.legTotal > p.far + 50){ a.k1 = true; var tFar = announceFor(step,"far"); if(tFar) speak(tFar); }
   if(r <= p.adv){ advanceStep(true); }
 }
 
@@ -11839,13 +12525,17 @@ function startGuidance(){
   state.running = true;
   speak(announceFor(currentStep(),"start"));
   if(laneActive()) state.announced.lane = true;
-  /* 進捗は実際のGPS移動にだけ連動させる。デモ走行は自動で有効にしない。
+  /* 進捗は実際のGPS移動にだけ連動させる。
      GPS未取得なら実GPSの取得を始める（時間経過では進まない）。 */
   if(!state.gps.active && state.gps.watchId == null){ var gb = $("btnGps"); if(gb) gb.click(); }
   requestWake();
 }
 var _bn=$("btnNext"); if(_bn) _bn.addEventListener("click", function(){ if(!state.finished && state.route) advanceStep(true); });
 $("btnReroute").addEventListener("click", function(){ doReroute(true); });
+/* 案内シートのルート種別ボタン：押した時点で現在地から初回検索と同じ処理で再検索し、案内ルートを差し替える */
+document.querySelectorAll("[data-navkind]").forEach(function(b){
+  b.addEventListener("click", function(){ navSwitchRouteKind(b.getAttribute("data-navkind")); });
+});
 /* 再計算ボタンの条件＝現在地（約100m単位）と目的地。再計算した位置から
    動かない間は、同じ再計算を繰り返させない */
 if(window.BtnFx) BtnFx.register($("btnReroute"), function(){
@@ -11855,46 +12545,12 @@ if(window.BtnFx) BtnFx.register($("btnReroute"), function(){
   var tail = (dc && dc.length) ? dc[dc.length - 1][0].toFixed(4) + "," + dc[dc.length - 1][1].toFixed(4) : (state.route.to || "");
   return pos + "@" + tail;
 });
-$("btnPrev").addEventListener("click", function(){
-  if(!state.route || state.stepIdx<=0) return;
-  state.stepIdx--; state.finished=false; $("navMain").classList.remove("hidden"); $("navFinish").classList.add("hidden");
-  state.legTotal = currentStep().leg; state.remaining = currentStep().leg; state.announced = {}; renderNav();
-});
-
-/* simulation */
-function setSimButtons(v){
-  document.querySelectorAll("[data-sim]").forEach(function(b){
-    b.setAttribute("aria-pressed", String(Number(b.getAttribute("data-sim"))===v));
-  });
-}
-function stopSim(){ if(state.simTimer){ clearInterval(state.simTimer); state.simTimer = null; } }
-function setSim(v){
-  state.simSpeed = v; setSimButtons(v); stopSim();
-  if(v>0){
-    state.running = true;
-    state.simTimer = setInterval(function(){
-      if(state.finished) { stopSim(); return; }
-      var advance = 16.7 * 0.25 * v;
-      if(!state.gps.active){ state.remaining = Math.max(0, state.remaining - advance); tickAnnounce(); renderNav(); }
-    }, 250);
-  }
-  renderNav();
-}
-document.querySelectorAll("[data-sim]").forEach(function(b){
-  b.addEventListener("click", function(){
-    var v = Number(b.getAttribute("data-sim"));
-    if(v>0 && !state.running && state.stepIdx===0 && !state.announced.started){
-      state.announced.started = true; speak(announceFor(currentStep(),"start")); if(laneActive()) state.announced.lane = true;
-    }
-    setSim(v);
-  });
-});
-
 /* voice toggles (nav + sheet stay in sync)。ナビタブ上の音声／スリープ防止の
    表示は廃止済み：音声案内とスリープ防止は常時ONが前提で、切替は設定タブと
    案内画面側にだけ残す。 */
 function setVoice(on){
   state.voice = on;
+  if(typeof applyAudioSession === "function") applyAudioSession();
   var vt = $("voiceToggle"); if(vt){ vt.setAttribute("aria-pressed", String(on)); vt.textContent = on ? "音声 ON" : "音声 OFF"; }
   $("voiceToggleNav").setAttribute("aria-pressed", String(on));
   $("voiceToggleNav").textContent = on ? "音声 ON" : "音声 OFF";
@@ -12268,19 +12924,32 @@ function setDlgMode(mode){
   hideDlgConfirm();
   syncDlgToViewport();
 }
-/* ソフトキーボードに隠れないように、visualViewport に合わせる。
-   カードは上寄せ表示なので、キーボード表示時は可視領域の先頭へ合わせ、
-   入力欄と候補がキーボードの上に収まるよう高さも可視領域内に収める */
+/* v160: キーボードを開いてもカードの位置は動かさない。
+   従来はキーボード検出時に top を「visualViewport.offsetTop + 8px」へ
+   差し替えていたため、CSS 本来の上位置（--sat + 10px、安全域ぶん）が
+   消えて、開くたびにカードが上へ跳ねていた（実機スクショで確認）。
+   本来の上位置は初回に実測して保持し、キーボード表示中は
+   「本来位置＋ビューポートのパン量（offsetTop）」を保つことで、
+   iOS が visualViewport をパンさせても画面上の見かけ位置が
+   1px も変わらないようにする。高さだけは可視領域に収まるよう
+   絞る（カードは画面上部・入力欄も上部なので位置を保っても
+   キーボードとは重ならず、候補リストはカード内スクロールで
+   従来どおり使える）。閉じたら inline 指定を外して通常表示へ戻す */
+var dlgNaturalTop = null; /* カード本来の上位置（px・inline未指定時に実測） */
 function syncDlgToViewport(){
   var dlg = $("slotDialog"); if(!dlg || dlg.classList.contains("hidden")) return;
   var card = dlg.querySelector(".dlg-card"); if(!card) return;
   var vv = window.visualViewport;
+  if(dlgNaturalTop == null && !card.style.top){
+    var nt = parseFloat(getComputedStyle(card).top);
+    if(isFinite(nt)) dlgNaturalTop = nt;
+  }
   if(!vv){ card.style.top = ""; card.style.maxHeight = ""; return; }
   var kbH = Math.max(0, window.innerHeight - vv.height - (vv.offsetTop || 0));
   var focused = document.activeElement && (document.activeElement.tagName === "INPUT" || document.activeElement.tagName === "TEXTAREA");
   if(kbH > 60 && focused){
-    card.style.top = ((vv.offsetTop || 0) + 8) + "px";
-    card.style.maxHeight = Math.max(200, vv.height - 16) + "px";
+    if(dlgNaturalTop != null) card.style.top = ((vv.offsetTop || 0) + dlgNaturalTop) + "px";
+    card.style.maxHeight = Math.max(200, vv.height - (dlgNaturalTop || 10) - 8) + "px";
   } else {
     card.style.top = ""; card.style.maxHeight = "";
   }
@@ -12292,7 +12961,9 @@ if(window.visualViewport){
 ["dlgQuery", "addrQuery"].forEach(function(id){
   var el = $(id); if(!el) return;
   el.addEventListener("focus", function(){
-    setTimeout(function(){ syncDlgToViewport(); try{ el.scrollIntoView({ block: "nearest" }); }catch(e){} }, 320);
+    /* v160: フォーカス時の scrollIntoView は行わない。入力欄はカード
+       上部にあり元々見えている。スクロールで位置が動く方が弊害になる */
+    setTimeout(syncDlgToViewport, 320);
     setTimeout(syncDlgToViewport, 650);
   });
   el.addEventListener("blur", function(){ setTimeout(syncDlgToViewport, 120); });
@@ -14520,8 +15191,32 @@ function geomPairPlanImpl(cand){
       var px = spanExit(spanPlans[xi2]);
       if(px){ xSpan = spanPlans[xi2]; xSel = px; break; }
     }
+    /* v142: セクション間の空白が「同じ路線の登録ICを複数飛ばした」
+       ものなら、それは複合行程の継ぎ目ではなく、形状が本線を
+       離れた跡である（実測：東北道を仙台付近で降りて平泉前沢で
+       乗り直す形状が、仙台側と平泉前沢側の2セクションとして
+       それぞれ検証を通り、1本の有料プランに結合されてしまった）。
+       そのような空白はスパン結合で正当化せず、全体検証へ落とす。
+       別路線同士の継ぎ目や、間に登録ICが無い空白（IC間隔が本当に
+       広い区間）は従来どおり結合する */
+    var gapContradicted = false;
+    if(eSel && xSel){
+      var ei0 = spanPlans.indexOf(eSpan), xi0 = spanPlans.indexOf(xSpan);
+      for(var gj = ei0; gj >= 0 && gj < xi0 && !gapContradicted; gj++){
+        var secA = spanPlans[gj].sec, secB = spanPlans[gj + 1].sec;
+        if(!secA || !secA.length || !secB || !secB.length) continue;
+        var pa = secA[secA.length - 1], pb = secB[0];
+        if(!pa || !pb || pa.road !== pb.road) continue;
+        var loI = Math.min(pa.idx, pb.idx), hiI = Math.max(pa.idx, pb.idx), skipped = 0;
+        for(var kk = loI + 1; kk < hiI; kk++){
+          var icr = pa.road.ics[kk];
+          if(icr && icr[1] != null) skipped++;
+        }
+        if(skipped >= 2) gapContradicted = true;
+      }
+    }
     if(eSel && xSel && spanPlans.indexOf(xSpan) >= spanPlans.indexOf(eSpan) &&
-       xSel.chain - eSel.chain >= 8000){
+       xSel.chain - eSel.chain >= 8000 && !gapContradicted){
       var groups = [], hwSum = 0;
       for(var gi2 = spanPlans.indexOf(eSpan); gi2 <= spanPlans.indexOf(xSpan); gi2++){
         var sp = spanPlans[gi2];
@@ -14580,6 +15275,18 @@ function geomPairPlanImpl(cand){
        上回れない誤差のペアは評価しない */
     if(best && pairList[pi2].err - 2000 >= best.score) break;
     var pr3 = pairList[pi2], ep2 = pr3.e, xp2 = pr3.x;
+    /* v142: 同一路線で登録ICを複数飛ばすペアは、形状がその区間で
+       本線を離れている証拠なので検証対象にしない（スパン側の
+       gapContradicted と同じ物差し。segCov は射影の単調性しか
+       見ないため、並行する一般道を走る形状でも通ってしまう） */
+    if(ep2.road === xp2.road && xp2.chain - ep2.chain > 45000){
+      var loF = Math.min(ep2.idx, xp2.idx), hiF = Math.max(ep2.idx, xp2.idx), skipF = 0;
+      for(var kf = loF + 1; kf < hiF; kf++){
+        var icf = ep2.road.ics[kf];
+        if(icf && icf[1] != null && !passedSet[ep2.ri + ":" + kf]) skipF++;
+      }
+      if(skipF >= 2) continue;
+    }
     var fromId = ep2.ri + ":" + ep2.idx, toId = xp2.ri + ":" + xp2.idx;
     var pnList = [];
     try{ var pnA = icNetPathNodes(nodes, fromId, toId); if(pnA && pnA.nodes) pnList.push(pnA); }catch(e){}
@@ -17285,13 +17992,34 @@ syncDestDisplay();
          始めたら wobStart 側で .snap のタイマーを取り消す */
       bubbleReturn();
     }
+    /* ===== v155: 長押しでもシャボン玉を出して追従を始める =====
+       従来は 5px 以上なぞらないと追従が始まらず、止まったままの
+       長押し（未選択タブの上でも）は無反応だった。押下から 230ms
+       動かずにいたら、その場でドラッグ開始と同じ扱いにして
+       シャボン玉を出し、以降は小さな動きにも追従させる。離した
+       ときの処理は既存のドラッグ終了（最寄りタブへ吸着＋クリック
+       抑制）にそのまま合流する。短いタップは従来どおり click で
+       切り替わる（タイマーは pointerup で解除される） */
+    var tabLpTimer = 0;
+    function tabLpClear(){ if(tabLpTimer){ clearTimeout(tabLpTimer); tabLpTimer = 0; } }
     tabbarEl.addEventListener("pointerdown", function(e){
       tabDrag = { x: e.clientX, y: e.clientY, moved: false };
+      tabLpClear();
+      tabLpTimer = setTimeout(function(){
+        tabLpTimer = 0;
+        if(!tabDrag || tabDrag.moved) return;
+        tabDrag.moved = true; tabDrag.lp = true;
+        tabIndEl.classList.add("noanim");
+        wobStart({ clientX: tabDrag.x });
+        var r = tabbarEl.getBoundingClientRect();
+        tabIndFollow(tabDrag.x - r.left, tabDrag.y - r.top);
+      }, 230);
     });
     window.addEventListener("pointermove", function(e){
       if(!tabDrag) return;
       if(!tabDrag.moved && Math.abs(e.clientX - tabDrag.x) < 5 && Math.abs(e.clientY - tabDrag.y) < 5) return;
       if(!tabDrag.moved){
+        tabLpClear();
         tabDrag.moved = true;
         tabIndEl.classList.add("noanim");
         wobStart(e);
@@ -17302,6 +18030,7 @@ syncDestDisplay();
       tabIndFollow(e.clientX - r.left, e.clientY - r.top);
     }, { passive: true });
     window.addEventListener("pointerup", function(e){
+      tabLpClear();
       if(!tabDrag) return;
       var wasMoved = tabDrag.moved; tabDrag = null;
       if(!wasMoved) return; /* タップは通常の click（showTabMain→スライド）に任せる */
@@ -17319,6 +18048,7 @@ syncDestDisplay();
       else moveTabInd(false);
     });
     window.addEventListener("pointercancel", function(){
+      tabLpClear();
       if(!tabDrag) return;
       var wasMoved = tabDrag.moved; tabDrag = null;
       if(wasMoved){ wobEnd(); tabIndEl.classList.remove("noanim"); moveTabInd(false); }
@@ -18429,6 +19159,19 @@ syncDestDisplay();
 
   /* ---- ホーム全画面地図 ---- */
   var homeMap = null, homePosMarker = null, homeTapMarker = null, homeTap = null, homeCentered = false;
+  /* v159: ホーム地図の現在地追従（既定ON）。v136 で撤去した「強制
+     センタリング」とは別物で、利用者の操作（パン／他の場所のタップ／
+     2本指操作）で即解除でき、「現在地に戻る」ボタンで再開する追従
+     として実装する。案内画面の追従は対象外（従来どおり別系統） */
+  var homeFollow = true, homeFollowZoomed = false;
+  function releaseHomeFollow(){
+    if(!homeFollow) return;
+    homeFollow = false; homeFollowZoomed = false; syncLocateBtn();
+  }
+  function syncLocateBtn(){
+    var b = $id("homeLocateBtn");
+    if(b) b.setAttribute("aria-pressed", homeFollow ? "true" : "false");
+  }
   /* v133: ホーム地図の回転・傾き（案内地図と同じ見た目・操作にする）。
      地図要素ごとCSS変形させるため、Leaflet標準のドラッグ／ピンチは
      座標変換がずれる。標準操作を切り、自前ポインタ処理で補正する */
@@ -18446,6 +19189,10 @@ syncDestDisplay();
   function applyHomeTransform(){
     var el = $id("homeMap"); if(!el) return;
     el.style.transform = homeTransformStr();
+    /* v156: 傾きで潰れるピンを縦に伸ばして相殺する量（1/cosθ、上限1.75）。
+       CSS 側の .cat-pin／.poi-pin／既定ピン img が --pin-sy を使う */
+    var sy = homeTilt > 0.5 ? Math.min(1.75, 1 / Math.cos(homeTilt * Math.PI / 180)) : 1;
+    el.style.setProperty("--pin-sy", sy.toFixed(3));
     /* 回転・傾き中は Leaflet のマーカードラッグが座標ずれで壊れるため止める */
     if(homeTapMarker && homeTapMarker.dragging){
       try{
@@ -18561,6 +19308,7 @@ syncDestDisplay();
       var now2 = performance.now();
       if(pendingTap && now2 - pendingTap.t < 320 && Math.hypot(e.clientX - pendingTap.x, e.clientY - pendingTap.y) < 48){
         clearPending();
+        releaseHomeFollow(); /* ダブルタップ拡大で中心が移るので追従解除 */
         var nz = Math.min(mapZoomCap(), map.getZoom() + 1);
         try{ map.setZoomAround(ll, nz, { animate: true }); }
         catch(err){ try{ map.setZoom(nz, { animate: true }); }catch(e2){} }
@@ -18585,7 +19333,7 @@ syncDestDisplay();
      離指後の慣性ズームもここで担う */
   function setupHomeGestures(map){
     var mc = map.getContainer();
-    var ptrs = {};
+    var ptrs = {}, gDown = {};
     var pendDx = 0, pendDy = 0, panQueued = false;
     function flushPan(){
       panQueued = false;
@@ -18654,6 +19402,8 @@ syncDestDisplay();
       if(e.target && e.target.closest && e.target.closest(".leaflet-marker-draggable")) return;
       stopZoomInertia(map);
       ptrs[e.pointerId] = { x: e.clientX, y: e.clientY };
+      gDown[e.pointerId] = { x: e.clientX, y: e.clientY };
+      if(Object.keys(ptrs).length === 2) releaseHomeFollow(); /* 2本指操作＝地図を動かす意思として追従解除 */
       if(Object.keys(ptrs).length === 2){
         g2 = null; /* 基準を取り直す（既適用分からのジャンプ防止） */
         pinchSamples = [];
@@ -18670,6 +19420,8 @@ syncDestDisplay();
       var ids = Object.keys(ptrs);
       if(ids.length === 1){
         if(pinchStash && Math.hypot(p.x - pinchStash.ax, p.y - pinchStash.ay) > 6) pinchStash = null;
+        var gd = gDown[e.pointerId];
+        if(gd && Math.hypot(e.clientX - gd.x, e.clientY - gd.y) > 10) releaseHomeFollow(); /* 10px超のパンで追従解除 */
         if(dx || dy) panScreenDelta(dx, dy);
       } else if(ids.length === 2){
         queueTwoFinger();
@@ -18678,6 +19430,7 @@ syncDestDisplay();
     function gEnd(e){
       var nBefore = Object.keys(ptrs).length;
       delete ptrs[e.pointerId];
+      delete gDown[e.pointerId];
       var ids = Object.keys(ptrs);
       if(nBefore === 2 && ids.length === 1){
         /* ピンチ終了：直近約150msの拡縮速度を予約し、残った指がほぼ
@@ -18723,6 +19476,11 @@ syncDestDisplay();
     /* 地図から選ぶモード中は地点カードを出さない（POIピンのタップ等が
        選択モードの状態を乱さないように） */
     if(window.__mapPickClick) return;
+    /* ルート設定シート表示中はピンを刺さない。シートの上に見えている
+       地図部分へのタップで地点カードとピンプレビュー計算が割り込むと、
+       シート側のルート計算と競合して表示が壊れるため */
+    if(sheetOpen) return;
+    releaseHomeFollow(); /* 他の場所を選んだら現在地追従は解除する */
     clearSearchPin(); /* 地図タップのピンが立ったら検索ピンは役目を終える */
     homeTap = [latlng[0], latlng[1]];
     if(homeTapMarker){ try{ homeMap.removeLayer(homeTapMarker); }catch(err){} }
@@ -18765,19 +19523,66 @@ syncDestDisplay();
       })
       .catch(function(){ if(homeTap && homeTap[0] === lat && homeTap[1] === lng) reg.placeholder = "地点名（マイ地点登録用）"; });
   }
+  /* v160: ホームの青ドットも案内画面と同じ表示専用平滑化を通す。
+     従来は 1.5 秒間隔の同期のたびに生フィックスへ瞬間移動し、追従パンも
+     Leaflet アニメーションの再起動を繰り返して細かく震えていた。
+     生フィックス→α-βフィルタ（createPosSmoother）→rAFで指数平滑に
+     滑走させる。ドットの表示位置だけの話で、検索・ルート計算など
+     生座標を使う処理には一切触れない */
+  var homeSm = (typeof createPosSmoother === "function") ? createPosSmoother() : null;
+  var homeDisp = { pos: null, tgt: null, raf: 0, lastTs: 0 };
+  function homeAnimFrame(ts){
+    homeDisp.raf = 0;
+    if(!homeMap || !homePosMarker || !homeDisp.tgt){ homeDisp.pos = null; homeDisp.lastTs = 0; return; }
+    var dt = homeDisp.lastTs ? Math.min(120, ts - homeDisp.lastTs) : 16;
+    homeDisp.lastTs = ts;
+    var tgt = homeDisp.tgt;
+    if(!homeDisp.pos || homeMap.distance(homeDisp.pos, tgt) > 150){
+      homeDisp.pos = [tgt[0], tgt[1]]; /* 初回と大きなジャンプは即時配置 */
+    } else {
+      var dist = homeMap.distance(homeDisp.pos, tgt);
+      var spd = (typeof state !== "undefined" && state.gps) ? state.gps.speed : null;
+      var gacc = (typeof state !== "undefined" && state.gps && state.gps.acc) || 10;
+      /* 静止・低速時は精度に応じた不感帯の中でドットを止める */
+      var holdR = (spd == null || spd < 1.2) ? Math.max(3, Math.min(12, gacc * 0.5)) : 0;
+      if(dist > holdR){
+        var tauH = (spd == null || spd < 1.5) ? 300 : spd < 6 ? 250 : 190;
+        var k = 1 - Math.exp(-dt / tauH);
+        homeDisp.pos = [homeDisp.pos[0] + (tgt[0] - homeDisp.pos[0]) * k,
+                        homeDisp.pos[1] + (tgt[1] - homeDisp.pos[1]) * k];
+      }
+    }
+    homePosMarker.setLatLng(homeDisp.pos);
+    /* 追従中は中心も表示位置へフレーム単位で寄せる（アニメーションの
+       再起動によるガタつきを避け、animate:false の小刻みな移動にする） */
+    if(homeFollow && homeFollowZoomed){
+      var ctr = null; try{ ctr = homeMap.getCenter(); }catch(e){}
+      if(ctr && homeMap.distance(ctr, homeDisp.pos) > 5){
+        try{ homeMap.panTo(homeDisp.pos, { animate: false }); }catch(e){}
+      }
+    }
+    if(homeMap.distance(homeDisp.pos, tgt) > 0.6) homeDisp.raf = requestAnimationFrame(homeAnimFrame);
+    else homeDisp.lastTs = 0;
+  }
   function syncHomePos(center){
     if(!homeMap || typeof state === "undefined" || !state.gps || state.gps.lat == null) return;
-    var ll = [state.gps.lat, state.gps.lng];
+    var raw = [state.gps.lat, state.gps.lng];
+    var ll = homeSm ? homeSm.push(raw[0], raw[1], state.gps.acc, state.gps.speed, Date.now()) : raw;
     if(!homePosMarker){
       homePosMarker = L.circleMarker(ll, { radius: 8, color: "#ffffff", weight: 3, fillColor: "#1a73e8", fillOpacity: 1 }).addTo(homeMap);
-    } else {
-      homePosMarker.setLatLng(ll);
+      homeDisp.pos = [ll[0], ll[1]];
     }
-    /* v136: 現在地へのセンタリングは廃止した。以前は初回フィックス時に
-       地図が自動で現在地へ寄り、利用者が見ている場所を奪っていた。
-       青ドットの位置同期だけを行い、地図を現在地へ動かすのは
-       「現在地に戻る」ボタンを押したときだけにする（center 引数は
-       互換のため残すが無視する） */
+    homeDisp.tgt = [ll[0], ll[1]];
+    if(!homeDisp.raf) homeDisp.raf = requestAnimationFrame(homeAnimFrame);
+    /* v159: 追従ONの間は、青ドットに合わせて地図の中心も現在地へ
+       付いていく。初回は現在地ボタンと同じ倍率（14以上）へ寄せ、
+       以降の追従パンは homeAnimFrame が表示位置に合わせて滑らかに
+       行う。追従の解除は releaseHomeFollow（利用者のパン／タップ等）
+       だけが行う */
+    if(homeFollow && homeMap && !homeFollowZoomed){
+      homeFollowZoomed = true;
+      try{ homeMap.setView(ll, Math.max(homeMap.getZoom(), 14), { animate: true }); }catch(e){}
+    }
   }
   function initHomeMap(){
     if(homeMap){ try{ homeMap.invalidateSize(); }catch(e){} return; }
@@ -18826,7 +19631,9 @@ syncDestDisplay();
     if(!homeTap) return;
     var nm = ($id("htbRegName").value || "").trim() || $id("htbName").textContent || "地点";
     addMyPlace(nm, homeTap[0], homeTap[1]);
-    showHtbMsg("マイ地点に「" + nm + "」を登録しました。");
+    /* v160: 登録できた旨の確認表示は出さない（ユーザーの指示）。
+       登録・保存自体は従来どおり実行される。残っていたメッセージも消す */
+    hideHtbMsg();
     if(typeof refreshSettingsMeta === "function"){ try{ refreshSettingsMeta(); }catch(e){} }
   });
   var bS = $id("btnHtbStart"); if(bS) bS.addEventListener("click", function(){ if(window.BtnFx) BtnFx.begin(this); startPinNav(); });
@@ -18848,13 +19655,16 @@ syncDestDisplay();
     }).observe(vh, { attributes: true, attributeFilter: ["class"] });
   }
   initHomeMap();
+  syncLocateBtn();
   /* 現在地に戻るボタン（ホーム地図）：回転・傾きをリセットして
      現在地へ寄せる。GPS未取得なら取得をキックして、取れたら寄せる */
   var hlb = $id("homeLocateBtn");
   if(hlb) hlb.addEventListener("click", function(){
     homeRot = 0; homeTilt = 0; applyHomeTransform();
+    /* v159: 現在地へ戻すだけでなく、現在地追従も再開する */
+    homeFollow = true; syncLocateBtn();
     if(homeMap && typeof state !== "undefined" && state.gps && state.gps.lat != null){
-      homeCentered = true;
+      homeCentered = true; homeFollowZoomed = true;
       try{ homeMap.setView([state.gps.lat, state.gps.lng], Math.max(homeMap.getZoom(), 14), { animate: true }); }catch(e){}
       return;
     }
@@ -19251,8 +20061,12 @@ syncDestDisplay();
   var catLayer = null;       /* カテゴリピンのレイヤーグループ */
   var CAT_PIN_LIMIT = 40;    /* ピン件数の上限は固定（近い順に切る） */
   /* v127: カテゴリピンはズーム約12以上でのみ出す。12未満の間はピンを
-     出さず、画面上部に小さな注意（homeCatZoomNote）を出すだけにする */
-  var CAT_MIN_ZOOM = 12;
+     出さず、画面上部に小さな注意（homeCatZoomNote）を出すだけにする
+     v154: しきい値を14へ引き上げた（従来の約2倍よりさらに拡大した
+     水準）。広域表示ではピンが中心に固まってラベルが重なり見苦しい
+     ため、街区を十分に拡大したときだけ出す。ズームアウトでしきい値を
+     下回ったら、表示中のピンはその時点で消す（applyCatZoomGate） */
+  var CAT_MIN_ZOOM = 14;
   var catGated = false;      /* ズーム不足でピンを抑止中か（復帰時に再検索する） */
   function catZoomOk(){
     var map = homeMapObj();
@@ -19320,7 +20134,7 @@ syncDestDisplay();
     var map = homeMapObj();
     clearCatPins();
     if(!map || typeof L === "undefined") return 0;
-    /* v127: ズーム約12未満ではどの経路からもピンを出さない（最終ガード） */
+    /* v127: ズームしきい値（CAT_MIN_ZOOM）未満ではどの経路からもピンを出さない（最終ガード） */
     if(!catZoomOk()){ showCatZoomNote(); catGated = true; return 0; }
     var rows = [];
     (items || []).forEach(function(it){
@@ -19367,8 +20181,8 @@ syncDestDisplay();
         if(!activeCat) return;
         if(window.__mapPickClick){ clearCatPins(); return; }
         var m2 = homeMapObj(); if(!m2) return;
-        /* v127: ズーム約12未満ではピンを出さない（注意のみ）。
-           抑止中にズームが12以上へ戻ったら検索からやり直す */
+        /* v127: ズームしきい値未満ではピンを出さない（注意のみ）。
+           抑止中にズームがしきい値以上へ戻ったら検索からやり直す */
         if(!applyCatZoomGate()) return;
         if(catGated){ catGated = false; runCatSearchBody(activeCat, ++catSeq); return; }
         var vb2 = mapBounds(m2); if(!vb2) return;
