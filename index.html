@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="カーナビ" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%231c1c1e'/%3E%3Ctext x='50' y='68' font-size='52' text-anchor='middle' fill='white'%3E%E2%86%97%3C/text%3E%3C/svg%3E" />
-<link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
+<link rel="apple-touch-icon" sizes="180x180" href="icon-180.png" />
 <link rel="manifest" href="data:application/octet-stream;base64,eyJiYWNrZ3JvdW5kX2NvbG9yIjoiIzE0MTQxNiIsImRpc3BsYXkiOiJzdGFuZGFsb25lIiwiaWNvbnMiOlt7InB1cnBvc2UiOiJhbnkiLCJzaXplcyI6IjE5MngxOTIiLCJzcmMiOiJpY29uLTE5Mi5wbmciLCJ0eXBlIjoiaW1hZ2UvcG5nIn0seyJwdXJwb3NlIjoiYW55Iiwic2l6ZXMiOiI1MTJ4NTEyIiwic3JjIjoiaWNvbi01MTIucG5nIiwidHlwZSI6ImltYWdlL3BuZyJ9LHsicHVycG9zZSI6Im1hc2thYmxlIiwic2l6ZXMiOiI1MTJ4NTEyIiwic3JjIjoiaWNvbi01MTIucG5nIiwidHlwZSI6ImltYWdlL3BuZyJ9XSwibGFuZyI6ImphIiwibmFtZSI6IuOCq+ODvOODiuODkyIsInNjb3BlIjoiLi4vIiwic2hvcnRfbmFtZSI6IuOCq+ODvOODiuODkyIsInN0YXJ0X3VybCI6Ii4uL2luZGV4Lmh0bWwiLCJ0aGVtZV9jb2xvciI6IiMxNDE0MTYifQ==" />
 <title>カーナビ — 関東・分岐ナビ（首都高・圏央道）</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -124,7 +124,7 @@ window.__ROAD_PACKS = {"kanto":{"bbox":[34.55,138.35,37.15,141.15],"km":32806,"q
       var pts = decodeWay(w, bundle.q), cls = w[0];
       for(var i = 1; i < pts.length; i++){
         var a = pts[i - 1], b = pts[i], si = segs.length;
-        segs.push({ a: a, b: b, cls: cls });
+        segs.push({ a: a, b: b, cls: cls, nm: w[1] });
         var x0 = Math.floor(Math.min(a[1], b[1]) / CELL), x1 = Math.floor(Math.max(a[1], b[1]) / CELL);
         var y0 = Math.floor(Math.min(a[0], b[0]) / CELL), y1 = Math.floor(Math.max(a[0], b[0]) / CELL);
         for(var cx = x0; cx <= x1; cx++) for(var cy = y0; cy <= y1; cy++){
@@ -271,6 +271,305 @@ window.__ROAD_PACKS = {"kanto":{"bbox":[34.55,138.35,37.15,141.15],"km":32806,"q
     return { tollKm: toll / 1000, tollKmLong: tollLong / 1000, totalKm: total / 1000,
       tollShare: total > 0 ? toll / total : 0, intervals: intervals, flags: on };
   }
+  /* ===== v132: 同梱高速線を辿る経路（ガイド点列 → 本線ポリライン） =====
+     外部ルーティングAPIは、IC代表点を経由点にしても本線へ吸着できず
+     途中で一般道へ降りてしまう区間がある（実測：関越道 塩沢石打〜六日町、
+     秋田道 大曲〜秋田南は、本線上の2点を渡しても有料区間0〜僅少の
+     ルートしか返らなかった）。そこで有料候補の高速区間の形状は、
+     同梱した高速線そのものをセグメントグラフとして辿って作る。
+     ガイド点（ICネットワークの経路ノード列）を順に本線へ吸着し、
+     隣り合う吸着点同士をセグメントグラフの最短路で繋ぐ。グラフの
+     頂点はセグメント端点（OSMノード）で、立体交差の交点は頂点に
+     ならないため、平面交差のない高速同士が誤接続することはない。
+     吸着できないガイド点がある／区間が繋がらない場合は null を返し、
+     呼び出し側は従来方式へ倒す（一般道区間が混ざる東北中央道のような
+     回廊では、線が無い区間で正直に失敗する）。 */
+  var _hwGraph = null; /* {key, pts, adj} のキャッシュ（bbox単位） */
+  function hwPtKey(p){ return Math.round(p[0] * 100000) + ":" + Math.round(p[1] * 100000); }
+  function buildHwGraph(guide){
+    var idx = getHwIdx(); if(!idx) return null;
+    var minLa = 90, maxLa = -90, minLn = 180, maxLn = -180;
+    guide.forEach(function(p){
+      if(p[0] < minLa) minLa = p[0]; if(p[0] > maxLa) maxLa = p[0];
+      if(p[1] < minLn) minLn = p[1]; if(p[1] > maxLn) maxLn = p[1];
+    });
+    minLa -= 0.05; maxLa += 0.05; minLn -= 0.05; maxLn += 0.05;
+    /* キャッシュキーはガイド点列のハッシュも含める（回廊制限が
+       ガイド依存のため。bboxだけだと別回廊のグラフを返す恐れ） */
+    var gh = 0;
+    guide.forEach(function(p){ gh = ((gh * 31) + Math.round(p[0] * 1000)) | 0; gh = ((gh * 31) + Math.round(p[1] * 1000)) | 0; });
+    var key = [minLa.toFixed(1), minLn.toFixed(1), maxLa.toFixed(1), maxLn.toFixed(1)].join(":") + "#" + guide.length + "#" + gh;
+    if(_hwGraph && _hwGraph.key === key) return _hwGraph;
+    var pts = [], nodeId = {}, adj = [];
+    /* 回廊制限：ガイド折れ線から5km以内のセグメントだけをグラフ化
+       する。長距離では対象矩形が広大になり、無関係な高速まで
+       ノード化して探索が桁違いに重くなるため */
+    function distToGuide(p){
+      var best = Infinity;
+      for(var gi2 = 0; gi2 + 1 < guide.length; gi2++){
+        var a = guide[gi2], b = guide[gi2 + 1];
+        if(p[0] < Math.min(a[0], b[0]) - 0.11 || p[0] > Math.max(a[0], b[0]) + 0.11 ||
+           p[1] < Math.min(a[1], b[1]) - 0.11 || p[1] > Math.max(a[1], b[1]) + 0.11) continue;
+        var kx = 111320 * Math.cos(a[0] * Math.PI / 180), ky = 110540;
+        var px = (p[1] - a[1]) * kx, py = (p[0] - a[0]) * ky;
+        var bx = (b[1] - a[1]) * kx, by = (b[0] - a[0]) * ky;
+        var l2 = bx * bx + by * by;
+        var t = l2 > 0 ? Math.max(0, Math.min(1, (px * bx + py * by) / l2)) : 0;
+        var qx = px - bx * t, qy = py - by * t;
+        var d = Math.sqrt(qx * qx + qy * qy);
+        if(d < best) best = d;
+      }
+      return best;
+    }
+    function nid(p){
+      var k = hwPtKey(p);
+      if(nodeId[k] == null){ nodeId[k] = pts.length; pts.push(p); adj.push([]); }
+      return nodeId[k];
+    }
+    idx.segs.forEach(function(sg){
+      var mLa = (sg.a[0] + sg.b[0]) / 2, mLn = (sg.a[1] + sg.b[1]) / 2;
+      if(mLa < minLa || mLa > maxLa || mLn < minLn || mLn > maxLn) return;
+      if(distToGuide([mLa, mLn]) > 5000) return;
+      var ia = nid(sg.a), ib = nid(sg.b);
+      var w = havM(sg.a[0], sg.a[1], sg.b[0], sg.b[1]);
+      if(!(w > 0)) return;
+      adj[ia].push([ib, w]); adj[ib].push([ia, w]);
+    });
+    if(!pts.length) return null;
+    /* 射影溶接：JCT部では本線同士がリンク（motorway_link）経由でしか
+       繋がらないことがあり、上下線は端点同士が一致しない（頂点の
+       位置が沿道方向にずれる）ため、端点ベースの接続だけでは
+       コンポーネントが分断し、大きく迂回する経路になる（実測：
+       美女木JCTで断절、前橋付近で並行路線へ迂回）。そこで各頂点から
+       近傍セグメント（60m以内）へ射影点を経由する辺を張り、
+       幾何的に接続している箇所をすべて繋ぐ。射影距離には×3の
+       ペナルティを付け、本来の共有ノード接続を優先させる */
+    pts.forEach(function(p, i){
+      var cx = Math.floor(p[1] / CELL), cy = Math.floor(p[0] / CELL);
+      var seenS = {};
+      for(var gx = cx - 1; gx <= cx + 1; gx++) for(var gy = cy - 1; gy <= cy + 1; gy++){
+        var cell = idx.grid[gx + ":" + gy]; if(!cell) continue;
+        for(var ci = 0; ci < cell.length; ci++){
+          var si = cell[ci]; if(seenS[si]) continue; seenS[si] = 1;
+          var sg = idx.segs[si];
+          var ja = nodeId[hwPtKey(sg.a)], jb = nodeId[hwPtKey(sg.b)];
+          if(ja == null || jb == null || ja === i || jb === i) continue;
+          var kx = 111320 * Math.cos(sg.a[0] * Math.PI / 180), ky = 110540;
+          var px = (p[1] - sg.a[1]) * kx, py = (p[0] - sg.a[0]) * ky;
+          var bx = (sg.b[1] - sg.a[1]) * kx, by = (sg.b[0] - sg.a[0]) * ky;
+          var l2 = bx * bx + by * by;
+          var t = l2 > 0 ? Math.max(0, Math.min(1, (px * bx + py * by) / l2)) : 0;
+          var q = [sg.a[0] + (sg.b[0] - sg.a[0]) * t, sg.a[1] + (sg.b[1] - sg.a[1]) * t];
+          var d = havM(p[0], p[1], q[0], q[1]);
+          if(d > 60) continue;
+          var segLen = havM(sg.a[0], sg.a[1], sg.b[0], sg.b[1]);
+          adj[i].push([ja, d * 3 + segLen * t]);
+          adj[i].push([jb, d * 3 + segLen * (1 - t)]);
+        }
+      }
+    });
+    /* 溶接第2段：それでも繋がらない区間がある（実測：美女木JCT付近で
+       169mの欠落）。短いリンク区間が同梱から漏れている場合に限り、
+       別コンポーネントの最寄り端点へだけ高ペナルティで接続する。
+       本来の接続がある場所では決して選ばれない重みにする */
+    var parent = pts.map(function(_, i){ return i; });
+    function findRoot(x){ while(parent[x] !== x){ parent[x] = parent[parent[x]]; x = parent[x]; } return x; }
+    adj.forEach(function(es, i){
+      es.forEach(function(e){
+        var ra = findRoot(i), rb = findRoot(e[0]);
+        if(ra !== rb) parent[ra] = rb;
+      });
+    });
+    var weld2 = {};
+    pts.forEach(function(p, i){
+      var k = Math.floor(p[0] / 0.014) + ":" + Math.floor(p[1] / 0.014);
+      (weld2[k] = weld2[k] || []).push(i);
+    });
+    pts.forEach(function(p, i){
+      var cx = Math.floor(p[0] / 0.014), cy = Math.floor(p[1] / 0.014);
+      var ri = findRoot(i), bj = -1, bd = 1500;
+      for(var gx = cx - 1; gx <= cx + 1; gx++) for(var gy = cy - 1; gy <= cy + 1; gy++){
+        var cell = weld2[gx + ":" + gy] || [];
+        for(var ci = 0; ci < cell.length; ci++){
+          var j = cell[ci];
+          if(j === i || findRoot(j) === ri) continue;
+          var d = havM(p[0], p[1], pts[j][0], pts[j][1]);
+          if(d < bd){ bd = d; bj = j; }
+        }
+      }
+      if(bj >= 0){ adj[i].push([bj, bd * 5 + 1500]); adj[bj].push([i, bd * 5 + 1500]); }
+    });
+    _hwGraph = { key: key, pts: pts, adj: adj, idx: idx, nodeId: nodeId };
+    return _hwGraph;
+  }
+  /* 路線名の正規化（同梱データの "E17|関越自動車道" と、IC表の
+     "関越道"／"首都高 4号新宿線" を突き合わせるための粗い名寄せ） */
+  function normRoadName(s){
+    if(!s) return "";
+    s = String(s).split("|").pop();
+    s = s.replace(/[（(].*?[）)]/g, "");
+    s = s.replace(/^首都高速/, "").replace(/^首都高\s*/, "");
+    s = s.replace(/自動車道$/, "").replace(/高速道路$/, "").replace(/高速$/, "").replace(/道路$/, "").replace(/道$/, "");
+    return s.replace(/\s+/g, "");
+  }
+  /* 点 p の最寄りセグメント（添字・射影点・射影比）を返す（nearestSeg の添字版）。
+     roadHint（路線名）がある場合、その路線のセグメントを優先する：
+     JCT の代表点は接続する別路線の方が近いことがあり（実測：藤岡JCTは
+     関越道より上信越道の方が近い）、最寄りだけだと回廊を外れるため */
+  function nearestSegIx(idx, p, maxM, roadHint, bundle){
+    var cx = Math.floor(p[1] / CELL), cy = Math.floor(p[0] / CELL), best = null, bestNamed = null;
+    var seen = {};
+    var hint = roadHint ? normRoadName(roadHint) : "";
+    var namesArr = (bundle && bundle.names) ? bundle.names.split("\t") : null;
+    for(var gx = cx - 2; gx <= cx + 2; gx++) for(var gy = cy - 2; gy <= cy + 2; gy++){
+      var cell = idx.grid[gx + ":" + gy]; if(!cell) continue;
+      for(var ci = 0; ci < cell.length; ci++){
+        var si = cell[ci]; if(seen[si]) continue; seen[si] = 1;
+        var sg = idx.segs[si], a = sg.a, b = sg.b;
+        var kx = 111320 * Math.cos(a[0] * Math.PI / 180), ky = 110540;
+        var px = (p[1] - a[1]) * kx, py = (p[0] - a[0]) * ky;
+        var bx = (b[1] - a[1]) * kx, by = (b[0] - a[0]) * ky;
+        var l2 = bx * bx + by * by;
+        var t = l2 > 0 ? Math.max(0, Math.min(1, (px * bx + py * by) / l2)) : 0;
+        var q = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+        var d = havM(p[0], p[1], q[0], q[1]);
+        if(d > maxM) continue;
+        if(!best || d < best.d) best = { d: d, pt: q, si: si, t: t };
+        if(hint && namesArr && sg.nm != null && normRoadName(namesArr[sg.nm]) === hint){
+          if(!bestNamed || d < bestNamed.d) bestNamed = { d: d, pt: q, si: si, t: t };
+        }
+      }
+    }
+    return bestNamed || best;
+  }
+  window.__hwPath = function(guideIn){
+    try{
+      if(!guideIn || guideIn.length < 2) return null;
+      /* ガイド点は [lat,lng] または {pt:[lat,lng], road:"路線名"} */
+      var guide = [], hints = [];
+      guideIn.forEach(function(g){
+        if(g && g.pt){ guide.push(g.pt); hints.push(g.road || null); }
+        else { guide.push(g); hints.push(null); }
+      });
+      var G = buildHwGraph(guide);
+      if(!G) return null;
+      var idx = G.idx;
+      var bundle = window.__HW_BUNDLE;
+      /* 各ガイド点を本線へ吸着する（仮想ノードとしてグラフへ一時登録）。
+         中間点は、座標が本線から大きくずれているIC（実測：関越道・
+         駒寄スマートICは約4.7km）が混ざっても回廊全体を落とさない
+         よう、吸着できなければ読み飛ばす。両端（乗車・降車IC）は
+         回廊の要なので、許容を広げて本線への射影で吸着する */
+      var snaps = [];
+      for(var gi = 0; gi < guide.length; gi++){
+        var isEnd = (gi === 0 || gi === guide.length - 1);
+        var sn = nearestSegIx(idx, guide[gi], isEnd ? 6000 : 1600, hints[gi], bundle);
+        if(!sn){ if(isEnd) return null; continue; }
+        var sg = idx.segs[sn.si];
+        var ia = G.nodeId[hwPtKey(sg.a)], ib = G.nodeId[hwPtKey(sg.b)];
+        if(ia == null || ib == null){ if(isEnd) return null; continue; }
+        var segLen = havM(sg.a[0], sg.a[1], sg.b[0], sg.b[1]);
+        snaps.push({ pt: sn.pt, ia: ia, ib: ib, ta: segLen * sn.t, tb: segLen * (1 - sn.t) });
+      }
+      if(snaps.length < 2) return null;
+      var out = [], totalM = 0;
+      for(var s2 = 0; s2 + 1 < snaps.length; s2++){
+        var A = snaps[s2], Bp = snaps[s2 + 1];
+        /* A の射影点→ B の射影点：両端のセグメント端点を介して Dijkstra */
+        var startCosts = [[A.ia, A.ta], [A.ib, A.tb]];
+        var goalCosts = {}; goalCosts[Bp.ia] = Bp.ta; goalCosts[Bp.ib] = Bp.tb;
+        var dist = {}, prev = {}, visited = {};
+        var heap = [];
+        function hpush(id, d){
+          heap.push([d, id]);
+          var c = heap.length - 1;
+          while(c > 0){ var p2 = (c - 1) >> 1; if(heap[p2][0] <= heap[c][0]) break; var tmp = heap[p2]; heap[p2] = heap[c]; heap[c] = tmp; c = p2; }
+        }
+        function hpop(){
+          var top = heap[0], last = heap.pop();
+          if(heap.length){ heap[0] = last; var c = 0;
+            for(;;){ var l = c * 2 + 1, r = l + 1, m = c;
+              if(l < heap.length && heap[l][0] < heap[m][0]) m = l;
+              if(r < heap.length && heap[r][0] < heap[m][0]) m = r;
+              if(m === c) break; var tmp2 = heap[m]; heap[m] = heap[c]; heap[c] = tmp2; c = m; } }
+          return top;
+        }
+        /* A*探索：ヒューリスティクスは目標射影点までの直線距離。
+           全ての辺の重みは幾何距離以上（溶接はペナルティ付き）なので
+           許容的であり、最適性は保たれる。素のDijkstraでは長距離の
+           区間ごとにグラフ全体を探索して極端に重かった */
+        function heur(id){ var p = G.pts[id]; return havM(p[0], p[1], Bp.pt[0], Bp.pt[1]); }
+        startCosts.forEach(function(sc){ if(dist[sc[0]] == null || sc[1] < dist[sc[0]]){ dist[sc[0]] = sc[1]; hpush(sc[0], sc[1] + heur(sc[0])); } });
+        var goalId = null, goalTotal = Infinity;
+        while(heap.length){
+          var cur = hpop(), cid = cur[1];
+          if(visited[cid]) continue; visited[cid] = 1;
+          if(cur[0] >= goalTotal) break;
+          var cd = dist[cid];
+          if(goalCosts[cid] != null && cd + goalCosts[cid] < goalTotal){ goalTotal = cd + goalCosts[cid]; goalId = cid; }
+          var edges = G.adj[cid] || [];
+          for(var ei = 0; ei < edges.length; ei++){
+            var to = edges[ei][0], nd = cd + edges[ei][1];
+            if(dist[to] == null || nd < dist[to]){ dist[to] = nd; prev[to] = cid; hpush(to, nd + heur(to)); }
+          }
+        }
+        if(goalId === null) return null;
+        var chainIds = [], node = goalId;
+        while(node != null){ chainIds.unshift(node); node = prev[node]; if(node != null && chainIds.length > 200000) return null; }
+        var segPts = [A.pt];
+        chainIds.forEach(function(id){ segPts.push(G.pts[id]); });
+        segPts.push(Bp.pt);
+        for(var q = 0; q < segPts.length; q++){
+          if(out.length && havM(out[out.length - 1][0], out[out.length - 1][1], segPts[q][0], segPts[q][1]) < 1) continue;
+          if(q > 0) totalM += havM(segPts[q - 1][0], segPts[q - 1][1], segPts[q][0], segPts[q][1]);
+          out.push(segPts[q]);
+        }
+      }
+      if(out.length < 8 || !(totalM > 0)) return null;
+      /* 往復スパー除去：分岐部で行き止まり側の枝へ回り込んだ経路は、
+         同じ頂点を往路・復路で2回通る形になる（実測：高崎玉村付近で
+         約4kmの往復）。ほぼ同じ点へ戻ってくる区間は、その間を
+         切り取って前後を直結する */
+      var spurGuard = 0, spurChanged = true;
+      while(spurChanged && spurGuard++ < 8 && out.length > 8){
+        spurChanged = false;
+        var cumS = [0];
+        for(var si2 = 1; si2 < out.length; si2++) cumS.push(cumS[si2 - 1] + havM(out[si2 - 1][0], out[si2 - 1][1], out[si2][0], out[si2][1]));
+        /* 空間グリッドで近接ペアだけを調べる（素朴な全ペア走査は
+           長距離で数秒かかる） */
+        var cellS = {};
+        for(var ci3 = 0; ci3 < out.length; ci3++){
+          var ck = Math.floor(out[ci3][0] / 0.0009) + ":" + Math.floor(out[ci3][1] / 0.0009);
+          (cellS[ck] = cellS[ck] || []).push(ci3);
+        }
+        outerSpur:
+        for(var a2 = 0; a2 < out.length; a2++){
+          var cxS = Math.floor(out[a2][0] / 0.0009), cyS = Math.floor(out[a2][1] / 0.0009);
+          var candB = [];
+          for(var gx2 = cxS - 1; gx2 <= cxS + 1; gx2++) for(var gy2 = cyS - 1; gy2 <= cyS + 1; gy2++){
+            var cell2 = cellS[gx2 + ":" + gy2]; if(!cell2) continue;
+            for(var cj = 0; cj < cell2.length; cj++) if(cell2[cj] > a2 + 1) candB.push(cell2[cj]);
+          }
+          candB.sort(function(x, y){ return x - y; });
+          for(var bi2 = 0; bi2 < candB.length; bi2++){
+            var b2 = candB[bi2];
+            var alongS = cumS[b2] - cumS[a2];
+            if(alongS < 600) continue;
+            var dabS = havM(out[a2][0], out[a2][1], out[b2][0], out[b2][1]);
+            if(dabS < 25 || (dabS < 60 && alongS >= 1500)){
+              out.splice(a2 + 1, b2 - a2 - 1);
+              spurChanged = true;
+              break outerSpur;
+            }
+          }
+        }
+      }
+      totalM = 0;
+      for(var k2 = 1; k2 < out.length; k2++) totalM += havM(out[k2 - 1][0], out[k2 - 1][1], out[k2][0], out[k2][1]);
+      if(out.length < 8 || !(totalM > 0)) return null;
+      return { pts: out, km: Math.round(totalM / 100) / 10 };
+    }catch(e){ return null; }
+  };
   /* 一般道パック（＋高速）への吸着：点 p に最も近い同梱道路上の点を返す。
      maxM 以内に無ければ null。経由点の実道路吸着（snapSurfaceVia）の
      オフライン・フォールバックと、形状の安定化に使う。一般道パックを
@@ -878,13 +1177,14 @@ select,.dm-row input{border-radius:10px}
 .pv-cand .ck{flex:none;width:22px;height:22px;border-radius:50%;background:var(--ink);color:var(--bg);display:none;place-items:center;font-size:13px;font-weight:900}
 .pv-cand.sel .ck{display:grid}
 /* --- preview: IC picker for toll candidates --- */
-#pvIcPanel{flex:0 1 auto;min-height:0;max-height:24dvh;overflow-y:auto;margin:2px 14px 6px;border:1.5px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--surface)}
+#pvIcPanel{flex:0 1 auto;min-height:0;max-height:24dvh;overflow-y:auto;margin:2px 14px 6px;border:none;border-radius:12px;padding:10px 12px;background:var(--surface)}
 #pvIcPanel .icp-h{font-size:12px;font-weight:900;color:var(--ink2);letter-spacing:.04em;margin-bottom:6px}
 #pvIcPanel .icp-rec{font-size:13.5px;font-weight:800;line-height:1.55}
 #pvIcPanel .icp-rec small{display:block;font-size:11.5px;color:var(--ink2);font-weight:700}
 .icr{margin-top:9px}
 .icr-lb{font-size:11.5px;font-weight:900;color:var(--ink2);margin-bottom:5px}
-.icr-rail{position:relative;display:flex;flex-wrap:wrap;gap:5px;padding:5px;border:1.5px solid var(--line);border-radius:12px;background:var(--surface);touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.icr-rail{position:relative;display:flex;flex-wrap:wrap;gap:5px;align-items:center;padding:4px 2px;border:none;background:var(--surface);touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.icr-arr{color:var(--ink2);font-size:11px;font-weight:900;pointer-events:none}
 .icr-pill{position:absolute;left:0;top:0;border-radius:999px;background:var(--ink);opacity:0;pointer-events:none;transition:transform .22s ease,width .22s ease,height .22s ease}
 .icr-pill.noanim{transition:none}
 .icr-chip{position:relative;z-index:1;border:1.5px solid var(--line);background:transparent;color:var(--ink);border-radius:999px;padding:6px 10px;font-size:12.5px;font-weight:800;font-family:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
@@ -916,8 +1216,8 @@ select,.dm-row input{border-radius:10px}
 .icp-strip-wrap{margin-top:9px}
 .icp-strip-h{font-size:11.5px;font-weight:900;color:var(--ink2);margin-bottom:5px}
 .icp-strip{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
-.icp-node{border:1.5px solid var(--line);background:var(--surface);color:var(--ink2);border-radius:999px;padding:4px 9px;font-size:11.5px;font-weight:700}
-.icp-node.end{background:var(--ink);color:var(--bg);border-color:var(--ink);font-weight:900}
+.icp-node{border:1.5px solid transparent;background:var(--surface);color:var(--ink2);border-radius:999px;padding:4px 9px;font-size:11.5px;font-weight:700}
+.icp-node.end{background:var(--ink);color:var(--bg);border-color:transparent;font-weight:900}
 .icp-arr{color:var(--ink2);font-size:11px;font-weight:900}
 .icp-diff{font-size:12.5px;font-weight:800;line-height:1.55;margin-top:7px}
 .icp-reopt{font-size:12px;font-weight:700;color:var(--ink2);line-height:1.5;margin-top:6px}
@@ -1527,8 +1827,14 @@ html,body{touch-action:manipulation}
 :root[data-theme="light"] .leaflet-control-attribution{color:rgba(110,110,118,.78);text-shadow:0 1px 2px rgba(255,255,255,.7)}
 /* ライト地図はダークタイルの色味変換（.tilefx-esri-light／.tilefx-lighthi）で作る */
 /* --- ナビタブ：全画面地図のみ（設定はルート設定シート／地図タップの下部バーから） --- */
-#view-home{position:fixed;inset:0;overflow:hidden;background:var(--surface2)}
-#homeMap{position:absolute;inset:0;z-index:1;background:var(--surface2)}
+#view-home{position:fixed;inset:0;overflow:hidden;background:var(--surface2);perspective:1100px}
+#homeMap{position:absolute;left:50%;top:50%;width:170%;height:170%;transform:translate(-50%,-50%);touch-action:none;will-change:transform;z-index:1;background:var(--surface2)}
+/* 現在地に戻るボタン（アイコンのみ・シンプルな円形） */
+.locate-btn{position:absolute;width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--ink);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.20);cursor:pointer;padding:0;-webkit-tap-highlight-color:transparent}
+.locate-btn svg{width:22px;height:22px;flex:none}
+.locate-btn:active{transform:scale(.93)}
+#homeLocateBtn{right:14px;bottom:calc(100px + env(safe-area-inset-bottom));z-index:1100}
+#navLocateBtn{right:14px;bottom:calc(104px + env(safe-area-inset-bottom));z-index:30}
 #homeMap .mapfallback{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
   text-align:center;padding:18px;font-size:13px;line-height:1.7;color:var(--ink2);z-index:500}
 /* --- 地図タップ時の下部バー（登録／決定アクション） --- */
@@ -2226,15 +2532,18 @@ body.previewing .pv-mapwrap{opacity:1;pointer-events:auto}
   border-top:1.5px solid var(--line);border-radius:20px 20px 0 0;box-shadow:0 -14px 36px rgba(0,0,0,.30);
   transform:translateY(105%);transition:transform .38s cubic-bezier(.3,.8,.3,1);pointer-events:auto}
 body.previewing #previewPane .pv-sheet{transform:translateY(0)}
-body.previewing #previewPane .pv-sheet.folded{transform:translateY(calc(100% - 88px))}
+body.previewing #previewPane .pv-sheet.folded{transform:translateY(calc(100% - 116px))}
 #previewPane .pv-sheet.dragging{transition:none}
 #previewPane .pv-sheet .pv-head{padding:0 14px 6px;cursor:grab;touch-action:none}
 /* --- ルート設定シート：ハンドル＋見出しが残る位置まで畳める ---
    下部のフローティングタブバーがシートより手前に描かれるため、
-   畳んだときの見せ幅（168px）はタブバーの占有分（約106px）＋
-   ハンドルと見出し（約62px）で決める */
+   畳んだときの見せ幅はタブバーの占有分（下マージン＋セーフエリア＋
+   バー本体で実機では約111px）より上で止まる必要がある。以前の168px
+   ではハンドルと見出し（約51px）を足しても余白がほぼ無く、畳むと
+   ハンドルごとタブバーに隠れて掴めなくなっていたため、見せ幅を
+   204px に広げてタブバーの上端から約40px以上の余白を確保する */
 .home-sheet{transition:transform .32s cubic-bezier(.3,.8,.3,1)}
-.home-sheet.folded{transform:translateY(calc(100% - 168px))}
+.home-sheet.folded{transform:translateY(calc(100% - 204px))}
 .home-sheet.dragging{transition:none}
 .home-sheet .hs-head{cursor:grab;touch-action:none}
 .home-sheet .sheet-grip{padding-bottom:1px}
@@ -2323,6 +2632,7 @@ body.previewing #previewPane .pv-sheet.folded{transform:translateY(calc(100% - 8
   <!-- ============ HOME ============ -->
   <div id="view-home">
     <div id="homeMap"><div class="mapfallback" id="homeMapFallback">地図を読み込み中…</div></div>
+    <button type="button" class="locate-btn" id="homeLocateBtn" aria-label="現在地に戻る"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="6.2"/><circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none"/><path d="M12 2.6v2.9M12 18.5v2.9M2.6 12h2.9M18.5 12h2.9"/></svg></button>
     <button type="button" class="home-top-search" id="homeTopSearch" aria-label="場所を検索">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></svg>
       <span id="homeTopSearchText">住所・店名・地名を検索</span>
@@ -2787,6 +3097,7 @@ body.previewing #previewPane .pv-sheet.folded{transform:translateY(calc(100% - 8
         <div class="mapfallback" id="navMapFallback">地図を読み込み中…</div>
       </div>
     </div>
+    <button type="button" class="locate-btn" id="navLocateBtn" aria-label="現在地に戻る"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="6.2"/><circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none"/><path d="M12 2.6v2.9M12 18.5v2.9M2.6 12h2.9M18.5 12h2.9"/></svg></button>
     <div class="reroute-toast hidden" id="rerouteToast">ルートを再計算しました</div>
     <div class="nav-inner" id="navMain">
       <div class="nav-top">
@@ -3713,6 +4024,11 @@ function navProfile(){
 }
 function laneActive(){
   if(!state.route) return false;
+  /* 一般道の例外箇所（laneHard：実データで進行可能な車線が1本だけの
+     難しい分岐）だけは、一般道でも車線案内する。距離は一般道の
+     プロファイルに合わせて600m以内に限る */
+  var curStep = state.route.steps[state.stepIdx];
+  if(curStep && curStep.laneHard) return state.remaining <= 600 || state.legTotal <= 600;
   if(state.route.type !== "hw") return false; /* 車線案内は高速・有料道路のみ。一般道では出さない */
   /* ルート全体が高速扱いでも、今のステップが一般道区間なら出さない。
      TomTom構築ルートは有料区間の割合で種別が決まるため、入口までの
@@ -5956,10 +6272,10 @@ $("btnPreview").addEventListener("click", openPreview);
 /* ================= ROUTE CHOICE + PREVIEW =================
    ルートを選ぶと「プレビュー／案内開始」を出す。
    プレビューでは操作中の画面が下に引っ込み、上部にルート全体を表示する。 */
-var pendingRoute = null, pendingFare = null, previewMap = null, previewLayer = null, pvIcLayer = null, pvHwLayer = null, pendingCandidates = null, pendingMeta = null, pendingTollUnknown = false;
+var pendingRoute = null, pendingFare = null, previewMap = null, previewLayer = null, pvIcLayer = null, pvHwLayer = null, pendingCandidates = null, pendingMeta = null, pendingTollUnknown = false, pendingEstToll = false;
 var selectedCand = -1; /* 候補画面で選択中の候補インデックス */
 function selectRoute(r, fare){
-  pendingRoute = r; pendingFare = fare || null; pendingCandidates = null; pendingMeta = null; pendingTollUnknown = false;
+  pendingRoute = r; pendingFare = fare || null; pendingCandidates = null; pendingMeta = null; pendingTollUnknown = false; pendingEstToll = false;
   $("choiceName").textContent = (r.fromLabel || r.from) + " → " + r.to + (r.simple ? "（簡易案内）" : "");
   $("routeChoice").classList.remove("hidden");
 }
@@ -5974,8 +6290,9 @@ function pvMetaText(r, toll){
   var km = pendingMeta ? pendingMeta.km : r.km;
   var min = pendingMeta ? pendingMeta.min : r.min;
   /* 料金不明の有料区間を含む候補は、ヘッダーでも「無料」と出さない
-     （候補カードの「有料区間あり」と揃える） */
-  return "約" + km + "km ・ 約" + min + "分 ・ " + (toll ? yen(toll) : (pendingTollUnknown ? "有料区間あり" : "無料"));
+     （候補カードの「有料区間あり」と揃える）。料金グラフでなく
+     公式料金体系からの概算の場合は「概算」を付けて区別する */
+  return "約" + km + "km ・ 約" + min + "分 ・ " + (toll ? ((pendingTollUnknown && pendingEstToll) ? "概算 " : "") + yen(toll) : (pendingTollUnknown ? "有料区間あり" : "無料"));
 }
 function showPreview(){
   if(!pendingRoute) return;
@@ -6018,18 +6335,20 @@ function pvResetRotation(){ pvDeg = 0; pvApplyTransform(); }
 /* 地図要素は回転用に170%へ広げてあるため、fitBounds のままだと線が小さく
    写る。log2(1.7)≒0.77段だけ寄せて、従来の表示倍率に戻す。
    v125: さらに全体フィットから1.8倍縮小していた（log2(1.8)≒0.848段）。
-   v127: その縮小率はルート長で可変にする（fitOutDelta）。短いルートでは
-   1.8倍まで引いてよいが、長いルートでは引き過ぎると小さな画面でルートが
-   隠れやすいため、長さに応じて縮小を滑らかに弱める。
+   v127: その縮小率はルート長で可変にした（fitOutDelta）。
+   v136: 向きを反転し、振れ幅も約2倍に広げた。旧方式は長いルートほど
+   縮小を弱めていたため、長距離ではフィット後に寄せる分（+0.77段）と
+   相まってルートが画面からはみ出し、全体が見えなかった。長いルート
+   ほど収めるための余白が要るので、長いほど強く引く。
    中心は fitBounds で決めたルート全体の中心のまま変えない */
 /* 全体フィット後に引くズーム段数：ルート長（km）で滑らかに変える。
-   3km以下＝0.848段（1.8倍）／80km以上＝0.20段（約1.15倍）／間は対数補間 */
+   3km以下＝0.85段（約1.8倍）／150km以上＝2.0段（4倍）／間は対数補間 */
 function fitOutDelta(km){
-  var D_MAX = 0.848, D_MIN = 0.20;
-  if(!isFinite(km) || km == null || km <= 3) return D_MAX;
-  if(km >= 80) return D_MIN;
-  var t = (Math.log(km) - Math.log(3)) / (Math.log(80) - Math.log(3));
-  return D_MAX + (D_MIN - D_MAX) * t;
+  var D_MIN = 0.85, D_MAX = 2.0;
+  if(!isFinite(km) || km == null || km <= 3) return D_MIN;
+  if(km >= 150) return D_MAX;
+  var t = (Math.log(km) - Math.log(3)) / (Math.log(150) - Math.log(3));
+  return D_MIN + (D_MAX - D_MIN) * t;
 }
 /* ポリラインの全長（km）。fitOutDelta へ渡すルート長の算出用 */
 function ptsKm(pts){
@@ -6285,6 +6604,15 @@ function drawHwBandsPreview(){
   if(!pvHwLayer) return;
   pvHwLayer.clearLayers();
   if(!pendingRoute || typeof L === "undefined") return;
+  /* v136: ローカル組み立て候補（localBuilt）は、高速区間を組み立て
+     時点の事実（route.hwSpan）で描く。形状照合による再推定は、
+     組み立て済みの回廊でも取りこぼしで帯が途切れることがあった
+     ため、組み立て候補では使わない（区間判定をデータで完結させる） */
+  if(pendingRoute.localBuilt && pendingRoute.hwSpan && pendingRoute.geomPts){
+    var sp136 = pendingRoute.geomPts.slice(pendingRoute.hwSpan[0], pendingRoute.hwSpan[1]);
+    if(sp136.length > 1) L.polyline(sp136, {color:"#ff9500", weight:6, opacity:0.95, smoothFactor:0}).addTo(pvHwLayer);
+    return;
+  }
   var pts = anchoredGeomPts(pendingRoute);
   if(!pts) pts = pendingRoute.steps.filter(function(s){ return s.lat != null; }).map(function(s){ return [s.lat, s.lng]; });
   if(!pts || pts.length < 2) return;
@@ -6565,9 +6893,36 @@ function enrichRouteSteps(route){
           var rec = csv ? csv.split(",").map(function(x){ return parseInt(x, 10); }).filter(function(x){ return x >= 1 && x <= ln[2]; }) : [];
           if(rec.length && rec.length < ln[2]){ s.lanes = ln[2]; s.rec = rec; s.osmLane = true; }
         }
-      } else if(!s.name || s.name === "交差点"){
-        var xn = guideNearestXing(s.lat, s.lng, 90);
-        if(xn) s.name = xn;
+      } else {
+        if(!s.name || s.name === "交差点"){
+          var xn = guideNearestXing(s.lat, s.lng, 90);
+          if(xn) s.name = xn;
+        }
+        /* 一般道の車線：実データ（turn:lanes）がある箇所だけ扱う。
+           走行する車線そのものの案内は一般道では原則出さず、
+           「右折専用レーンがあります」級の軽い注意にとどめる。
+           例外は、進行方向へ進める車線が1本だけに限られる難しい
+           箇所（4車線以上）だけで、そこは従来どおり車線案内する。
+           実データが無い箇所では推測の車線案内も注意も出さない */
+        var ln2 = guideNearestLane(s.lat, s.lng, 250);
+        if(ln2 && ln2[2] >= 3){
+          var csv2 = (s.dir === "straight") ? ln2[4] : ln2[3];
+          var rec2 = csv2 ? csv2.split(",").map(function(x){ return parseInt(x, 10); }).filter(function(x){ return x >= 1 && x <= ln2[2]; }) : [];
+          if(rec2.length){
+            var total2 = ln2[2];
+            if(total2 >= 4 && rec2.length === 1){
+              s.lanes = total2; s.rec = rec2; s.osmLane = true; s.laneHard = true;
+            } else if(s.dir === "right" && rec2.length === 1 && rec2[0] === total2){
+              s.laneCaution = "右折専用レーンがあります";
+            } else if(s.dir === "left" && rec2.length === 1 && rec2[0] === 1){
+              s.laneCaution = "左折専用レーンがあります";
+            } else if(s.dir === "straight" && rec2.indexOf(total2) < 0 && rec2.indexOf(1) >= 0){
+              s.laneCaution = "右折専用レーンがあります";
+            } else if(s.dir === "straight" && rec2.indexOf(1) < 0 && rec2.indexOf(total2) >= 0){
+              s.laneCaution = "左折専用レーンがあります";
+            }
+          }
+        }
       }
     }catch(e){}
   });
@@ -6731,7 +7086,13 @@ function buildRouteChain(route){
   var prevC = 0;
   route.steps.forEach(function(s){
     if(s.lat == null){ chain.stepChain.push(prevC); return; }
-    var pr = projectOnChain(chain, s.lat, s.lng, null);
+    /* ステップはルート順に並ぶため、前ステップの chainage 近傍だけの
+       窓射影で足りる。素朴な全走査だと長距離ルート（数万点×数百
+       ステップ）で案内開始時に秒級の同期ブロックになる。窓内に候補が
+       無い／垂直距離が大きい（窓の外に真の最近点がある疑い）場合は
+       従来の全走査へ戻すので、結果は全走査と一致する */
+    var pr = projectOnChain(chain, s.lat, s.lng, [prevC - 1000, prevC + 50000]);
+    if(!pr || pr.perp > 300) pr = projectOnChain(chain, s.lat, s.lng, null);
     var c = pr ? pr.chain : prevC;
     if(c < prevC) c = prevC; /* ステップの chainage は単調にする */
     chain.stepChain.push(c); prevC = c;
@@ -7208,6 +7569,27 @@ function osrmUrl(coords, steps, alternatives, bearings){
     "?overview=full&geometries=geojson" + (steps ? "&steps=true" : "") +
     (alternatives ? "&alternatives=" + alternatives : "") +
     (bearings ? "&bearings=" + bearings : "");
+}
+/* OSRMのルートJSON取得（2系統）：公開サーバーが混雑・障害で応答しない
+   場合はFOSSGISのOSRMでも引き直す。一般道の細粒度取得は多数の小さな
+   リクエストで成り立つため、片系の不調がそのまま「一般道候補が出ない」
+   事故になっていた。両系とも応答したがルートが無い場合は、最後の
+   応答をそのまま返して呼び出し側の分割・フォールバックへ委ねる */
+function osrmRouteFetch(coords, alternatives, singleHost){
+  var coordStr = coords.map(function(c){ return c[1] + "," + c[0]; }).join(";");
+  var qs = "?overview=full&geometries=geojson&steps=true" + (alternatives ? "&alternatives=" + alternatives : "");
+  var hosts = singleHost ? ["https://router.project-osrm.org/route/v1/driving/"]
+    : ["https://router.project-osrm.org/route/v1/driving/",
+    "https://routing.openstreetmap.de/routed-car/route/v1/driving/"];
+  function tryHost(hi){
+    if(hi >= hosts.length) return Promise.reject(new Error("osrm fetch failed"));
+    return fetch(hosts[hi] + coordStr + qs).then(function(r){ return r.json(); }).then(function(d){
+      if(d && d.routes && d.routes.length) return d;
+      if(hi + 1 < hosts.length) return tryHost(hi + 1);
+      return d;
+    }, function(){ return tryHost(hi + 1); });
+  }
+  return tryHost(0);
 }
 /* 2点（[lat,lng]）間の方位角（度、0=北・時計回り）。OSRM の bearings 指定に使う */
 function bearingDegPts(a, b){
@@ -8792,6 +9174,46 @@ function lastResortCandidate(chain, byKind, fromDisp, destName, cb){
     })(li);
   }
 }
+/* ルート形状の「途中降り」量（km）：同梱高速線との照合で、最初に
+   高速へ乗った地点と最後に高速を降りる地点の間に挟まれた一般道
+   区間のうち最長のもの。乗り口までのアクセス・降りてからの一般道は
+   数えない。照合できない（同梱範囲外など）場合は 0 を返す */
+function routeMidOffKm(route){
+  if(!route || !route.geomPts || route.geomPts.length < 8) return 0;
+  if(typeof window === "undefined" || !window.__hwMatchRoute) return 0;
+  var m = null;
+  try{ m = window.__hwMatchRoute(route.geomPts); }catch(e){ m = null; }
+  if(!m || !m.flags || m.flags.length !== route.geomPts.length) return 0;
+  var pts = route.geomPts, cum = [0], i;
+  for(i = 1; i < pts.length; i++) cum.push(cum[i - 1] + haversine(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]));
+  var firstOn = -1, lastOn = -1;
+  for(i = 0; i < m.flags.length; i++){ if(m.flags[i]){ if(firstOn < 0) firstOn = i; lastOn = i; } }
+  if(firstOn < 0 || lastOn <= firstOn) return 0;
+  var best = 0, runStart = -1;
+  for(i = firstOn; i <= lastOn; i++){
+    if(!m.flags[i]){ if(runStart < 0) runStart = i; }
+    else if(runStart >= 0){ best = Math.max(best, cum[i] - cum[runStart]); runStart = -1; }
+  }
+  if(runStart >= 0) best = Math.max(best, cum[lastOn] - cum[runStart]);
+  return Math.round(best / 100) / 10;
+}
+/* ルート末尾の「降りたまま」量（km）：最後に高速を降りてから目的地
+   までの一般道区間長。長距離で有料区間が目的地のかなり手前で
+   終わってしまう候補（例：北上あたりで降りて残り150kmが一般道）の
+   検出に使う。照合できない場合は 0 */
+function routeTailOffKm(route){
+  if(!route || !route.geomPts || route.geomPts.length < 8) return 0;
+  if(typeof window === "undefined" || !window.__hwMatchRoute) return 0;
+  var m = null;
+  try{ m = window.__hwMatchRoute(route.geomPts); }catch(e){ m = null; }
+  if(!m || !m.flags || m.flags.length !== route.geomPts.length) return 0;
+  var pts = route.geomPts, cum = [0], i;
+  for(i = 1; i < pts.length; i++) cum.push(cum[i - 1] + haversine(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]));
+  var lastOn = -1;
+  for(i = 0; i < m.flags.length; i++){ if(m.flags[i]) lastOn = i; }
+  if(lastOn < 0 || lastOn >= pts.length - 1) return 0;
+  return Math.round((cum[cum.length - 1] - cum[lastOn]) / 100) / 10;
+}
 /* 候補自身の有料区間の割合（出典ごとの実測値を優先し、無ければ案内
    ステップの有料フラグ×区間長から推定する）。料金表示の最終検査に使う */
 function candTollShareEvidence(c){
@@ -8875,6 +9297,7 @@ function fixupTollLabel(c){
    沿道距離÷86km/h の見積もりで、実時間の判定はAPIの実形状から作る
    候補側で行う */
 var icNetCache = null;
+var localIcPairsCache = {}; /* v136: localIcPairs のOD単位キャッシュ */
 function icNetBuild(){
   if(icNetCache) return icNetCache;
   /* v130: ノードの同定を「名称」から「路線×収録位置」の一意IDへ変更した。
@@ -8948,29 +9371,86 @@ function icNetBuild(){
   icNetCache = nodes;
   return nodes;
 }
-function icNetPath(nodes, fromId, toId){
-  var dist = {}, prev = {}, visited = {};
+/* v136: 最短路探索を二分ヒープ化した。旧実装は未確定ノードの最小を
+   毎回全走査する O(V²) で、全国ICネット（約1,500ノード）では
+   1回あたり電話で100ms級、localIcPairs が最大36通り＋別回廊分を
+   同期実行するため、候補計算のたびにメインスレッドが数秒固まる
+   ことがあった（ピン→目的地設定のフリーズ感の主因）。結果（最短路）
+   は同一で、計算量だけを O((V+E) log V) に落とす */
+function icNetDijkstra(nodes, fromId, toId, mulFn){
+  var dist = {}, prev = {}, done = {};
   dist[fromId] = 0;
-  while(true){
-    var cur = null, best = Infinity;
-    for(var n in dist){ if(!visited[n] && dist[n] < best){ best = dist[n]; cur = n; } }
-    if(cur === null || cur === toId) break;
-    visited[cur] = true;
-    var adj = nodes[cur].adj;
+  var heap = [[0, fromId]];
+  function push(d, id){
+    heap.push([d, id]);
+    var i = heap.length - 1;
+    while(i > 0){
+      var p = (i - 1) >> 1;
+      if(heap[p][0] <= heap[i][0]) break;
+      var t = heap[p]; heap[p] = heap[i]; heap[i] = t; i = p;
+    }
+  }
+  function pop(){
+    var top = heap[0], last = heap.pop();
+    if(heap.length){
+      heap[0] = last;
+      var i = 0;
+      for(;;){
+        var l = i * 2 + 1, r = l + 1, m = i;
+        if(l < heap.length && heap[l][0] < heap[m][0]) m = l;
+        if(r < heap.length && heap[r][0] < heap[m][0]) m = r;
+        if(m === i) break;
+        var t = heap[m]; heap[m] = heap[i]; heap[i] = t; i = m;
+      }
+    }
+    return top;
+  }
+  while(heap.length){
+    var cur = pop(), cd = cur[0], cn = cur[1];
+    if(done[cn]) continue;
+    if(cd > (dist[cn] == null ? Infinity : dist[cn])) continue;
+    done[cn] = true;
+    if(cn === toId) break;
+    var adj = nodes[cn] ? nodes[cn].adj : null;
+    if(!adj) continue;
     for(var nb in adj){
-      var nd = dist[cur] + adj[nb];
-      if(dist[nb] == null || nd < dist[nb]){ dist[nb] = nd; prev[nb] = cur; }
+      var w = adj[nb];
+      if(mulFn) w = w * mulFn(nodes[cn], nodes[nb]);
+      var nd = cd + w;
+      if(dist[nb] == null || nd < dist[nb]){ dist[nb] = nd; prev[nb] = cn; push(nd, nb); }
     }
   }
   if(dist[toId] == null) return null;
+  return { km: dist[toId], prev: prev };
+}
+function icNetPath(nodes, fromId, toId){
+  var r = icNetDijkstra(nodes, fromId, toId, null);
+  if(!r) return null;
   var path = [], node = toId;
   while(node !== fromId){
     path.unshift(nodes[node] ? nodes[node].name : node);
-    node = prev[node];
+    node = r.prev[node];
     if(node == null) return null;
   }
   path.unshift(nodes[fromId] ? nodes[fromId].name : fromId);
-  return { km: dist[toId], path: path };
+  return { km: r.km, path: path };
+}
+/* icNetPath のノード列版（v132）。mulFn(aNode, bNode) が辺の重み倍率を
+   返す場合はそれを掛ける：第1経路の辺にペナルティを掛けた再探索で
+   「別回廊」（例：東北中央道回廊に対する東北道→北上JCT→秋田道）を
+   拾うために使う */
+function icNetPathNodes(nodes, fromId, toId, mulFn){
+  var r = icNetDijkstra(nodes, fromId, toId, mulFn || null);
+  if(!r) return null;
+  var path = [], node = toId;
+  while(node !== fromId){
+    if(!nodes[node]) return null;
+    path.unshift(nodes[node]);
+    node = r.prev[node];
+    if(node == null) return null;
+  }
+  path.unshift(nodes[fromId]);
+  return { km: r.km, nodes: path };
 }
 /* 乗車IC候補×降車IC候補を内部見積もりで評価し、最大3ペアを返す
    （2ペア目以降は降車ICの多様性を確保する。下記参照）。
@@ -8980,6 +9460,11 @@ function localIcPairs(chain){
   if(!chain || chain.length !== 2) return [];
   var o = chain[0], d = chain[1];
   if(!(haversine(o[0], o[1], d[0], d[1]) / 1000 >= 10)) return [];
+  /* v136: 同じODのペア計算は使い回す。ピンプレビューと決定フローで
+     同じ座標列の候補計算が二重に走り、そのたびICネットワークの
+     最短路探索一式を同期実行してメインスレッドを塞いでいた */
+  var key136 = o[0].toFixed(4) + "," + o[1].toFixed(4) + ">" + d[0].toFixed(4) + "," + d[1].toFixed(4);
+  if(localIcPairsCache[key136]) return localIcPairsCache[key136];
   var nodes = icNetBuild();
   function surfEstMin(lat1, lng1, lat2, lng2){
     return haversine(lat1, lng1, lat2, lng2) / 1000 * 1.32 / 22 * 60;
@@ -9032,6 +9517,73 @@ function localIcPairs(chain){
       if(picked.indexOf(pairs[k]) < 0) picked.push(pairs[k]);
     }
   }
+  /* v132: 各ペアにノード列（同梱高速線を辿る形状生成のガイド）を付け、
+     先頭ペアには第1経路の辺へペナルティを掛けた別回廊のノード列も付ける。
+     直線距離ベースの最短は、一般道区間を含む回廊（東北中央道など）を
+     本線が連続する回廊（東北道→秋田道）より短く評価してしまうため、
+     形状生成の段階で両回廊を試せるようにしておく */
+  picked.forEach(function(pr){
+    var pn = null;
+    try{ pn = icNetPathNodes(nodes, pr.entry.id, pr.exit.id); }catch(e){ pn = null; }
+    if(pn) pr.nodes = pn.nodes;
+  });
+  if(picked.length && picked[0].nodes){
+    try{
+      /* 既出経路の辺にペナルティを重ねて最大2本の別回廊を拾う */
+      var penIds = {};
+      picked[0].nodes.forEach(function(n){ penIds[n.id] = true; });
+      var alts = [];
+      for(var round = 0; round < 2; round++){
+        var altP = icNetPathNodes(nodes, picked[0].entry.id, picked[0].exit.id, function(a, b){
+          return (penIds[a.id] && penIds[b.id]) ? 2.5 : 1;
+        });
+        if(!altP || !altP.nodes) break;
+        var dup = alts.some(function(prev){
+          return prev.length === altP.nodes.length &&
+            prev.every(function(n, i){ return n.id === altP.nodes[i].id; });
+        });
+        var sameMain = altP.nodes.length === picked[0].nodes.length &&
+          altP.nodes.every(function(n, i){ return n.id === picked[0].nodes[i].id; });
+        if(dup || sameMain) break;
+        alts.push(altP.nodes);
+        altP.nodes.forEach(function(n){ penIds[n.id] = true; });
+      }
+      /* 路線回避の別回廊：本線で使った中間の路線を丸ごと避ける案も
+         用意する。辺ペナルティ方式の別回廊は、北部で結局同じ回廊
+         （一般道区間を含む東北中央道など）へ合流してしまうことが
+         あり、その回廊の欠落区間で形状生成が失敗する。路線単位で
+         避ければ、本線が連続する回廊（東北道→北上JCT→秋田道）が
+         候補に残る */
+      var mainNodes = picked[0].nodes;
+      var roadUse = {}, roadLast = {};
+      mainNodes.forEach(function(n, ni){ if(n.road){ roadUse[n.road.road] = (roadUse[n.road.road] || 0) + 1; roadLast[n.road.road] = ni; } });
+      /* 回避の優先順は「経路の後方まで長く続く路線」から：途中降りの
+         主因は目的地側の回廊（例：東北中央道）にあることが多く、
+         先に試すことで生成までの試行回数を減らす */
+      var midRoads = Object.keys(roadUse).filter(function(rn){
+        return roadUse[rn] >= 3 && mainNodes[0].road.road !== rn && mainNodes[mainNodes.length - 1].road.road !== rn;
+      }).sort(function(a, b){ return roadLast[b] - roadLast[a]; });
+      var avoidAlts = [];
+      for(var mr = 0; mr < midRoads.length && avoidAlts.length + alts.length < 4; mr++){
+        var avoid = midRoads[mr];
+        var altR = icNetPathNodes(nodes, picked[0].entry.id, picked[0].exit.id, function(a, b){
+          return (a.road && b.road && a.road.road === avoid && b.road.road === avoid) ? 8 : 1;
+        });
+        if(!altR || !altR.nodes) continue;
+        var dupR = alts.concat(avoidAlts).some(function(prev){
+          return prev.length === altR.nodes.length && prev.every(function(n, i){ return n.id === altR.nodes[i].id; });
+        });
+        var sameR = altR.nodes.length === mainNodes.length && altR.nodes.every(function(n, i){ return n.id === mainNodes[i].id; });
+        if(dupR || sameR) continue;
+        avoidAlts.push(altR.nodes);
+      }
+      /* 路線回避の別回廊を先に試す（長距離の途中降り対策として
+         最も効くのは回廊そのものの差し替えのため） */
+      var allAlts = avoidAlts.concat(alts);
+      if(allAlts.length) picked[0].altNodesList = allAlts;
+    }catch(e){}
+  }
+  localIcPairsCache[key136] = picked;
   return picked;
 }
 /* ペアからOSRMへ渡す経由点列を作る。基本形は [出発地, 乗車IC本線,
@@ -9091,6 +9643,330 @@ function localLegsSane(route, wps){
   }
   return true;
 }
+/* ===== v132: 有料候補の高速区間を同梱高速線から組み立てる =====
+   【なぜOSRMへIC経由点で引き直す方式では直らないか（実測）】
+   関越道 塩沢石打〜六日町・秋田道 大曲〜秋田南では、本線上の2点を
+   そのまま渡しても OSRM は有料区間0〜僅少のルートしか返さなかった
+   （IC代表点は本線から最大1km超ずれている地点もあり、吸着先が
+   料金所側や並行する国道になる。回廊をピン留めしても、ピン間で
+   一般道へ降りる経路を OSRM が選ぶ）。つまり長距離の「途中で降りる」
+   は経由点の工夫では解消しない。そこで高速区間の形状は、同梱した
+   高速線データ（__hwPath）から直接組み立て、OSRMは出発地→乗車IC
+   料金所・降車IC料金所→目的地の一般道レッグだけに使う。
+   検証は従来と同じ物差し（apiCandidateSane・tollWorthy・一般道
+   候補より明確に速いこと）に加え、組み立てた形状自身の
+   「途中降り」が小さいこと（routeMidOffKm）も条件にする */
+function trimGeomNear(geom, target, maxM, fromEnd){
+  if(!geom || geom.length < 2) return geom;
+  var i, found = -1;
+  if(fromEnd){
+    for(i = geom.length - 1; i >= 0; i--){
+      if(haversine(geom[i][0], geom[i][1], target[0], target[1]) <= maxM){ found = i; break; }
+    }
+    return found >= 0 ? geom.slice(0, found + 1) : geom;
+  }
+  for(i = 0; i < geom.length; i++){
+    if(haversine(geom[i][0], geom[i][1], target[0], target[1]) <= maxM){ found = i; break; }
+  }
+  return found >= 0 ? geom.slice(found) : geom;
+}
+/* 一般道レッグの取得：料金所座標への吸着が悪いと大回りループに
+   なることがある（実測：前橋IC料金所を起点にするとOSRMが約4km
+   南下して戻る経路を返した）。料金所とIC本線点の両方を試し、
+   形状が健全で短い方を採用する */
+/* 任意点列のOSRM取得（stitchLegRawの経由点バリアント用） */
+function stitchFetchRaw(pts, cb){
+  if(pts.length === 2){ osrmLegRawSimple(pts[0], pts[1], cb); return; }
+  if(typeof fetch === "undefined"){ cb(null); return; }
+  var hosts = [
+    "https://router.project-osrm.org/route/v1/driving/",
+    "https://routing.openstreetmap.de/routed-car/route/v1/driving/"
+  ];
+  var hi = 0;
+  (function attempt(){
+    if(hi >= hosts.length){ cb(null); return; }
+    var url = hosts[hi++] + pts.map(function(p){ return p[1] + "," + p[0]; }).join(";") +
+      "?overview=full&geometries=geojson&steps=true&alternatives=0";
+    fetch(url).then(function(res){ return res.json(); }).then(function(data){
+      if(data && data.routes && data.routes.length){ cb(data.routes[0]); return; }
+      attempt();
+    }, function(){ attempt(); });
+  })();
+}
+function stitchLegRaw(fromOpts, toOpts, viaPt, cb){
+  var combos = [];
+  fromOpts.forEach(function(f){
+    toOpts.forEach(function(t){
+      var dup = false;
+      for(var i = 0; i < combos.length; i++)
+        if(haversine(combos[i][0][0], combos[i][0][1], f[0], f[1]) < 30 && haversine(combos[i][1][0], combos[i][1][1], t[0], t[1]) < 30) dup = true;
+      if(!dup) combos.push([f, t]);
+    });
+  });
+  /* 経由点バリアント：IC直近の吸着が本線の逆方向になる場合に、
+     ICから目的地（入口側は出発地）方向へ少しずらした点を経由させて
+     初動の向きを強制する（実測：秋田中央ICは料金所起点だと南下して
+     秋田南経由になるが、経由点を挟むと市街へ直行する） */
+  if(viaPt && combos.length){
+    var c0 = combos[0];
+    combos.push([c0[0], viaPt, c0[1]]);
+  }
+  if(!combos.length){ cb(null); return; }
+  var results = [], left = combos.length;
+  combos.forEach(function(cm){
+    stitchFetchRaw(cm, function(r){
+      results.push(r);
+      if(--left > 0) return;
+      var best = null, bestScore = null, bestSane = false;
+      results.forEach(function(rr){
+        if(!rr) return;
+        var g = ((rr.geometry && rr.geometry.coordinates) || []).map(function(c){ return [c[1], c[0]]; });
+        /* レッグの健全性：全体形状用の単調接近・ループ判定は、市街地へ
+           入る正当な一般道（並行する街路を南下→北上する等）でも落ちる
+           ため、迂回率のみで見る。加えて、レッグ自体が高速回廊を
+           走ってしまう吸着ミス（入口・出口レッグの本質的な異常）は
+           同梱高速線との重なり長で判定する */
+        var sane = false, onRunM = 0;
+        try{
+          sane = ptsShapeSane(g, rr.distance, 2.4, 8000, false, true);
+          if(typeof window !== "undefined" && window.__hwMatchRoute){
+            var mm = window.__hwMatchRoute(g);
+            if(mm && mm.flags) for(var fi = 1; fi < g.length; fi++)
+              if(mm.flags[fi] && mm.flags[fi - 1]) onRunM += haversine(g[fi - 1][0], g[fi - 1][1], g[fi][0], g[fi][1]);
+          }
+          /* レッグの大半が高速回廊そのものなら吸着ミスとして落とす。
+             出口の接続道路自体が同梱対象（自動車専用道路等）の場合は
+             一部重なるのが正当なので、絶対量だけでは落とさない */
+          if(onRunM > 4000 && onRunM > (rr.distance || 0) * 0.8) sane = false;
+        }catch(e){ sane = false; }
+        var score = (sane ? 0 : 1e12) + (rr.distance || 0) + onRunM * 1.5;
+        if(bestScore === null || score < bestScore){ bestScore = score; best = rr; bestSane = sane; }
+      });
+      cb(best, bestSane);
+    });
+  });
+}
+/* stitch候補専用の健全性チェック。全体形状への geomShapeSane /
+   starShapeSane は、一般道レッグが高速と交差・近接する正当な
+   形状（実測：前橋ICからの一般道が関越道と同一点を横切る）でも
+   落ちてしまうため、両端一致・実走距離の整合・速度の妥当性と、
+   レッグ単位の形状健全性（stitchLegRaw で担保）で代替する。
+   高速区間が同梱実形状であることと routeMidOffKm の検査が
+   「途中で降りない」ことの担保になる */
+function stitchCandidateSane(cand){
+  var route = cand.route, res = cand.res;
+  if(!route || !route.geomPts || route.geomPts.length < 2) return false;
+  var pts = route.geomPts, dc = route.destCoords;
+  if(dc && dc.length > 2){
+    if(!splitGeomByStops(pts, dc)) return false;
+  } else if(dc && dc.length === 2){
+    if(haversine(dc[0][0], dc[0][1], pts[0][0], pts[0][1]) > 800) return false;
+    if(haversine(dc[1][0], dc[1][1], pts[pts.length - 1][0], pts[pts.length - 1][1]) > 800) return false;
+  }
+  if(res && res.km > 0){
+    var plen = polylineLenM(pts) / 1000;
+    if(Math.abs(plen - res.km) > Math.max(1.5, res.km * 0.12)) return false;
+  }
+  return candSpeedSane(cand);
+}
+function tryStitchTollCandidate(chain, pair, nodes, byKind, fromDisp, destName, out, cb){
+  if(!nodes || nodes.length < 2 || typeof window === "undefined" || !window.__hwPath){ cb(null); return; }
+  var hw = null;
+  try{ hw = window.__hwPath(nodes.map(function(n){ return { pt: [n.lat, n.lng], road: n.road.road }; })); }catch(e){ hw = null; }
+  if(!hw || !(hw.km >= 20) || !hw.pts || hw.pts.length < 8){ cb(null); return; }
+  var eGate = icGateOf(pair.entry.road, pair.entry.ic) || [pair.entry.lat, pair.entry.lng];
+  var xGate = icGateOf(pair.exit.road, pair.exit.ic) || [pair.exit.lat, pair.exit.lng];
+  var eNode = [pair.entry.lat, pair.entry.lng], xNode = [pair.exit.lat, pair.exit.lng];
+  var rawA = null, rawB = null, saneA = false, saneB = false, left = 2;
+  function fin(){
+    if(--left > 0) return;
+    if(!rawA || !rawB || !saneA || !saneB){ cb(null); return; }
+    var cand = null;
+    try{ cand = buildStitchedCandidate(chain, pair, nodes, hw, rawA, rawB, eGate, xGate, byKind, fromDisp, destName); }catch(e){ cand = null; }
+    if(!cand){ cb(null); return; }
+    if(!stitchCandidateSane(cand)){ cb(null); return; }
+    if(routeMidOffKm(cand.route) > 12){ cb(null); return; }
+    var refMin = null;
+    if(out.surface) refMin = candMin(out.surface);
+    else if(out.rec) refMin = candMin(out.rec);
+    var myMin = candMin(cand);
+    if(refMin != null && !(myMin <= refMin - Math.max(6, refMin * 0.08))){ cb(null); return; }
+    cb(cand);
+  }
+  var viaA = null, viaB = null;
+  (function(){
+    var dA = haversine(eNode[0], eNode[1], chain[0][0], chain[0][1]);
+    if(dA > 1500){
+      var fA = Math.min(1000, dA * 0.25) / dA;
+      viaA = [eNode[0] + (chain[0][0] - eNode[0]) * fA, eNode[1] + (chain[0][1] - eNode[1]) * fA];
+    }
+    var dB = haversine(xNode[0], xNode[1], chain[1][0], chain[1][1]);
+    if(dB > 1500){
+      var fB = Math.min(1000, dB * 0.25) / dB;
+      viaB = [xNode[0] + (chain[1][0] - xNode[0]) * fB, xNode[1] + (chain[1][1] - xNode[1]) * fB];
+    }
+  })();
+  /* v136: 一般道レッグの端点候補へ「IC近傍の一般道点」を加える。
+     料金所点・本線点は本線へ吸着しやすく、出口レッグが「いったん
+     高速へ戻って次のICで降りる」形になってレッグ健全性で落ち、
+     高速区間が完璧に組み上がっていても候補全体が棄却されていた
+     （実測：秋田中央の出口レッグは全バリアントが秋田自動車道を
+     6〜9km逆走し、東北道→秋田道の組み立て候補が丸ごと消えた）。
+     入口側はICの約800m手前、出口側は料金所から目的地側へ約800mの
+     一般道点を端点にすれば、OSRMは接続路から素直に引ける */
+  Promise.all([
+    (typeof surfaceApproachPt === "function") ? surfaceApproachPt(chain[0], eGate) : Promise.resolve(null),
+    (typeof exitApproachPt === "function") ? exitApproachPt(xGate, chain[1]) : Promise.resolve(null)
+  ]).then(function(aps){
+    var toOptsA = [eGate, eNode]; if(aps[0]) toOptsA.push(aps[0]);
+    var fromOptsB = [xGate, xNode]; if(aps[1]) fromOptsB.push(aps[1]);
+    stitchLegRaw([chain[0]], toOptsA, viaA, function(r, s){ rawA = r; saneA = !!s; fin(); });
+    stitchLegRaw(fromOptsB, [chain[1]], viaB, function(r, s){ rawB = r; saneB = !!s; fin(); });
+  }, function(){
+    stitchLegRaw([chain[0]], [eGate, eNode], viaA, function(r, s){ rawA = r; saneA = !!s; fin(); });
+    stitchLegRaw([xGate, xNode], [chain[1]], viaB, function(r, s){ rawB = r; saneB = !!s; fin(); });
+  });
+}
+function buildStitchedCandidate(chain, pair, nodes, hw, rawA, rawB, eGate, xGate, byKind, fromDisp, destName){
+  var rtA = osrmRawToRoute(rawA, fromDisp, pair.entry.name, [chain[0], eGate], "locA");
+  var rtB = osrmRawToRoute(rawB, pair.exit.name, destName, [xGate, chain[1]], "locB");
+  if(!rtA || !rtB) return null;
+  var geomA = (rawA.geometry && rawA.geometry.coordinates || []).map(function(c){ return [c[1], c[0]]; });
+  var geomB = (rawB.geometry && rawB.geometry.coordinates || []).map(function(c){ return [c[1], c[0]]; });
+  if(geomA.length < 2 || geomB.length < 2) return null;
+  geomA = trimGeomNear(geomA, hw.pts[0], 150, true);
+  geomB = trimGeomNear(geomB, hw.pts[hw.pts.length - 1], 150, false);
+  var seamA = haversine(geomA[geomA.length - 1][0], geomA[geomA.length - 1][1], hw.pts[0][0], hw.pts[0][1]);
+  var seamB = haversine(hw.pts[hw.pts.length - 1][0], hw.pts[hw.pts.length - 1][1], geomB[0][0], geomB[0][1]);
+  var geom = [];
+  geomA.forEach(function(p){ geom.push(p); });
+  /* v136: 高速区間が geom の何番から何番までか（組み立てた事実）を
+     記録する。プレビュー／案内地図のオレンジ帯は、後段の形状照合
+     （__hwMatchRoute）による再推定ではなく、この区間をそのまま使う */
+  var hwSpanStart = geom.length;
+  hw.pts.forEach(function(p){
+    if(geom.length && haversine(geom[geom.length - 1][0], geom[geom.length - 1][1], p[0], p[1]) < 1) return;
+    geom.push(p);
+  });
+  var hwSpanEnd = geom.length;
+  geomB.forEach(function(p){
+    if(geom.length && haversine(geom[geom.length - 1][0], geom[geom.length - 1][1], p[0], p[1]) < 1) return;
+    geom.push(p);
+  });
+  if(geom.length < 8) return null;
+  /* 高速ポリライン上の累積距離と、各ノード（IC/JCT）の頂点位置 */
+  var cum = [0], i;
+  for(i = 1; i < hw.pts.length; i++) cum.push(cum[i - 1] + haversine(hw.pts[i - 1][0], hw.pts[i - 1][1], hw.pts[i][0], hw.pts[i][1]));
+  var nodeIdx = [], searchFrom = 0;
+  nodes.forEach(function(n){
+    var bi = searchFrom, bd = Infinity;
+    for(var j = searchFrom; j < hw.pts.length; j++){
+      var d = haversine(n.lat, n.lng, hw.pts[j][0], hw.pts[j][1]);
+      if(d < bd){ bd = d; bi = j; }
+    }
+    nodeIdx.push(bi);
+    searchFrom = bi;
+  });
+  /* ステップ列：一般道レッグA（到着ステップを除く）＋高速ステップ列
+     （IC/JCTごと）＋一般道レッグB。leg は前ステップからの距離（m）で、
+     合計が全体形状と一致するよう継ぎ目（料金所⇔本線）分を配分する */
+  /* 経由点バリアント由来の「経由地」ステップは案内には不要なので、
+     距離を次のステップへ寄せて取り除く */
+  function dropViaSteps(steps){
+    var out = [];
+    steps.forEach(function(s){
+      if(s.name === "経由地" && s.to === "経由地を通過"){ out.push(null); out._viaLeg = (out._viaLeg || 0) + (s.leg || 0); return; }
+      if(out._viaLeg){ s = Object.assign({}, s, { leg: (s.leg || 0) + out._viaLeg }); out._viaLeg = 0; }
+      out.push(s);
+    });
+    return out.filter(function(s){ return !!s; });
+  }
+  var stepsA = dropViaSteps(rtA.steps.slice());
+  var droppedLeg = 0;
+  if(stepsA.length && /目的地到着/.test(stepsA[stepsA.length - 1].to || "")){
+    droppedLeg = stepsA[stepsA.length - 1].leg || 0;
+    stepsA.pop();
+  }
+  var hwSteps = [];
+  for(i = 0; i < nodes.length; i++){
+    var n = nodes[i];
+    var legM = (i === 0) ? droppedLeg + seamA : Math.max(0, cum[nodeIdx[i]] - cum[nodeIdx[i - 1]]);
+    var roadLabel = n.road.road;
+    var lanes = genLanes(roadLabel, true);
+    var to;
+    if(i === nodes.length - 1) to = destAreaLabel(destName);
+    else if(nodes[i + 1].road !== n.road) to = nodes[i + 1].road.road + "方面";
+    else to = "本線直進";
+    hwSteps.push({ name: n.name, road: roadLabel, to: to, dir: "straight",
+      leg: Math.round(legM), lanes: lanes, rec: genRec("straight", lanes, true),
+      laneNote: "", toll: true, lat: n.lat, lng: n.lng });
+  }
+  var stepsB = dropViaSteps(rtB.steps.slice());
+  if(stepsB.length) stepsB[0].leg = (stepsB[0].leg || 0) + Math.round(seamB);
+  var steps = stepsA.concat(hwSteps, stepsB);
+  var km = Math.round(polylineLenM(geom) / 100) / 10;
+  if(!(km > 0)) return null;
+  var tm = trafficModel();
+  var hwBaseMin = hw.km / 86 * 60;
+  var min = Math.max(1, Math.round(rtA.min + hwBaseMin * tm.hw + rtB.min));
+  var baseMin = Math.max(1, Math.round(rtA.baseMin + hwBaseMin + rtB.baseMin));
+  var tollKm = Math.round(Math.min(km, hw.km + (rtA.tollKmOsrm || 0) + (rtB.tollKmOsrm || 0)) * 100) / 100;
+  var route = { id: "local-hw-" + pair.entry.name + "-" + pair.exit.name,
+    type: "hw", name: fromDisp + " → " + destName, from: fromDisp, to: destName,
+    km: km, min: min, baseMin: baseMin,
+    traffic: tm.active ? tm.label : null, drive: null, driveNote: "高速・有料道路中心",
+    toll: 0, gates: [["一般道のみ ― 通行料金なし", 0]],
+    steps: steps, geomPts: geom, osrmBuilt: false, localBuilt: true, _geomDense: true,
+    destCoords: chain.slice(), tollKmOsrm: tollKm, tollShareOsrm: km > 0 ? tollKm / km : 0,
+    hwTollKm: hw.km, hwMatched: true, hwSpan: [hwSpanStart, hwSpanEnd] };
+  if(fromDisp === "現在地") route.fromLabel = "現在地";
+  var forced = (byKind.toll && byKind.toll.res)
+    ? { toll: byKind.toll.res.toll, gates: byKind.toll.fare.gates } : null;
+  var toll = 0, gates = route.gates;
+  if(forced){ toll = forced.toll; gates = forced.gates; }
+  route.toll = toll; route.gates = gates;
+  var res = { km: km, min: min, baseMin: baseMin, toll: toll, path: null, edges: null, mode: "local-hw" };
+  if(toll > 0 && byKind.toll && byKind.toll.res){
+    res.path = byKind.toll.res.path || null;
+    res.edges = byKind.toll.res.edges || null;
+  }
+  var cand = { kind: "toll", label: "有料", res: res, route: route,
+    fare: { toll: toll, gates: gates, label: fromDisp + " → " + destName + "（有料）" },
+    baseGates: gates, driveNote: "高速・有料道路中心（" + pair.entry.name + " → " + pair.exit.name + "）",
+    trafficNote: route.traffic ? "渋滞想定込み（" + route.traffic + "）" : null };
+  if(!forced){
+    var gl = [[pair.entry.road.road + " " + pair.entry.name + " → " + pair.exit.name + "（料金不明）", 0]];
+    cand.fare.gates = gl; cand.baseGates = gl; cand.route.gates = gl;
+    cand.tollUnknown = true; cand.priceText = "有料区間あり";
+  }
+  cand.localIcPair = { entry: pair.entry.name, exit: pair.exit.name, hwKm: hw.km,
+    entryRoad: pair.entry.road.road, exitRoad: pair.exit.road.road,
+    entryIdx: parseInt(String(pair.entry.id).split(":")[1], 10),
+    exitIdx: parseInt(String(pair.exit.id).split(":")[1], 10),
+    pairNodes: nodes.map(function(n){ return n.id; }) };
+  return cand;
+}
+/* 有料候補の組み立て（v132）：まず同梱高速線からの組み立て（上記）を
+   試し、失敗した場合だけ従来のOSRM経由点方式へ倒す */
+function tryLocalTollCandidate(chain, byKind, fromDisp, destName, out, cb){
+  var pairs = [];
+  try{ pairs = localIcPairs(chain); }catch(e){ pairs = []; }
+  if(!pairs.length){ cb(null); return; }
+  var jobs = [];
+  pairs.forEach(function(pr){
+    if(pr.nodes) jobs.push({ pair: pr, nodes: pr.nodes });
+    if(pr.altNodesList) pr.altNodesList.forEach(function(an){ jobs.push({ pair: pr, nodes: an }); });
+  });
+  var ji = 0;
+  (function nextJob(){
+    if(ji >= jobs.length){ tryLocalTollCandidateOsrm(chain, byKind, fromDisp, destName, out, cb); return; }
+    var job = jobs[ji++];
+    tryStitchTollCandidate(chain, job.pair, job.nodes, byKind, fromDisp, destName, out, function(cand){
+      if(cand){ cb(cand); return; }
+      nextJob();
+    });
+  })();
+}
 /* 有料候補が無いときに、内部ICペアから有料候補を組み立てる。
    ICによっては料金所座標や本線点への吸着が周回路になるため、
    組み立ては複数バリアント（本線点のみ／料金所点への置換等）を
@@ -9098,7 +9974,7 @@ function localLegsSane(route, wps){
    リルートと同じ物差し（両端一致・有料区間のtollWorthy・
    apiCandidateSane）に加え、一般道候補（無ければ推奨）より明確に
    速いこと（6分以上かつ8%以上）を提示条件にする */
-function tryLocalTollCandidate(chain, byKind, fromDisp, destName, out, cb){
+function tryLocalTollCandidateOsrm(chain, byKind, fromDisp, destName, out, cb){
   var pairs = [];
   try{ pairs = localIcPairs(chain); }catch(e){ pairs = []; }
   if(!pairs.length){ cb(null); return; }
@@ -9150,13 +10026,25 @@ function tryLocalTollCandidate(chain, byKind, fromDisp, destName, out, cb){
       var cand = osrmMakeCandidate("toll", "有料", route, byKind, fromDisp, destName, chain, forced);
       if(!cand || !tollWorthy(cand.route.tollShareOsrm, cand.route.tollKmOsrm)){ attemptPair(); return; }
       if(!apiCandidateSane(cand)){ attemptPair(); return; }
+      /* v136: 回廊一致の最終検査。この方式の候補は「選んだICペアの
+         高速回廊を通る」ことが前提だが、OSRMはIC経由点の間でも
+         一般道へ降りることがあり（実測：秋田道や東北中央道回廊で
+         国道へ落ち、高速と一般道が混ざった候補がそのまま有料候補に
+         なっていた）、色判定も含めて表示が崩れていた。組み立て候補
+         （stitch）と同じ物差しで、途中の一般道区間が長いものは
+         そのペアの候補として採用せず、次のペアへ進む */
+      if(routeMidOffKm(cand.route) > 12 || routeTailOffKm(cand.route) > 20){ attemptPair(); return; }
       var myMin = candMin(cand);
       if(refMin != null && !(myMin <= refMin - Math.max(6, refMin * 0.08))){ attemptPair(); return; }
       if(!forced){
         var gl = [[pair.entry.road.road + " " + pair.entry.name + " → " + pair.exit.name + "（料金不明）", 0]];
         cand.fare.gates = gl; cand.baseGates = gl; cand.route.gates = gl;
       }
-      cand.localIcPair = { entry: pair.entry.name, exit: pair.exit.name, hwKm: pair.hwKm };
+      cand.localIcPair = { entry: pair.entry.name, exit: pair.exit.name, hwKm: pair.hwKm,
+        entryRoad: pair.entry.road.road, exitRoad: pair.exit.road.road,
+        entryIdx: parseInt(String(pair.entry.id).split(":")[1], 10),
+        exitIdx: parseInt(String(pair.exit.id).split(":")[1], 10),
+        pairNodes: pair.nodes ? pair.nodes.map(function(n){ return n.id; }) : null };
       cand.driveNote = "高速・有料道路中心（" + pair.entry.name + " → " + pair.exit.name + "）";
       cb(cand);
     }
@@ -9185,19 +10073,33 @@ function assembleApiCandidates(chain, byKind, fromDisp, destName, customInfo, cb
       /* v130: 有料候補が「あるが長距離の途中で切れている」場合（例：都内→
          秋田で宇都宮から先が一般道になる候補）も、内部ICペア生成で
          有料区間が大幅に長い候補が作れれば差し替える（旧候補は別案へ） */
-      var partialLong = false;
+      /* v132: 「途中で切れている」の判定を、有料区間の割合（旧：5割未満）
+         から「途中の一般道区間の長さ」へ変える。実測した都内→秋田
+         （有料347km/567km＝61%）・都内→新潟（215km/313km＝69%）は、
+         割合では過半でも途中に95〜218kmの一般道区間があり、旧判定を
+         すり抜けていた。routeMidOffKm は同梱高速線との照合で、最初と
+         最後の高速区間に挟まれた一般道区間の最大長を返す */
+      var partialLong = false, curMidOff = 0, curTailOff = 0;
       if(out.toll && chain && chain.length === 2){
         var tk = out.toll.route && out.toll.route.tollKmOsrm;
         var tot = (out.toll.res && out.toll.res.km) || (out.toll.route && out.toll.route.km) || 0;
         var straight = haversine(chain[0][0], chain[0][1], chain[1][0], chain[1][1]) / 1000;
-        if(tk != null && tot > 0 && straight >= 120 && tk < tot * 0.5) partialLong = true;
+        curMidOff = routeMidOffKm(out.toll.route);
+        curTailOff = routeTailOffKm(out.toll.route);
+        /* 発動条件（v133で拡張）：有料比率が87%未満、途中の一般道
+           区間が20km以上、または降りたまま目的地まで25km以上。
+           比率だけでは「北上まで乗って残り150kmが一般道」（比率は
+           7割前後）を取りこぼすため、末尾の降りっぱなしも見る */
+        if(tot > 0 && straight >= 120 && ((tk != null && tk < tot * 0.87) || curMidOff >= 20 || curTailOff >= 25)) partialLong = true;
       }
       if(!out.toll || partialLong){
         tryLocalTollCandidate(chain, byKind, fromDisp, destName, out, function(lc){
           if(lc){
             if(!out.toll) out.toll = lc;
-            else if(lc.route && lc.route.tollKmOsrm > (out.toll.route.tollKmOsrm || 0) + 40 &&
-                    candMin(lc) <= candMin(out.toll) * 1.15){
+            else if(candMin(lc) <= candMin(out.toll) * 1.15 &&
+                    ((lc.route && lc.route.tollKmOsrm > (out.toll.route.tollKmOsrm || 0) + 40) ||
+                     (curMidOff >= 20 && routeMidOffKm(lc.route) <= Math.max(5, curMidOff - 15)) ||
+                     (curTailOff >= 25 && routeTailOffKm(lc.route) <= Math.max(8, curTailOff - 15)))){
               if(!out.alt) out.alt = out.toll;
               out.toll = lc;
             }
@@ -9285,6 +10187,7 @@ function maybeRefreshTtNav(){
    OSRMの最速経路は首都高・外環などの有料道路を通ることがあるため、
    一般道（無料）ルートの選定ではこの判定で有料区間を除外する。 */
 function isTollRoadStep(st){
+  if(st.__toll) return true; /* 旧形状の切り出しステップが引き継いだ有料印（sliceGeomRaw） */
   var name = st.name || "", ref = (st.ref || "").trim();
   if(/高速|首都高|自動車道|有料道路|有料橋|アクアライン/.test(name)) return true;
   /* 「高速」「自動車道」を名前に含まない有料道路（京葉道路・第三京浜・
@@ -9318,6 +10221,42 @@ function osrmTollKm(r0){
    実測：この方式で狭山→渋谷の一般道が有料0.00kmで引けた */
 /* 直線補間点を実道路へ吸着させる。有料道路名の吸着点は避け、
    吸着先が1.5km超遠い点は経由点として使わない */
+/* v136: 名前のある一般道へ広域吸着する。粗ルート（高速道路）の上の
+   点を通常吸着すると、本線の無名セグメントを掴んで到達不能な
+   経由点になるため、候補20点・3km以内から「名前があり有料道路で
+   ない」最初の候補を選ぶ。無ければ null（呼び出し側で点ごと落とす） */
+/* v136: 点が有料道路の上（本線スタックの中）に乗っているかを
+   最寄り道路名で判定する。nearest の候補には ref が無く、高速の
+   トンネル名（関越トンネル等）は isTollRoadStep のパターンにも
+   掛からないため、200m以内の候補に対象名があればスタック内と
+   みなす（用途は粗ルート経由点のスクリーニング限定で、多少の
+   過剰除外は経由点の冗長性で吸収できる） */
+function ptOnTollRoad(p){
+  if(typeof fetch === "undefined") return Promise.resolve(false);
+  return fetch("https://router.project-osrm.org/nearest/v1/driving/" + p[1] + "," + p[0] + "?number=6")
+    .then(function(res){ return res.json(); }).then(function(d){
+      var wps = (d && d.waypoints) || [];
+      for(var i = 0; i < wps.length; i++){
+        if(wps[i].distance > 200) break;
+        var nm = wps[i].name || "";
+        if(isTollRoadStep({ name: nm, ref: "" }) || /トンネル/.test(nm)) return true;
+      }
+      return false;
+    }).catch(function(){ return false; });
+}
+function snapSurfaceViaWide(p){
+  if(typeof fetch === "undefined") return Promise.resolve(null);
+  return fetch("https://router.project-osrm.org/nearest/v1/driving/" + p[1] + "," + p[0] + "?number=20")
+    .then(function(res){ return res.json(); }).then(function(d){
+      var wps = (d && d.waypoints) || [];
+      for(var i = 0; i < wps.length; i++){
+        var nm = wps[i].name || "";
+        if(nm && !isTollRoadStep({ name: nm, ref: "" }) && wps[i].distance <= 3000)
+          return [wps[i].location[1], wps[i].location[0]];
+      }
+      return null;
+    }).catch(function(){ return null; });
+}
 function snapSurfaceVia(p){
   if(typeof fetch === "undefined") return Promise.resolve(null);
   return fetch("https://router.project-osrm.org/nearest/v1/driving/" + p[1] + "," + p[0] + "?number=4")
@@ -9360,35 +10299,149 @@ function surfaceApproachPt(fromPt, nearPt){
   if(!(d > 2200)) return Promise.resolve(null);
   return snapSurfaceVia(lerpPt(fromPt, nearPt, d - 800));
 }
+/* 出口側の一般道アプローチ点：料金所点から目的地側へ約800mの一般道点。
+   surfaceApproachPt（入口側＝ICの手前）の対向版。料金所点・本線点を
+   始点にすると本線へ吸着し、出口レッグが「いったん高速へ戻って
+   次のICで降りる」逆走形になるIC（実測：秋田中央）向け */
+function exitApproachPt(gatePt, destPt){
+  var d = haversine(gatePt[0], gatePt[1], destPt[0], destPt[1]);
+  if(!(d > 2200)) return Promise.resolve(null);
+  return snapSurfaceVia(lerpPt(gatePt, destPt, 800));
+}
 /* a→b の間に約 spacingKm ごとの一般道経由点を挟んだ境界点列を返す */
 function surfaceBounds(a, b, spacingKm){
   var crow = haversine(a[0], a[1], b[0], b[1]) / 1000;
-  var n = Math.min(8, Math.floor(crow / spacingKm));
+  /* v136: 区間数の上限を8→14に上げた。8だと長距離では1区間が
+     数十kmになり、細粒度方式の前提（区間が短いから一般道の代替が
+     返る）が崩れていた。残りの分割は fetchSurfaceLegRaw の再帰が担う */
+  var n = Math.min(14, Math.floor(crow / spacingKm));
   if(n < 1) return Promise.resolve([a, b]);
-  var jobs = [];
+  var jobs = [], rawPts = [];
   for(var i = 1; i <= n; i++){
     (function(f){
-      jobs.push(snapSurfaceVia([a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f]));
+      var rp = [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
+      rawPts.push(rp);
+      jobs.push(snapSurfaceVia(rp));
     })(i / (n + 1));
   }
   return Promise.all(jobs).then(function(vias){
+    /* v136: 吸着できなかった補間点も座標列に残す（OSRM側で最寄りの
+       道路へ吸着される）。従来は落としていたため、山岳部などで
+       吸着が外れると次の境界点まで数十〜100km超の巨大区間になり、
+       その区間が引けず一般道全体が失敗していた */
     var out = [a];
-    vias.forEach(function(v){ if(v) out.push(v); });
+    vias.forEach(function(v, vi){ out.push(v || rawPts[vi]); });
     out.push(b);
     return out;
   });
 }
 /* 1区間（2点間）を一般道で引く：代替から有料ゼロを優先し、無ければ
-   有料最小が toleranceKm 以下のときだけ採用する */
+   有料最小が toleranceKm 以下のときだけ採用する。
+   v136: 受け付けられる案が無い区間は再帰的に半分に割って引き直す。
+   OSRMの代替は区間が長いほど高速経由に寄り、有料ゼロが1本も
+   返らないことが多い（実測：東京→新潟では28km区間で代替が
+   有料案しか返らず、従来の中点1回分割では割り切れず、一般道
+   候補が丸ごと消えていた）。区間が短いほどOSRMの最速は一般道に
+   なるため、約3.5kmまで割る。リクエスト総数は surfLegBudget で
+   抑える（fetchSurfaceFine の入口でリセットする） */
+var surfLegBudget = 480;
+var surfLegLocal = 60; /* v136: レグ1本あたりの予算（並列レグ同士の奪い合い防止） */
 function fetchSurfaceLegRaw(a, b, toleranceKm){
-  return fetch(osrmUrl([a, b], true, 3)).then(function(res){ return res.json(); }).then(function(data){
+  /* v136: 予算はレグ単位で持つ。共有プールだけだと、並列に走る
+     先行レグの再帰が全体の予算を使い切り、後続レグが未試行のまま
+     落ちて一般道全体が組み上がらなかった（実測：予算が負値まで
+     枯渇）。全体キャップ（surfLegBudget）は暴走防止として残す */
+  surfLegLocal = 60;
+  return fetchSurfaceLegRawR(a, b, toleranceKm, 0).then(function(r){
+    if(r) return r;
+    /* v136: OSRM のグラフで一般道が途切れている区間（三川峠の
+       国道17号など、OSRM では有料代替しか返らない峠道）向けに、
+       別エンジン（Valhalla・高速除外指定）でも引いてみる */
+    return fetchSurfaceLegValhalla(a, b);
+  });
+}
+/* Valhalla（OSMコミュニティの公開インスタンス）で高速を除外して
+   引き、OSRM 形式の raw ルートへ変換する。polyline6 の形状と
+   マニューバ（方向・道路名・区間長）を steps へ写す。有料名の
+   ステップを含む場合は採用しない */
+function decodePolyline6(str){
+  var pts = [], lat = 0, lng = 0, i = 0;
+  function readVal(){
+    var v = 0, shift = 0, b;
+    do { b = str.charCodeAt(i++) - 63; v |= (b & 31) << shift; shift += 5; } while(b >= 32);
+    return (v & 1) ? ~(v >> 1) : (v >> 1);
+  }
+  while(i < str.length){
+    lat += readVal(); lng += readVal();
+    pts.push([lat / 1e6, lng / 1e6]);
+  }
+  return pts;
+}
+function fetchSurfaceLegValhalla(a, b){
+  if(typeof fetch === "undefined") return Promise.resolve(null);
+  var body = { locations: [{ lat: a[0], lon: a[1] }, { lat: b[0], lon: b[1] }],
+    costing: "auto", costing_options: { auto: { exclude_motorways: 1 } },
+    shape_format: "polyline6", directions_options: { units: "kilometers" } };
+  return fetch("https://valhalla1.openstreetmap.de/route", { method: "POST",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+    .then(function(r){ return r.json(); }).then(function(j){
+      var trip = j && j.trip;
+      if(!trip || !trip.legs || !trip.legs[0] || !trip.legs[0].shape) return null;
+      var pts = decodePolyline6(trip.legs[0].shape);
+      if(pts.length < 2) return null;
+      var vTypes = { 4: ["arrive", ""], 5: ["arrive", "right"], 6: ["arrive", "left"],
+        9: ["turn", "slight right"], 10: ["turn", "right"], 11: ["turn", "sharp right"],
+        14: ["turn", "sharp left"], 15: ["turn", "left"], 16: ["turn", "slight left"],
+        17: ["continue", "straight"], 8: ["continue", "straight"], 25: ["roundabout", ""],
+        26: ["exit roundabout", ""], 24: ["merge", ""], 1: ["depart", ""], 2: ["depart", "right"], 3: ["depart", "left"] };
+      var steps = [];
+      (trip.legs[0].maneuvers || []).forEach(function(m){
+        var t = vTypes[m.type] || ["continue", "straight"];
+        var bi = (m.begin_shape_index != null) ? m.begin_shape_index : 0;
+        var bp = pts[Math.min(bi, pts.length - 1)] || pts[0];
+        steps.push({ name: (m.street_names && m.street_names[0]) || "", ref: "",
+          distance: (m.length || 0) * 1000,
+          maneuver: { type: t[0], modifier: t[1], location: [bp[1], bp[0]] } });
+      });
+      if(steps.length < 2) return null;
+      var raw = { distance: (trip.summary.length || 0) * 1000, duration: trip.summary.time || 0,
+        geometry: { coordinates: pts.map(function(p){ return [p[1], p[0]]; }) },
+        legs: [{ steps: steps, distance: (trip.summary.length || 0) * 1000, duration: trip.summary.time || 0 }] };
+      if(osrmTollKm(raw) > 0.01) return null;
+      return raw;
+    }).catch(function(){ return null; });
+}
+function fetchSurfaceLegRawR(a, b, toleranceKm, depth){
+  if(typeof fetch === "undefined") return Promise.resolve(null);
+  if(surfLegBudget-- <= 0 || surfLegLocal-- <= 0) return Promise.resolve(null);
+  /* v136: 再帰の深いノードでは第1ホストのみ使う（2ホストとも同じ
+     系統の代替しか返さず、失敗時の通信が倍になるだけのため） */
+  return osrmRouteFetch([a, b], 3, depth > 0).then(function(data){
     var routes = (data && data.routes) || [];
-    if(!routes.length) return null;
-    var free = routes.filter(function(r){ return osrmTollKm(r) <= 0.01; });
-    if(free.length) return pickDrivableRoute(free).chosen;
-    var bt = Infinity, br = null;
-    routes.forEach(function(r){ var tk = osrmTollKm(r); if(tk < bt){ bt = tk; br = r; } });
-    return (br && bt <= toleranceKm) ? br : null;
+    var picked = null;
+    if(routes.length){
+      var free = routes.filter(function(r){ return osrmTollKm(r) <= 0.01; });
+      if(free.length) picked = pickDrivableRoute(free).chosen || null;
+      else {
+        var bt = Infinity, br = null;
+        routes.forEach(function(r){ var tk = osrmTollKm(r); if(tk < bt){ bt = tk; br = r; } });
+        if(br && bt <= toleranceKm) picked = br;
+      }
+    }
+    if(picked) return picked;
+    var crow = haversine(a[0], a[1], b[0], b[1]);
+    if(depth >= 6 || crow < 3500) return null;
+    return snapSurfaceVia(lerpPt(a, b, crow / 2)).then(function(sn){
+      /* 吸着できなければ生の補間点で割る（OSRM側が最寄り道路へ吸着する） */
+      var mid = sn || lerpPt(a, b, crow / 2);
+      return Promise.all([
+        fetchSurfaceLegRawR(a, mid, toleranceKm, depth + 1),
+        fetchSurfaceLegRawR(mid, b, toleranceKm, depth + 1)
+      ]).then(function(rr){
+        if(!rr[0] || !rr[1]) return null;
+        return mergeOsrmSegs(rr);
+      });
+    });
   }).catch(function(){ return null; });
 }
 /* 結合形状の折り返しスパー検出：進んだ先で元の場所の近く（30m以内）へ
@@ -9439,19 +10492,10 @@ function fetchSurfaceBoundsR(bounds, toleranceKm, repairsLeft){
   var jobs = [];
   for(var i = 0; i < bounds.length - 1; i++){
     (function(a, b){
-      jobs.push(fetchSurfaceLegRaw(a, b, toleranceKm).then(function(r){
-        if(r) return r;
-        return snapSurfaceVia(lerpPt(a, b, haversine(a[0], a[1], b[0], b[1]) / 2)).then(function(mid){
-          if(!mid) return null;
-          return Promise.all([
-            fetchSurfaceLegRaw(a, mid, toleranceKm),
-            fetchSurfaceLegRaw(mid, b, toleranceKm)
-          ]).then(function(rr){
-            if(!rr[0] || !rr[1]) return null;
-            return mergeOsrmSegs(rr);
-          });
-        });
-      }));
+      /* v136: 区間が引けない場合の分割は fetchSurfaceLegRaw 自身が
+         再帰的に行う（中点の吸着失敗時も生座標で割れる）。ここでの
+         二重の分割は廃止した */
+      jobs.push(fetchSurfaceLegRaw(a, b, toleranceKm));
     })(bounds[i], bounds[i + 1]);
   }
   var fetchedLegs = null;
@@ -9518,7 +10562,104 @@ function repairSurfaceFolds(bounds, toleranceKm, merged, legs, repairsLeft){
    形状の端は anchoredGeomPts が元の点へ繋ぐ） */
 function fetchSurfaceFine(coords){
   if(!coords || coords.length < 2 || typeof fetch === "undefined") return Promise.resolve(null);
+  surfLegBudget = 480; /* v136: 再帰分割のリクエスト総数予算を入口で戻す */
+  /* v136: 区間の経由点は、まず引いた粗ルート（最速）の実形状から等間隔に
+     拾う。直線補間だと山岳部で稜線の反対側に点が落ち、レグごとに谷を
+     往復する形状（東京→新潟で実測695km、正規の一般道は約340km）が
+     組み上がって健全性チェックに落ち、一般道候補が消えていた。
+     粗ルートが高速道路でも、その形状沿いの点同士を一般道で結べば
+     並行する国道の回廊になる。粗ルートが取れない区間は従来の
+     直線補間（surfaceBounds）に倒す */
+  function coarseBounds(a, b, spacingKm){
+    var crow = haversine(a[0], a[1], b[0], b[1]) / 1000;
+    var n = Math.min(14, Math.floor(crow / spacingKm));
+    if(n < 1) return Promise.resolve([a, b]);
+    return osrmRouteFetch([a, b], 0).then(function(j){
+      if(!j || !j.routes || !j.routes[0] || !j.routes[0].geometry || !j.routes[0].geometry.coordinates) return null;
+      var g = j.routes[0].geometry.coordinates;
+      var total = 0, cum = [0], i;
+      for(i = 1; i < g.length; i++){ total += haversine(g[i - 1][1], g[i - 1][0], g[i][1], g[i][0]); cum.push(total); }
+      if(!(total > 0)) return null;
+      var raw = [], stepM = total / (n + 1), target = stepM, gi = 1;
+      for(var k = 1; k <= n; k++){
+        while(gi < cum.length - 1 && cum[gi] < target) gi++;
+        /* 吸着の予備として、進行方向の左右300mの点も持つ。高速の
+           高架・盛土区間では最寄り候補が本線セグメントで埋まり、
+           名前のある一般道が候補に入らないため */
+        var pc = [g[gi][1], g[gi][0]];
+        var pPrev = [g[Math.max(0, gi - 1)][1], g[Math.max(0, gi - 1)][0]];
+        var pNext = [g[Math.min(g.length - 1, gi + 1)][1], g[Math.min(g.length - 1, gi + 1)][0]];
+        var dLa = pNext[0] - pPrev[0], dLn = (pNext[1] - pPrev[1]) * Math.cos(pc[0] * Math.PI / 180);
+        var dl = Math.sqrt(dLa * dLa + dLn * dLn) || 1;
+        var offD = 300 / 111320, cosLa = Math.cos(pc[0] * Math.PI / 180) || 1;
+        raw.push({ c: pc,
+          l: [pc[0] + (-dLn / dl) * offD, pc[1] + (dLa / dl) * offD / cosLa],
+          r: [pc[0] - (-dLn / dl) * offD, pc[1] - (dLa / dl) * offD / cosLa] });
+        target += stepM;
+      }
+      /* 粗ルート上の点は高速道路の上にあることが多く、レグ取得
+         （両端が一般道上の前提で有料を含まない代替を選ぶ仕組み）が
+         そのままでは成立しない。一般道へ吸着させてから渡す。
+         通常の吸着（最寄り4点・無名可）だと、高速本線の無名
+         セグメント（名前なしで有料判定をすり抜ける）を掴んで
+         「その点へは高速でしか着けない」境界点が残ることがある
+         （実測：東北道上の点で全レグ失敗）。そのため粗ポイント
+         専用に、名前のある一般道を広域（20候補・3km）から探す
+         吸着を優先し、どちらでも吸着できない点は境界から落とす
+         （区間が伸びても再帰分割が回復する） */
+      return Promise.all(raw.map(function(o){
+        return Promise.all([snapSurfaceViaWide(o.c), snapSurfaceViaWide(o.l), snapSurfaceViaWide(o.r)])
+          .then(function(ws){
+            if(ws[0] || ws[1] || ws[2]) return ws[0] || ws[1] || ws[2];
+            /* 名前のある一般道が近くに無い地域（山間部など）では、
+               中心点の吸着は本線の無名セグメント（到達不能な経由点）
+               になりがちなので、左右オフセット点の吸着を先に試す */
+            return snapSurfaceVia(o.l).then(function(sl){
+              if(sl) return sl;
+              return snapSurfaceVia(o.r).then(function(sr){
+                if(sr) return sr;
+                return snapSurfaceVia(o.c).then(function(sc){
+                  /* 中心の吸着が粗ルート点の60m以内＝本線の真上に
+                     落ちた場合は、その点へは高速でしか着けない
+                     （実測：関越トンネル坑口付近）ため経由点として
+                     使わず落とす（区間が伸びても再帰分割が回復する） */
+                  if(sc && haversine(sc[0], sc[1], o.c[0], o.c[1]) > 60) return sc;
+                  return null;
+                });
+              });
+            });
+          });
+      })).then(function(sn){
+        /* 最終スクリーニング：吸着先が有料道路の上にある点は落とす。
+           どの吸着経路でも、本線の無名セグメントやランプを掴むと
+           その点へ一般道で到達できず、隣接レグが全滅するため */
+        return Promise.all(sn.map(function(p){
+          if(!p) return null;
+          return ptOnTollRoad(p).then(function(on){ return on ? null : p; });
+        })).then(function(kept){
+          var out = [a];
+          raw.forEach(function(o, pi){ if(kept[pi]) out.push(kept[pi]); });
+          out.push(b);
+          return out.length > 2 ? out : null;
+        });
+      });
+    }).catch(function(){ return null; });
+  }
   function buildBounds(all, spacing){
+    var seq = Promise.resolve([all[0]]);
+    for(var i = 0; i < all.length - 1; i++){
+      (function(a, b){
+        seq = seq.then(function(acc){
+          return coarseBounds(a, b, spacing).then(function(bd){
+            if(bd) return acc.concat(bd.slice(1));
+            return surfaceBounds(a, b, spacing).then(function(bd2){ return acc.concat(bd2.slice(1)); });
+          });
+        });
+      })(all[i], all[i + 1]);
+    }
+    return seq;
+  }
+  function buildBoundsStraight(all, spacing){
     var seq = Promise.resolve([all[0]]);
     for(var i = 0; i < all.length - 1; i++){
       (function(a, b){
@@ -9537,6 +10678,12 @@ function fetchSurfaceFine(coords){
       });
   }
   return attempt(coords).then(function(r){
+    if(r) return r;
+    /* v136: 粗ルート回廊方式がレグ不成立で全滅した場合は、従来の
+       直線補間方式でもう一度組み立てる。回廊の質は粗方式が上だが、
+       東北方面など直線方式で組み上がるODを取りこぼさないため */
+    return buildBoundsStraight(coords, 5).then(function(bd){ return fetchSurfaceBounds(bd, 0.35); });
+  }).then(function(r){
     if(r) return r;
     var first = coords[0], last = coords[coords.length - 1];
     return Promise.all([snapSurfaceVia(first), snapSurfaceVia(last)]).then(function(sn){
@@ -9566,7 +10713,7 @@ function fetchSurfaceFine(coords){
    登録地点（練馬など）ではなく、今いる場所の次の曲がり角から案内が始まる。 */
 function buildOsrmSurfaceRoute(baseRoute, coords, cb){
   if(!coords || coords.length < 2 || typeof fetch === "undefined"){ cb(null); return; }
-  fetch(osrmUrl(coords, true, 3)).then(function(res){ return res.json(); }).then(function(data){
+  osrmRouteFetch(coords, 3).then(function(data){
     if(!data || !data.routes || !data.routes[0]){ cb(null); return; }
     /* 一般道（無料であるべきルート）は、有料区間を含まない代替経路だけから選ぶ。
        OSRM公開サーバーは有料回避パラメータ（exclude）を受け付けないため、
@@ -9601,7 +10748,7 @@ function buildOsrmSurfaceRoute(baseRoute, coords, cb){
     var results = new Array(coords.length - 1), remaining = coords.length - 1, failed = false;
     for(var li = 0; li < coords.length - 1; li++){
       (function(idx){
-        fetch(osrmUrl([coords[idx], coords[idx + 1]], true, 3)).then(function(res){ return res.json(); }).then(function(data){
+        osrmRouteFetch([coords[idx], coords[idx + 1]], 3).then(function(data){
           if(failed) return;
           if(!data || !data.routes || !data.routes.length){ failed = true; cb(null); return; }
           var lp = data.routes;
@@ -9869,7 +11016,7 @@ function navHeadingDeg(){
   return navLastHeading;
 }
 var navPtrActive = false; /* 指で地図を操作している間は追従・回転を止める（競合による振動防止） */
-var navRotateHold = false; /* 2本指で手動回転した間は方位追従を止め、自動で現在地へ戻るタイミング（再センタリング）で解除する */
+var navRotateHold = false; /* 2本指で手動回転した間は方位追従を止め、「現在地に戻る」ボタンで追従へ戻るときに解除する（v136：自動復帰は廃止） */
 var navHeadingTarget = 0, navHeadingAnimId = null;
 /* 目標方位へ最短方向にイージングしながら近づける（カクつかない追従にする） */
 function animateNavHeading(){
@@ -9927,20 +11074,17 @@ function navViewCenter(pos){
     return navMap.unproject(pt, navZoomDefault);
   }catch(e){ return pos; }
 }
+/* v136: 追従への自動復帰は廃止した。以前は地図を触ると3.5秒後に
+   自動で追従が再開し、現在地へセンタリングし直していたため、
+   案内中に地図を眺めていると表示位置を奪われていた。追従を止めたら
+   そのままにし、現在地へ戻すのは「現在地に戻る」ボタンを押した
+   ときだけにする */
 function scheduleNavRecenter(){
-  if(navRecenterTimer) clearTimeout(navRecenterTimer);
-  navRecenterTimer = setTimeout(function(){
-    navRecenterTimer = null;
-    navMapFollow = true;
-    navRotateHold = false; /* 追従に戻るタイミングで手動回転も解除し、方位へイージングで戻す */
-    var pos = navCurrentPos();
-    if(navMap && pos) navMap.setView(navViewCenter(pos), navZoomDefault, {animate:true});
-    applyNavHeading();
-  }, 3500);
+  if(navRecenterTimer){ clearTimeout(navRecenterTimer); navRecenterTimer = null; }
 }
 function navUserTouched(){
   navMapFollow = false;
-  scheduleNavRecenter();
+  scheduleNavRecenter(); /* 旧自動復帰タイマーが残っていたら止めるだけ */
 }
 function navOnHw(){ return !!(state.route && state.route.type === "hw"); }
 function navRoutePts(){
@@ -10107,7 +11251,7 @@ function initNavMap(){
       }
     }
     if(Object.keys(ptrs).length < 2){ pinchDPrev = 0; pinchAngLast = null; }
-    if(!Object.keys(ptrs).length){ navPtrActive = false; applyNavHeading(); scheduleNavRecenter(); }
+    if(!Object.keys(ptrs).length){ navPtrActive = false; applyNavHeading(); /* v136: 指を離しても追従へ自動復帰しない */ }
   }
   mc.addEventListener("pointerup", ptrEnd);
   mc.addEventListener("pointercancel", ptrEnd);
@@ -10117,6 +11261,16 @@ function initNavMap(){
     var z = navMap.getZoom() + (e.deltaY < 0 ? 1 : -1);
     navMap.setZoom(Math.max(mapZoomMin(), Math.min(mapZoomCap(), z)), {animate:false});
   }, {passive:false});
+  /* 現在地に戻るボタン（案内地図）：追従を即座に再開し、既定倍率で
+     現在地へ戻す。手動回転も解除して方位追従へ戻す */
+  var nlb = $("navLocateBtn");
+  if(nlb) nlb.addEventListener("click", function(){
+    if(navRecenterTimer){ clearTimeout(navRecenterTimer); navRecenterTimer = null; }
+    navMapFollow = true; navRotateHold = false;
+    var pos = navCurrentPos();
+    if(navMap && pos) navMap.setView(navViewCenter(pos), navZoomDefault, {animate:true});
+    applyNavHeading();
+  });
   setTimeout(function(){
     if(!navMap) return;
     navMap.invalidateSize();
@@ -10193,6 +11347,13 @@ function drawNavHwBands(pts){
   navHwLines.forEach(function(l){ try{ navMapLayer.removeLayer(l); }catch(e){} });
   navHwLines = [];
   if(!pts || pts.length < 2 || typeof L === "undefined" || !navMapLayer) return;
+  /* v136: ローカル組み立て候補は組み立て時の高速区間（hwSpan）で描く
+     （プレビューの drawHwBandsPreview と同じ方針） */
+  var rt136 = (typeof state !== "undefined") ? state.route : null;
+  if(rt136 && rt136.localBuilt && rt136.hwSpan && rt136.geomPts && rt136.geomPts.length > 2){
+    var sp136 = rt136.geomPts.slice(rt136.hwSpan[0], rt136.hwSpan[1]);
+    if(sp136.length > 1){ navHwLines.push(L.polyline(sp136, {color:"#ff9500", weight:6, opacity:0.95, smoothFactor:0}).addTo(navMapLayer)); return; }
+  }
   var m = null;
   try{ m = (typeof window !== "undefined" && window.__hwMatchRoute) ? window.__hwMatchRoute(pts) : null; }catch(e){}
   if(!m || !m.intervals) return;
@@ -10292,10 +11453,13 @@ function renderNav(){
   $("sbProg").style.width = pct + "%";
   /* lanes — 車線案内は手前の分岐を過ぎて、約1.2km手前になるまで出さない */
   var lActive = laneActive() && step.rec.length < step.lanes;
-  document.querySelector(".lanewrap").classList.toggle("hidden", !lActive);
-  $("lanePhrase").textContent = lActive ? lanePhrase(step) : "";
+  /* 一般道の軽い注意（右折専用レーン等）は車線ボックスを出さず、
+     文言だけを同じ場所に短く出す。表示は600m以内に限る */
+  var cActive = !lActive && !!step.laneCaution && (state.remaining <= 600 || state.legTotal <= 600);
+  document.querySelector(".lanewrap").classList.toggle("hidden", !(lActive || cActive));
+  $("lanePhrase").textContent = lActive ? lanePhrase(step) : (cActive ? step.laneCaution : "");
   var viz = $("laneViz"); viz.innerHTML = "";
-  for(var i=1;i<=step.lanes;i++){
+  if(lActive) for(var i=1;i<=step.lanes;i++){
     var rec = step.rec.indexOf(i) >= 0;
     var div = document.createElement("div");
     div.className = "lane" + (rec ? " rec" : "");
@@ -10358,7 +11522,8 @@ function renderSteps(){
     var dd = dirInfo(s.dir);
     row.innerHTML = '<span class="n">'+(i+1)+'</span><span class="body"><span class="nm"></span><span class="dt" style="display:block"></span></span><span class="d"></span>';
     row.querySelector(".nm").textContent = s.name + " ― " + dd.kind;
-    row.querySelector(".dt").textContent = roadDisplay(s) + " ／ " + s.to + (state.route.type === "hw" ? " ／ " + laneText(s) : "");
+    row.querySelector(".dt").textContent = roadDisplay(s) + " ／ " + s.to +
+      (s.laneCaution ? " ／ " + s.laneCaution : ((state.route.type === "hw" || s.laneHard) ? " ／ " + laneText(s) : ""));
     row.querySelector(".d").textContent = distText(s.leg);
     el.appendChild(row);
   });
@@ -10398,6 +11563,9 @@ function tickAnnounce(){
   var a = state.announced; var step = currentStep(); var r = state.remaining;
   var p = navProfile();
   if(r <= p.lane && !a.lane){ a.lane = true; if(state.running && laneGuidanceOn(step)) speak(step.name+"、"+lanePhrase(step)+"。"); }
+  /* 一般道の軽い注意は600m手前で一度だけ読み上げる（車線案内する
+     例外箇所ではそちらが優先するので重ねない） */
+  if(r <= 600 && !a.caution){ a.caution = true; if(state.running && step.laneCaution && !laneGuidanceOn(step)) speak(step.name + "、" + step.laneCaution + "。"); }
   if(r <= p.far + 50 && r > p.mid + 100 && !a.k1){ a.k1 = true; speak(announceFor(step,"1km")); }
   if(r <= p.mid + 20 && r > p.now && !a.m300){ a.m300 = true; speak(announceFor(step,"300m")); }
   /* 精度が50mより悪い間は「まもなく」の新規発話を抑える（回復後に改めて判定する） */
@@ -12392,6 +13560,311 @@ function tollPlanFor(res){
   if(!plan.entries.length || !plan.exits.length) return null;
   return plan;
 }
+/* ============ ローカル生成候補の実ペアからICプランを作る ============
+   【不具合の根本原因（都内→秋田で「降りる 宇都宮」ピンと宇都宮周辺の
+   降り口候補が出た件）】長距離の有料候補は同梱高速線から実ペア
+   （例：安行→秋田中央）で組み立てられるが、ICパネルと地図ピンは
+   料金グラフ由来のプラン（tollPlanFor）から作っていた。料金グラフの
+   有料区間は関東中心で、秋田行きでは宇都宮で打ち切られるため、
+   既定の降り口が宇都宮になり、実形状からの検出（detectIcPairFromGeom）
+   もその±5件の選択肢の中でしか選べず、黒磯板室止まりになっていた。
+   ルート形状自体は秋田まで高速を走っているのに、表示だけ宇都宮で
+   降りる形になっていたのはこの不整合による。
+   【対策】候補が localIcPair（実際に組み立てに使った乗車／降車IC）
+   を持ち、かつグラフ側プランの乗り口／降り口と実ペアがICネットワーク
+   上で大きく（30km超）離れている場合は、プラン自体を実ペアから
+   作り直す。チェーン（間のIC列）は組み立てに使ったノード列を優先し、
+   無ければICネットワークの最短路から路線ごとに区切って作る。
+   料金はグラフが実ペアをカバーしていないため金額を作らず、
+   パネルでは「料金不明」とする（tollUnknown） */
+/* ============ 全国料金概算（公式の料金体系ベース） ============
+   料金グラフ（関東中心）で引けない長距離の料金を、組み立てた回廊
+   （通る路線と区間距離）から公式の料金体系で算出する「概算」。
+   グラフで正確に引ける範囲はそちらが優先され、この概算はグラフの
+   外側と未登録区間のカバーにだけ使う。体系が特殊・区間制・無料
+   混在でこの方式では出せない路線を含む回廊は、金額を作らず null
+   を返して「料金不明」のままにする。
+   【NEXCO系（高速自動車国道・一般有料の対距離区間）】普通車・ETC
+   前提。税抜単価は普通区間24.6円/km、大都市近郊区間29.52円/km。
+   連続したNEXCO系走行を1回の利用として、距離料金の合計に長距離
+   逓減制（100kmまで等倍／100〜200kmの超過分0.75倍／200km超の
+   超過分0.70倍）を掛け、ターミナルチャージ150円を加えて消費税
+   10%を乗じ、10円単位に丸める（1万円を超える場合は100円未満を
+   切り捨てる）。関越トンネル等の特別単価区間は、ETCでは普通単価
+   まで割り引かれるため通常単価で計算する。
+   【首都高】距離制（上限あり）を既存の段階式で算出。【圏央道】
+   既存の近似式。【アクアライン】ETC割引の定額800円。
+   区間距離はIC表座標からの沿道距離に、同梱高速線の実長から求めた
+   補正係数（kmScale）を掛けて実距離へ寄せる。割引（深夜・休日等）
+   は含まない */
+var TOLL_NEXCO_ROADS = { "東名高速": 1, "新東名高速（神奈川区間）": 1, "中央道": 1, "関越道": 1, "東北道": 1, "常磐道": 1, "東関東道": 1, "館山道": 1, "北関東道": 1, "上信越道（群馬区間）": 1, "秋田道": 1, "山形道": 1, "磐越道": 1, "日本海東北道": 1, "八戸道": 1, "北陸道": 1, "名神高速": 1, "新名神高速": 1, "東海北陸道": 1, "近畿道": 1, "阪和道": 1, "中国道": 1, "山陽道": 1, "九州道": 1, "東九州道": 1, "宮崎道": 1, "大分道": 1, "長崎道": 1, "道央道": 1, "高松道": 1, "松山道": 1, "徳島道": 1, "高知道": 1, "舞鶴若狭道": 1, "仙台東部道": 1, "広島道": 1 };
+/* 大都市近郊区間（普通車29.52円/km）。from/to は IC_ROADS の名称 */
+var TOLL_URBAN_ZONES = [
+  { road: "東北道", from: "川口JCT", to: "加須" },
+  { road: "関越道", from: "練馬", to: "東松山" },
+  { road: "東名高速", from: "東京IC", to: "厚木" },
+  { road: "常磐道", from: "三郷JCT", to: "谷田部" },
+  { road: "中央道", from: "高井戸IC", to: "八王子" }
+];
+function tollRoadClass(roadName){
+  if(!roadName) return null;
+  if(roadName.indexOf("首都高") === 0) return "shuto";
+  if(roadName === "東京湾アクアライン") return "aqua";
+  if(roadName === "圏央道") return "keno";
+  if(TOLL_NEXCO_ROADS[roadName]) return "nexco";
+  return null;
+}
+function nexcoTollYen(chargeSum, km){
+  if(!(km > 0) || !(chargeSum > 0)) return 0;
+  var adj = km <= 100 ? km : (km <= 200 ? 100 + (km - 100) * 0.75 : 175 + (km - 200) * 0.70);
+  var v = (chargeSum * (adj / km) + 150) * 1.1;
+  return v > 10000 ? Math.floor(v / 100) * 100 : Math.round(v / 10) * 10;
+}
+/* チェーン区間列から料金概算を返す。{ total, parts:[内訳文字列] }
+   算出できない路線を含む場合は null */
+function estimateTollForChain(segs, eIdx, xIdx, kmScale){
+  if(!segs || !segs.length) return null;
+  var scale = (kmScale > 0.7 && kmScale < 1.4) ? kmScale : 1;
+  var runs = [];
+  segs.forEach(function(sg, si){
+    var from = (si === 0) ? eIdx : sg.entry;
+    var to = (si === segs.length - 1) ? xIdx : sg.exit;
+    if(from == null || to == null) return;
+    runs.push({ road: sg.road, from: from, to: to,
+      km: Math.abs(icAlongDist(sg.road, from, to)) * scale,
+      cls: tollRoadClass(sg.road.road) });
+  });
+  if(!runs.length) return null;
+  for(var i = 0; i < runs.length; i++)
+    if(runs[i].cls == null && runs[i].km > 0.5) return null;
+  /* 連続する同種区間を1ランにまとめる（NEXCOは連続走行で料金計算
+     は1回分、首都高・圏央道は通し距離で1回計算する） */
+  var groups = [];
+  runs.forEach(function(r){
+    var g = groups[groups.length - 1];
+    if(g && g.cls === r.cls && r.cls !== "aqua"){ g.parts.push(r); g.km += r.km; }
+    else groups.push({ cls: r.cls, km: r.km, parts: [r] });
+  });
+  var total = 0, parts = [];
+  groups.forEach(function(g){
+    if(g.cls === "aqua"){ total += 800; parts.push("東京湾アクアライン（ETC割引） " + yen(800)); return; }
+    if(g.km < 0.05) return;
+    if(g.cls === "nexco"){
+      var charge = 0, names = [];
+      g.parts.forEach(function(r){
+        var urban = 0;
+        TOLL_URBAN_ZONES.forEach(function(z){
+          if(z.road !== r.road.road) return;
+          var zi = null, zj = null;
+          r.road.ics.forEach(function(ic, ii){ if(ic[0] === z.from) zi = ii; if(ic[0] === z.to) zj = ii; });
+          if(zi == null || zj == null) return;
+          var a = Math.min(r.from, r.to), b = Math.max(r.from, r.to);
+          var c = Math.min(zi, zj), d = Math.max(zi, zj);
+          var o0 = Math.max(a, c), o1 = Math.min(b, d);
+          if(o1 > o0) urban += Math.abs(icAlongDist(r.road, o0, o1)) * scale;
+        });
+        urban = Math.min(urban, r.km);
+        charge += 24.6 * (r.km - urban) + 29.52 * urban;
+        if(names.indexOf(r.road.road) < 0) names.push(r.road.road);
+      });
+      var amtN = nexcoTollYen(charge, g.km);
+      total += amtN;
+      parts.push(names.join("・") + " 約" + Math.round(g.km) + "km " + yen(amtN));
+    } else if(g.cls === "shuto"){
+      var amtS = TOLL_NETWORKS.shuto.toll(g.km);
+      total += amtS; parts.push("首都高 約" + Math.round(g.km) + "km " + yen(amtS));
+    } else if(g.cls === "keno"){
+      var amtK = TOLL_NETWORKS.keno.toll(g.km);
+      total += amtK; parts.push("圏央道 約" + Math.round(g.km) + "km " + yen(amtK));
+    }
+  });
+  if(!(total > 0)) return null;
+  return { total: total, parts: parts };
+}
+function localPairPlan(cand){
+  var lp = cand && cand.localIcPair; if(!lp) return null;
+  var geom = cand.route && cand.route.geomPts;
+  function resolve(roadName, idx, name, nearPt){
+    if(roadName){
+      for(var ri = 0; ri < IC_ROADS.length; ri++){
+        if(IC_ROADS[ri].road !== roadName) continue;
+        if(idx != null && IC_ROADS[ri].ics[idx] && IC_ROADS[ri].ics[idx][0] === name)
+          return { road: IC_ROADS[ri], idx: idx };
+        for(var ii = 0; ii < IC_ROADS[ri].ics.length; ii++)
+          if(IC_ROADS[ri].ics[ii][0] === name) return { road: IC_ROADS[ri], idx: ii };
+      }
+    }
+    var best = null, bd = Infinity;
+    IC_ROADS.forEach(function(road){
+      road.ics.forEach(function(ic, ii){
+        if(ic[0] !== name || ic[1] == null) return;
+        var d = nearPt ? haversine(nearPt[0], nearPt[1], ic[1], ic[2]) : 0;
+        if(d < bd){ bd = d; best = { road: road, idx: ii }; }
+      });
+    });
+    return best;
+  }
+  var e = resolve(lp.entryRoad, lp.entryIdx, lp.entry, geom && geom.length ? geom[0] : null);
+  var x = resolve(lp.exitRoad, lp.exitIdx, lp.exit, geom && geom.length ? geom[geom.length - 1] : null);
+  if(!e || !x) return null;
+  if(!icUsable(e.road, e.idx, "entry", null) || !icUsable(x.road, x.idx, "exit", null)) return null;
+  var segs = null;
+  try{
+    var nodes = icNetBuild();
+    var pathNodes = null;
+    if(lp.pairNodes && lp.pairNodes.length > 1){
+      pathNodes = lp.pairNodes.map(function(id){ return nodes[id]; }).filter(function(n){ return !!n; });
+      if(pathNodes.length < 2) pathNodes = null;
+    }
+    if(!pathNodes){
+      var pn = icNetPathNodes(nodes, IC_ROADS.indexOf(e.road) + ":" + e.idx, IC_ROADS.indexOf(x.road) + ":" + x.idx);
+      if(pn) pathNodes = pn.nodes;
+    }
+    if(pathNodes && pathNodes.length > 1){
+      segs = [];
+      pathNodes.forEach(function(n){
+        var nIdx = parseInt(String(n.id).split(":")[1], 10);
+        var last = segs[segs.length - 1];
+        if(last && last.road === n.road) last.exit = nIdx;
+        else segs.push({ road: n.road, entry: nIdx, exit: nIdx });
+      });
+      segs[0].entry = e.idx;
+      segs[segs.length - 1].exit = x.idx;
+    }
+  }catch(err){ segs = null; }
+  if(!segs || !segs.length){
+    if(e.road === x.road) segs = [{ road: e.road, entry: e.idx, exit: x.idx }];
+    else return null;
+  }
+  var chainTotal = 0;
+  segs.forEach(function(sg){ chainTotal += icAlongDist(sg.road, sg.entry, sg.exit); });
+  if(!(chainTotal > 0)) return null;
+  /* 公式料金体系ベースの概算（料金グラフがペアをカバーしない長距離
+     向け）。IC表座標からの沿道距離は実距離とずれるため、同梱高速線
+     の実長（この候補の hwKm）との比で補正してから単価を掛ける */
+  var kmScale = 1;
+  if(lp.hwKm > 0 && chainTotal > 0){
+    var scT = lp.hwKm / chainTotal;
+    if(scT > 0.8 && scT < 1.25) kmScale = scT;
+  }
+  var estCache = {};
+  function estFor(eIdx, xIdx){
+    var key = eIdx + ":" + xIdx;
+    if(!(key in estCache)){
+      var est = null;
+      try{ est = estimateTollForChain(segs, eIdx, xIdx, kmScale); }catch(err){ est = null; }
+      estCache[key] = est;
+    }
+    return estCache[key];
+  }
+  var baseEst = estFor(e.idx, x.idx);
+  function alongWith(eIdx, xIdx){
+    if(segs.length === 1) return icAlongDist(segs[0].road, eIdx, xIdx);
+    var first = segs[0], last = segs[segs.length - 1];
+    var t = chainTotal
+      - icAlongDist(first.road, first.entry, first.exit)
+      - icAlongDist(last.road, last.entry, last.exit)
+      + icAlongDist(first.road, eIdx, first.exit)
+      + icAlongDist(last.road, last.entry, xIdx);
+    return Math.max(0.1, t);
+  }
+  function options(road, def, kind, toward){
+    var out = [];
+    for(var d = -5; d <= 5; d++){
+      var idx = def + d;
+      if(idx < 0 || idx >= road.ics.length) continue;
+      if(icUsable(road, idx, kind, toward)) out.push(idx);
+    }
+    if(out.indexOf(def) < 0 && icUsable(road, def, kind, toward)) out.push(def);
+    out.sort(function(a, b){ return Math.abs(a - def) - Math.abs(b - def); });
+    return out;
+  }
+  var plan = {
+    chain: { segs: segs, total: chainTotal }, baseToll: 0, tollUnknown: true, fromPair: true,
+    entryRoad: e.road, exitRoad: x.road, defEntry: e.idx, defExit: x.idx,
+    entries: options(e.road, e.idx, "entry", segs.length === 1 ? x.idx : segs[0].exit),
+    exits: options(x.road, x.idx, "exit", segs.length === 1 ? e.idx : segs[segs.length - 1].entry),
+    entryName: function(i){ return e.road.ics[i][0]; },
+    exitName: function(i){ return x.road.ics[i][0]; },
+    alongKm: function(eIdx, xIdx){ return alongWith(eIdx, xIdx); },
+    baseAlongKm: alongWith(e.idx, x.idx),
+    betweenNames: function(eIdx, xIdx){
+      var names = [];
+      segs.forEach(function(sg, si){
+        var from = (si === 0) ? eIdx : sg.entry;
+        var to = (si === segs.length - 1) ? xIdx : sg.exit;
+        if(from == null || to == null) return;
+        var step = from <= to ? 1 : -1;
+        for(var i = from; ; i += step){
+          var nm = sg.road.ics[i][0];
+          if(names[names.length - 1] !== nm) names.push(nm);
+          if(i === to) break;
+        }
+      });
+      return names;
+    },
+    tollFor: function(){ return 0; },
+    /* 概算（公式料金体系ベース）。出せない回廊では null のままにし、
+       表示側は「料金不明」に倒す */
+    estTollFor: function(eIdx, xIdx){ return estFor(eIdx, xIdx); },
+    baseEstToll: baseEst ? baseEst.total : null,
+    baseEstParts: baseEst ? baseEst.parts : null
+  };
+  if(!plan.entries.length || !plan.exits.length) return null;
+  return plan;
+}
+/* 2つのICの間隔（km）：同一路線なら沿道距離、別路線ならICネット
+   ワークの経路長（取れなければ直線距離） */
+function icPairGapKm(roadA, idxA, roadB, idxB){
+  var a = roadA && roadA.ics[idxA], b = roadB && roadB.ics[idxB];
+  if(!a || !b || a[1] == null || b[1] == null) return 0;
+  if(roadA === roadB) return Math.abs(icAlongDist(roadA, idxA, idxB));
+  try{
+    var p = icNetPath(icNetBuild(), IC_ROADS.indexOf(roadA) + ":" + idxA, IC_ROADS.indexOf(roadB) + ":" + idxB);
+    if(p && p.km > 0) return p.km;
+  }catch(err){}
+  return haversine(a[1], a[2], b[1], b[2]) / 1000;
+}
+/* ローカル生成候補について、料金グラフ側プランが実ペアから大きく
+   ずれている（＝グラフの有料区間が途中で打ち切られている）場合に、
+   実ペアのプランへ差し替える。差し替え済みなら二度目は触らない
+   （ユーザーがレールでICをずらした後の選択を初期化しないため）。
+   グラフと実ペアが近い候補（関東内など）では従来どおりグラフ側
+   プラン（料金計算つき）を使う */
+function pairPlanAdopt(cand){
+  if(!cand || !cand.localIcPair) return false;
+  if(cand._pairAdopted) return true;
+  var pp = null;
+  try{ pp = localPairPlan(cand); }catch(err){ pp = null; }
+  if(!pp) return false;
+  var gp = null;
+  try{ gp = tollPlanFor(cand.res); }catch(err){ gp = null; }
+  var adopt = !gp;
+  if(gp){
+    if(icPairGapKm(gp.exitRoad, gp.defExit, pp.exitRoad, pp.defExit) > 30) adopt = true;
+    else if(icPairGapKm(gp.entryRoad, gp.defEntry, pp.entryRoad, pp.defEntry) > 30) adopt = true;
+  }
+  if(!adopt) return false;
+  cand.icPlan = pp;
+  cand.icSel = { e: pp.defEntry, x: pp.defExit };
+  cand._icNone = false;
+  cand._pairAdopted = true;
+  /* 概算が出せるペアは、候補カード・プレビュー見出し・案内シート
+     にも「概算」として金額を出す（料金グラフの確定料金とは区別
+     する）。グラフ料金で引けている候補（tollUnknown でないもの）
+     には使わない。推奨の付け替えスコア計算より後に呼ばれる用途
+     （finalizeCandidateList末尾・パネル描画）でのみ fare へ反映し、
+     スコアへは影響させない */
+  if(cand.tollUnknown && pp.baseEstToll != null){
+    cand._estToll = true;
+    cand.priceText = "概算 " + yen(pp.baseEstToll);
+    var estGate = [[pp.entryRoad.road + " " + pp.entryName(pp.defEntry) + " → " + pp.exitName(pp.defExit) + "（概算）", pp.baseEstToll]];
+    cand.fare = { toll: pp.baseEstToll, gates: estGate };
+    cand.baseGates = estGate;
+    if(cand.route){ cand.route.toll = pp.baseEstToll; cand.route.gates = estGate; }
+  }
+  return true;
+}
 /* ============ 推奨との差分表示ヘルパー ============ */
 function fmtTollDelta(d){
   if(d === 0) return "料金は推奨と同じ";
@@ -12611,6 +14084,7 @@ function renderPvIcPanel(){
   if(pvIcLayer) pvIcLayer.clearLayers(); /* 前の候補のIC表示を消す（この後、対象候補なら applyIcSelection が描き直す） */
   var cand = (pendingCandidates && selectedCand >= 0) ? pendingCandidates[selectedCand] : null;
   if(!cand || !cand.res || !(cand.res.toll > 0) || !cand.fare) return;
+  if(cand.localIcPair) pairPlanAdopt(cand);
   if(!cand.icPlan) cand.icPlan = tollPlanFor(cand.res);
   var plan = cand.icPlan; if(!plan) return;
   if(!cand.icSel && !cand._icNone){
@@ -12672,7 +14146,15 @@ function renderPvIcPanel(){
     rail.appendChild(pill);
     var ordered = list.slice().sort(function(a, b){ return dirSign > 0 ? a - b : b - a; });
     var chips = [];
-    ordered.forEach(function(idx){
+    ordered.forEach(function(idx, oi){
+      /* 進行方向が分かるよう、下の帯表示と同じ「›」をチップ間に挟む
+         （並び順＝進行順）。矢印は装飾専用で、ドラッグ判定・タップ
+         判定はチップ側だけで行う */
+      if(oi > 0){
+        var arw = document.createElement("span"); arw.className = "icr-arr"; arw.textContent = "›";
+        arw.setAttribute("aria-hidden", "true");
+        rail.appendChild(arw);
+      }
       var c = document.createElement("button"); c.type = "button"; c.className = "icr-chip";
       c.textContent = road.ics[idx][0];
       if(idx === defIdx){
@@ -12773,6 +14255,11 @@ function renderPvIcPanel(){
   cand._icEls = { amt: amtEl, dlt: dltEl, reopt: reoptEl, head: recLine };
   var note = document.createElement("p"); note.className = "icp-note";
   note.textContent = "料金は有料区間の距離に応じた目安です（ETC）。実際の料金は料金所表示で確認してください。";
+  if(plan.tollUnknown && plan.baseEstToll != null){
+    /* 概算の根拠（公式の料金体系と内訳）を明示する */
+    note.textContent = "料金は公式の料金体系（距離×単価＋ターミナルチャージ、長距離逓減・消費税込み）で計算した概算です（普通車・ETC、割引なし）。内訳：" +
+      (plan.baseEstParts ? plan.baseEstParts.join("／") : "") + "。実際の料金と異なる場合があります。";
+  }
   panel.appendChild(note);
   /* レールは候補ごとに作り直すため、リサイズ時のピル再配置用に参照だけ保持する */
   pvIcRailsRef = rails;
@@ -12791,19 +14278,42 @@ function applyIcSelection(cand, plan, amtEl, dltEl, pairBtns){
      二重計算になるため、その場合は換算を使わない */
   var icOptMatch = !!(cand._icOpt && cand._icGeomPair &&
     cand._icGeomPair.e === cand.icSel.e && cand._icGeomPair.x === cand.icSel.x);
-  var toll = plan.tollFor(cand.icSel.e, cand.icSel.x);
-  cand.icToll = toll;
-  var delta = toll - plan.baseToll;
-  if(delta !== 0){
-    cand.fare.toll = toll;
-    cand.fare.gates = [[plan.entryRoad.road + " " + plan.entryName(cand.icSel.e) + " → " + plan.exitName(cand.icSel.x) + "（IC指定）", toll]];
-  } else {
-    cand.fare.toll = plan.baseToll;
-    if(cand.baseGates) cand.fare.gates = cand.baseGates;
+  /* 実ペアプラン（tollUnknown）は料金グラフがペアをカバーして
+     いないため、距離比で金額は作らない。代わりに、公式の料金体系
+     から算出できる回廊では「概算」として金額を出す（estTollFor）。
+     概算も出せない回廊は従来どおり「料金不明」 */
+  var toll = plan.tollUnknown ? null : plan.tollFor(cand.icSel.e, cand.icSel.x);
+  var estSel = null;
+  if(toll == null && plan.estTollFor){
+    var estObj = plan.estTollFor(cand.icSel.e, cand.icSel.x);
+    if(estObj) estSel = estObj.total;
+  }
+  var delta = 0;
+  if(toll != null){
+    cand.icToll = toll;
+    delta = toll - plan.baseToll;
+    if(delta !== 0){
+      cand.fare.toll = toll;
+      cand.fare.gates = [[plan.entryRoad.road + " " + plan.entryName(cand.icSel.e) + " → " + plan.exitName(cand.icSel.x) + "（IC指定）", toll]];
+    } else {
+      cand.fare.toll = plan.baseToll;
+      if(cand.baseGates) cand.fare.gates = cand.baseGates;
+    }
+  } else if(estSel != null){
+    cand._estToll = true;
+    cand.fare.toll = estSel;
+    cand.fare.gates = [[plan.entryRoad.road + " " + plan.entryName(cand.icSel.e) + " → " + plan.exitName(cand.icSel.x) + "（概算）", estSel]];
+    if(pendingCandidates && pendingCandidates[selectedCand] === cand) pendingEstToll = true;
   }
   if(pendingCandidates && pendingCandidates[selectedCand] === cand) pendingFare = cand.fare;
-  if(amtEl) amtEl.textContent = yen(toll);
-  if(dltEl) dltEl.textContent = delta === 0 ? "推奨ペアと同額" : ("推奨ペアより " + (delta > 0 ? "+¥" : "−¥") + Math.abs(delta));
+  if(amtEl) amtEl.textContent = toll != null ? yen(toll) : (estSel != null ? "概算 " + yen(estSel) : "料金不明");
+  if(dltEl) dltEl.textContent = toll != null
+    ? (delta === 0 ? "推奨ペアと同額" : ("推奨ペアより " + (delta > 0 ? "+¥" : "−¥") + Math.abs(delta)))
+    : (estSel != null && plan.baseEstToll != null
+      ? (estSel === plan.baseEstToll ? "推奨ペアと同額（概算）" : ("推奨ペアより " + (estSel > plan.baseEstToll ? "+¥" : "−¥") + Math.abs(estSel - plan.baseEstToll) + "（概算）"))
+      : "");
+  /* 差分表示など金額の参照が要る箇所は、候補に付いている料金で代用する */
+  var tollRef = toll != null ? toll : (estSel != null ? estSel : (cand.fare ? cand.fare.toll : 0));
   /* パネル見出しも選択中ペアに合わせ直す（ユーザーがレールでICを
      ずらしたとき、見出しだけ既定ペアのまま残らないように） */
   if(cand._icEls && cand._icEls.head) cand._icEls.head.textContent = icHeadlineText(cand, plan);
@@ -12822,7 +14332,7 @@ function applyIcSelection(cand, plan, amtEl, dltEl, pairBtns){
           (shiftMin !== 0 ? "（IC変更で約" + Math.abs(shiftMin) + "分" + (shiftMin < 0 ? "早い" : "遅い") + "・目安）" : "");
       } else {
         var recToll = (rec.icToll != null) ? rec.icToll : rec.res.toll;
-        diffEl.textContent = fmtTollDelta(toll - recToll) + " ・ " +
+        diffEl.textContent = fmtTollDelta(tollRef - recToll) + " ・ " +
           fmtMinDelta((candMin(cand) + shiftMin) - candMin(rec)) +
           " ・ 到着 " + arrivalClock(candMin(cand) + shiftMin) + "頃（推奨は " + arrivalClock(candMin(rec)) + "頃）" +
           (shiftMin !== 0 ? " ※IC変更分の時間差は目安" : "");
@@ -12835,7 +14345,7 @@ function applyIcSelection(cand, plan, amtEl, dltEl, pairBtns){
     if(cdEl && cand.res && rec2 && rec2 !== cand){
       var recToll2 = (rec2.icToll != null) ? rec2.icToll : rec2.res.toll;
       var shiftMin2 = icOptMatch ? 0 : icShiftMin(plan, cand.icSel.e, cand.icSel.x, cand.res.km, candMin(cand));
-      cdEl.textContent = fmtTollDelta(toll - recToll2) + " ・ " + fmtMinDelta((candMin(cand) + shiftMin2) - candMin(rec2));
+      cdEl.textContent = fmtTollDelta(tollRef - recToll2) + " ・ " + fmtMinDelta((candMin(cand) + shiftMin2) - candMin(rec2));
     }
   }
   if(pairBtns) pairBtns.forEach(function(p){
@@ -12844,9 +14354,10 @@ function applyIcSelection(cand, plan, amtEl, dltEl, pairBtns){
   var card = (typeof candCardEls !== "undefined" && candCardEls) ? candCardEls[selectedCand] : null;
   if(card){
     var cp = card.querySelector(".cp");
-    if(cp) cp.textContent = yen(toll);
+    if(cp && toll != null) cp.textContent = yen(toll);
+    else if(cp && estSel != null) cp.textContent = "概算 " + yen(estSel);
   }
-  if(pendingRoute) $("pvMeta").textContent = pvMetaText(pendingRoute, toll);
+  if(pendingRoute) $("pvMeta").textContent = pvMetaText(pendingRoute, tollRef);
   /* 選択中のICペアを地図へも反映する（区間の帯＋乗り口/降り口ピン） */
   drawPvIcMarkers(plan, cand.icSel.e, cand.icSel.x);
   /* ICペアが変わっていたら、一般道部分の再最適化と地図の線の更新を走らせる */
@@ -12940,12 +14451,91 @@ function icChainPoints(plan, eIdx, xIdx){
   }
   return pts;
 }
+/* 乗るIC→降りるICの間に並ぶICを間引かずに全件集める（名前つき）。
+   経由検証（chainPassOk）専用で、OSRMの経由点には使わない */
+function icChainPointsAll(plan, eIdx, xIdx){
+  var pts = [];
+  plan.chain.segs.forEach(function(sg, si){
+    var from = (si === 0) ? eIdx : sg.entry;
+    var to = (si === plan.chain.segs.length - 1) ? xIdx : sg.exit;
+    if(from == null || to == null) return;
+    var step = from <= to ? 1 : -1;
+    for(var i = from; ; i += step){
+      var ic = sg.road.ics[i];
+      if(ic && ic[1] != null){
+        var last = pts[pts.length - 1];
+        if(!last || haversine(last.pt[0], last.pt[1], ic[1], ic[2]) > 40)
+          pts.push({ name: ic[0], pt: [ic[1], ic[2]] });
+      }
+      if(i === to) break;
+    }
+  });
+  return pts;
+}
+/* 有料区間の形状が、プランのチェーン上のICを実際に経由しているか検証する。
+   【不具合の根本原因（長距離で降り口を変えると手前のICを経由しなくなる件）】
+   区間Bの第1段（fetchTollSeg）は経由点を乗降ICと乗換JCTだけに絞って
+   OSRMへ投げ、検証は「距離が想定の0.65〜1.45倍」「有料率50%以上」
+   だけだった。長距離ではこの検証が緩すぎて、途中で高速を降りて
+   一般道（並行国道）を100km超走る形状でも合格してしまっていた
+   （実測：東京→秋田で秋田道を湯田付近で降り、国道107号・13号を
+   約110km走る形状が有料率76%で合格し、横手・大曲・協和など
+   降り口より手前のICを2〜6km離れて通過していた）。OSM側で本線が
+   通行止め扱い等になっている区間があると、OSRMの最速案は本線を
+   維持しないため、検証側で「チェーンのICを経由していること」を
+   直接確認する必要がある。不合格なら既存の深掘り（間のIC全点を
+   経由点にする再試行→IC単位分解＋旧形状の切り出し）が働く。
+   【許容】ICテーブル座標の誤りが実在する（例：東北道・白岡菖蒲は
+   同梱線から約3.2kmずれる）ため、孤立したミスは許容する。落とす
+   のは「ミスが多すぎる」か「2件以上の連続ミスが6km以上に及ぶ」
+   （＝区間として高速を外れている）場合だけにする */
+function chainPassOk(geomPts, plan, eIdx, xIdx){
+  if(!geomPts || geomPts.length < 2 || !plan || !plan.chain) return true;
+  var full = icChainPointsAll(plan, eIdx, xIdx);
+  if(full.length < 3) return true;
+  /* 射影コストを抑えるため形状を最大1200点に間引く（区間への射影
+     距離で判定するので、カーブの弦近似誤差は数mに収まる） */
+  var geom = geomPts;
+  if(geom.length > 1200){
+    var thin = [geom[0]], stp = (geom.length - 1) / 1199;
+    for(var k = 1; k < 1199; k++) thin.push(geom[Math.round(k * stp)]);
+    thin.push(geom[geom.length - 1]);
+    geom = thin;
+  }
+  var cum = [0];
+  for(var ci = 1; ci < full.length; ci++)
+    cum.push(cum[ci - 1] + haversine(full[ci - 1].pt[0], full[ci - 1].pt[1], full[ci].pt[0], full[ci].pt[1]) / 1000);
+  var miss = [];
+  full.forEach(function(f, fi){
+    var pr = projOnGeom(geom, f.pt);
+    if(!pr || pr.d > 500) miss.push(fi);
+  });
+  if(!miss.length) return true;
+  var allow = Math.max(2, Math.floor(full.length * 0.06));
+  if(miss.length > allow) return false;
+  /* 連続ミスの広がり（チェーン沿いkm）を見る */
+  var runStart = miss[0], prev = miss[0];
+  for(var mi = 1; mi <= miss.length; mi++){
+    var cur = (mi < miss.length) ? miss[mi] : null;
+    if(cur == null || cur !== prev + 1){
+      if(prev > runStart && cum[prev] - cum[runStart] >= 6) return false;
+      runStart = cur; 
+    }
+    prev = cur;
+  }
+  return true;
+}
 function takeIcBaseSnap(cand){
   if(cand._icBaseSnap) return;
   var r = cand.route; if(!r) return;
   cand._icBaseSnap = { steps: r.steps, geomPts: r.geomPts, km: r.km, min: r.min, baseMin: r.baseMin,
     destCoords: r.destCoords, osrmCoords: r.osrmCoords, type: r.type, toll: r.toll, gates: r.gates,
     tollKmOsrm: r.tollKmOsrm, tollShareOsrm: r.tollShareOsrm,
+    /* 形状の状態フラグも一緒に保存する。再最適化は _geomDense /
+       _geomSnapTried を立てて帰るため、フラグ無しで形状だけ戻すと
+       復元後の粗い形状が「吸着済み」と誤認され、プレビューの
+       形状取り直しが二度と走らなくなる（直線の弦のまま残る） */
+    geomDense: r._geomDense, geomSnapTried: r._geomSnapTried, osrmBuilt: r.osrmBuilt,
     resKm: cand.res.km, resMin: cand.res.min, ttMin: cand.ttMin };
 }
 function restoreIcBase(cand, plan){
@@ -12956,6 +14546,7 @@ function restoreIcBase(cand, plan){
   r.steps = s.steps; r.geomPts = s.geomPts; r.km = s.km; r.min = s.min; r.baseMin = s.baseMin;
   r.destCoords = s.destCoords; r.osrmCoords = s.osrmCoords; r.type = s.type; r.toll = s.toll; r.gates = s.gates;
   r.tollKmOsrm = s.tollKmOsrm; r.tollShareOsrm = s.tollShareOsrm;
+  r._geomDense = s.geomDense; r._geomSnapTried = s.geomSnapTried; r.osrmBuilt = s.osrmBuilt;
   cand.res.km = s.resKm; cand.res.min = s.resMin; cand.ttMin = s.ttMin;
   cand._icGeomPair = { e: cand._icHomePair.e, x: cand._icHomePair.x };
   cand._icOpt = false;
@@ -12985,9 +14576,20 @@ function scheduleIcReopt(cand, plan){
   cand._icReoptTimer = setTimeout(function(){ reoptimizeIcRoute(cand, plan, seq); }, 300);
 }
 function failIcReopt(cand){
-  /* 採用できなかったペアでは再試行を繰り返さず、従来表示のままにする */
-  cand._icGeomPair = { e: cand.icSel.e, x: cand.icSel.x };
-  cand._icOpt = false;
+  /* 【不具合修正：選び直しても再計算されず、古い一般道ルートが残る件】
+     以前はここで _icGeomPair を「失敗したペア」へ書き換えていた。
+     _icGeomPair は「画面に出ている形状が対応するペア」の記録なので、
+     失敗時に書き換えると scheduleIcReopt の「形状と選択が一致して
+     いる」判定に引っかかり、そのペアでは二度と再計算が走らなく
+     なる（ユーザーが同じ降り口を選び直しても無反応で、失敗の
+     告知文まで次の表示更新で消える）。さらに _icOpt=false の
+     書き換えは、次回の再計算で経由地の振り分け基準が実形状と
+     違うペア（自宅ペア）に化ける原因にもなっていた。
+     失敗時は形状側の記録（_icGeomPair / _icOpt）には一切触らず、
+     失敗したペアは _icFailPair に分けて記録するだけにする。
+     同じペアを選び直せば、scheduleIcReopt が差分を検出して
+     再計算からやり直す */
+  cand._icFailPair = { e: cand.icSel.e, x: cand.icSel.x };
   setIcReoptStatus(cand, "一般道ルートの再計算ができませんでした。従来のルートで表示しています。");
 }
 function refreshIcOptDisplays(cand, plan){
@@ -13309,31 +14911,41 @@ function sliceGeomRaw(geom, fromPt, toPt, oldRoute){
     if(!last || haversine(last[0], last[1], p[0], p[1]) > 5) clean.push(p);
   });
   if(clean.length < 2) return null;
-  var keptSteps = [];
+  var keptSteps = [], midToll = false, midBest = Infinity;
   if(oldRoute && oldRoute.steps){
+    var midChain = (pF.chain + pT.chain) / 2;
     oldRoute.steps.forEach(function(s){
       if(s.lat == null) return;
       var pr = projOnGeom(geom, [s.lat, s.lng]);
-      if(pr && pr.chain > pF.chain + 40 && pr.chain < pT.chain - 40)
+      if(!pr) return;
+      if(Math.abs(pr.chain - midChain) < midBest){ midBest = Math.abs(pr.chain - midChain); midToll = !!s.toll; }
+      if(pr.chain > pF.chain + 40 && pr.chain < pT.chain - 40)
         keptSteps.push({ chain: pr.chain, s: s });
     });
     keptSteps.sort(function(a, b){ return a.chain - b.chain; });
   }
   var rawSteps = [];
-  function pushStep(type, loc, distToNext, name, mod){
-    rawSteps.push({ maneuver: { type: type, modifier: mod || "", location: [loc[1], loc[0]] },
-      distance: Math.max(0, Math.round(distToNext)), name: name || "", ref: "" });
+  function pushStep(type, loc, distToNext, name, mod, toll){
+    var stp = { maneuver: { type: type, modifier: mod || "", location: [loc[1], loc[0]] },
+      distance: Math.max(0, Math.round(distToNext)), name: name || "", ref: "" };
+    /* 旧ステップが有料区間のものは、その印（__toll）と高速の流れ
+       （100km/h）での所要時間を持たせる。切り出しステップは名前に
+       IC名が入るため、名称判定では有料と分からず、所要時間が
+       一般道の速度（16〜22km/h）で計算されて数倍に膨らむ事故が
+       あった（長距離の切り出しで所要1,600分超の実測） */
+    if(toll){ stp.__toll = 1; stp.duration = Math.round(stp.distance / 27.8); }
+    rawSteps.push(stp);
   }
   if(keptSteps.length){
-    pushStep("depart", clean[0], keptSteps[0].chain - pF.chain, "");
+    pushStep("depart", clean[0], keptSteps[0].chain - pF.chain, "", "", keptSteps[0].s.toll);
     keptSteps.forEach(function(k, ki){
       var nextChain = (ki + 1 < keptSteps.length) ? keptSteps[ki + 1].chain : pT.chain;
       var mod = (k.s.dir === "left" || k.s.dir === "fork-left") ? "left"
         : ((k.s.dir === "right" || k.s.dir === "fork-right") ? "right" : "");
-      pushStep("fork", [k.s.lat, k.s.lng], nextChain - k.chain, k.s.name, mod);
+      pushStep("fork", [k.s.lat, k.s.lng], nextChain - k.chain, k.s.name, mod, k.s.toll);
     });
   } else {
-    pushStep("depart", clean[0], pT.chain - pF.chain, "");
+    pushStep("depart", clean[0], pT.chain - pF.chain, "", "", midToll);
   }
   pushStep("arrive", clean[clean.length - 1], 0, "");
   var dist = Math.round(pT.chain - pF.chain);
@@ -13350,8 +14962,14 @@ function fetchTollSegByPairs(pts, oldGeom, oldRoute){
     (function(a, b){
       var expect = haversine(a[0], a[1], b[0], b[1]) / 1000 * 1.3;
       tasks.push(fetchTollSeg([a, b], expect).then(function(r){
+        var sl = oldGeom ? sliceGeomRaw(oldGeom, a, b, oldRoute) : null;
+        /* IC代表点が逆車線側に吸着すると、OSRM側は次のICまで行って
+           戻るループになり距離が大きく膨らむ。旧形状（同梱線ベース
+           の実線）の切り出しがあって、OSRM案がそれより3割超長い
+           場合は、実線の切り出しの方を採る（距離・時間の膨張防止） */
+        if(r && sl && (r.distance || 0) > (sl.distance || 0) * 1.3 + 500) return sl;
         if(r) return r;
-        return oldGeom ? sliceGeomRaw(oldGeom, a, b, oldRoute) : null;
+        return sl;
       }));
     })(pts[i], pts[i + 1]);
   }
@@ -13362,18 +14980,53 @@ function fetchTollSegByPairs(pts, oldGeom, oldRoute){
 }
 /* 区間B（乗るIC→降りるIC）の取得：通常は乗換JCTだけを経由点にする
    （fetchTollSeg）。落ちたら間のIC全点を経由点にして引き直し、
-   それでも駄目ならIC単位の小区間に分解する */
+   それでも駄目ならIC単位の小区間に分解する。
+   【不具合修正】fetchTollSegは非nullを返せば「成功」としてきたが、
+   長距離では途中で高速を外れた形状（一般道を長く走る）でも距離・
+   有料率の緩い検証を通ってしまい、それが採用されて「降り口より
+   手前のICを経由しなくなる」症状になっていた。各段の結果を
+   chainPassOk（チェーン上のICを実際に経由しているか）で検証し、
+   外れている形状は失敗として深掘り段へ進める */
 function fetchTollSegDeep(plan, e, x, segBPts, expectKm, oldGeom, oldRoute){
+  function chainOk(r){
+    if(!r || !r.geometry || !r.geometry.coordinates) return false;
+    var gp = r.geometry.coordinates.map(function(c){ return [c[1], c[0]]; });
+    return chainPassOk(gp, plan, e, x);
+  }
+  /* 距離の健全性：本線を辿る形状なら、チェーン沿い距離（IC座標の
+     弦長合計）に対して実路長はほぼ等しく、膨らんでも+1割程度。
+     全点経由のOSRM案はIC点の逆車線吸着で+3割級に膨らむことが
+     あるため、経由チェックと併せて距離でも採否を判定する */
+  function distOk(r){ return !!r && (r.distance || 0) / 1000 <= expectKm * 1.18 + 3; }
+  function good(r){ return chainOk(r) && distOk(r); }
   return fetchTollSeg(segBPts, expectKm).then(function(r){
-    if(r) return r;
+    if(good(r)) return r;
+    /* 旧形状の一括切り出し：現在の候補の線（同梱高速線ベースの実線）
+       が新しいペアの区間をカバーしているなら、その区間を切り出すの
+       が距離・時間とも最も正確（IC単位に割ると継ぎ目で距離・時間が
+       二重計上され、2〜3割膨らむ実測があった）。経由・距離の検証を
+       通った場合だけ採用する */
+    var slAll = null;
+    try{ slAll = oldGeom ? sliceGeomRaw(oldGeom, segBPts[0], segBPts[segBPts.length - 1], oldRoute) : null; }catch(err){ slAll = null; }
+    if(good(slAll)) return slAll;
     var allPts = icChainPoints(plan, e, x);
-    if(allPts.length > segBPts.length){
-      return fetchTollSeg(allPts, expectKm).then(function(r2){
-        if(r2) return r2;
-        return fetchTollSegByPairs(allPts, oldGeom, oldRoute);
+    var viaAll = allPts.length > segBPts.length ? fetchTollSeg(allPts, expectKm) : Promise.resolve(null);
+    return viaAll.then(function(r2){
+      if(good(r2)) return r2;
+      return fetchTollSegByPairs(allPts.length > 1 ? allPts : segBPts, oldGeom, oldRoute).then(function(r3){
+        /* どの段も「経由＋距離」を満たさない場合は、経由だけでも
+           満たす中で最も短いものを採る（高速を外れた形状より、
+           多少長くても本線を辿る形状の方が正しい）。経由を満たす
+           ものが無ければIC単位分解の結果（無ければ null＝再計算
+           失敗として旧形状を維持）に倒す */
+        var okChain = [slAll, r2, r3].filter(function(q){ return chainOk(q); });
+        if(okChain.length){
+          okChain.sort(function(a, b){ return (a.distance || 0) - (b.distance || 0); });
+          return okChain[0];
+        }
+        return r3;
       });
-    }
-    return fetchTollSegByPairs(allPts.length > 1 ? allPts : segBPts, oldGeom, oldRoute);
+    });
   });
 }
 /* 区間ごとのOSRM生ルートを1本に繋ぐ（perLegFallback と同じ繋ぎ方） */
@@ -13406,8 +15059,16 @@ function reoptimizeIcRoute(cand, plan, seq){
     if(sp.length < 2){ setIcReoptStatus(cand, ""); return; }
     origin = [sp[0].lat, sp[0].lng]; dest = [sp[sp.length - 1].lat, sp[sp.length - 1].lng];
   }
-  /* 経由地を、現在の形状での乗り口／降り口の前後へ振り分ける */
-  var geomPair = cand._icOpt ? cand._icGeomPair : cand._icHomePair;
+  /* 経由地を、現在の形状での乗り口／降り口の前後へ振り分ける。
+     振り分けの基準は「いま画面に出ている形状が対応するペア」
+     （_icGeomPair）でなければならない。以前は _icOpt が false の
+     とき自宅ペアに倒していたが、再最適化済みの形状（ペアB）が
+     出ている状態で別ペアの再計算が失敗すると _icOpt が false に
+     戻り、次の再計算がペアBの形状をペアA基準で振り分けてしまう
+     （経由地の前後判定が狂い、選び直すたびに線がぶれる一因）。
+     _icGeomPair は成功／復元／初期化のときだけ更新される
+     「形状の実ペア」なので、常にこちらを使う */
+  var geomPair = cand._icGeomPair || cand._icHomePair;
   var gE = geomPair ? plan.entryRoad.ics[geomPair.e] : null;
   var gX = geomPair ? plan.exitRoad.ics[geomPair.x] : null;
   var pE = gE ? projOnGeom(geom, [gE[1], gE[2]]) : null;
@@ -13477,8 +15138,27 @@ function reoptimizeIcRoute(cand, plan, seq){
        から切り出して組み立て、線全体が旧ペアのまま残る事態を避ける。
        有料区間が取れない場合だけは、全体を旧表示のままにする */
     var partial = false;
-    if(!rs[0]){ rs[0] = sliceGeomRaw(geom, origin, eGate || entryPt, route); if(rs[0]) partial = true; }
-    if(!rs[2]){ rs[2] = sliceGeomRaw(geom, xGate || exitPt, dest, route); if(rs[2]) partial = true; }
+    /* 【不具合修正：旧形状の切り出しが「古いICで乗り降りする線」を
+       採用してしまう件】一般道区間の取得に失敗したときの切り出しは、
+       新しいICの料金所を旧形状へ射影した点までを切り取る。ところが
+       新しい降り口が旧降り口より手前（乗るICなら奥）の場合、その
+       射影点は旧形状の「有料区間の途中」に落ちるため、切り出しには
+       旧ICまでの高速走行＋旧降り口からの一般道（＝古い一般道ルート
+       そのもの）が丸ごと含まれてしまう。従来はこれをそのまま採用
+       していたので、地図の線は選んだICではなく旧ICで乗り降りする
+       形になり、検証（chainPassOk等）も「高速に長く乗る分には
+       通る」ため素通りしていた。切り出しにランプ分（1.2km）を
+       超える有料走行が含まれる場合は、その区間は新しいICに
+       対応していないとみなして採用せず、区間欠け＝再計算失敗
+       として従来表示を保つ（間違った線を出すより正直な扱い） */
+    if(!rs[0]){
+      var slA = sliceGeomRaw(geom, origin, eGate || entryPt, route);
+      if(slA && rawRouteTollKm(slA) <= 1.2){ rs[0] = slA; partial = true; }
+    }
+    if(!rs[2]){
+      var slC = sliceGeomRaw(geom, xGate || exitPt, dest, route);
+      if(slC && rawRouteTollKm(slC) <= 1.2){ rs[2] = slC; partial = true; }
+    }
     /* 一般道区間が取れても、有料道路の混入がランプ分（1.2km）を
        超えて残った場合は「完全な再計算ではない」として伝える */
     var contaminated = (rs[0] && rawRouteTollKm(rs[0]) > 1.2) || (rs[2] && rawRouteTollKm(rs[2]) > 1.2);
@@ -13493,7 +15173,11 @@ function reoptimizeIcRoute(cand, plan, seq){
     var endsOk = gpts.length > 1 &&
       haversine(gpts[0][0], gpts[0][1], origin[0], origin[1]) <= 500 &&
       haversine(gpts[gpts.length - 1][0], gpts[gpts.length - 1][1], dest[0], dest[1]) <= 500;
-    if(!endsOk || !geomShapeSane(gpts, (merged.distance || 0) / 1000, coords)){ failIcReopt(cand); return; }
+    /* 最終ガード：繋ぎ合わせた形状全体が、選択中ペアのチェーン上の
+       ICを経由していることも確認する（fetchTollSegDeep側の検証を
+       すり抜けた場合や、旧形状の切り出しで組んだ場合の保険）。
+       外れていれば採用せず、前の正しい形状のままにする */
+    if(!endsOk || !geomShapeSane(gpts, (merged.distance || 0) / 1000, coords) || !chainPassOk(gpts, plan, e, x)){ failIcReopt(cand); return; }
     var nr = osrmRawToRoute(merged, route.fromLabel || route.from, route.to, coords, "ic");
     if(!nr){ failIcReopt(cand); return; }
     /* 候補のルートへ実形状・実数値を反映する。料金はICプラン側の値
@@ -13594,6 +15278,7 @@ function selectCandidate(i, skipMap){
   var c = pendingCandidates[i];
   pendingRoute = c.route; pendingFare = c.fare;
   pendingTollUnknown = !!c.tollUnknown;
+  pendingEstToll = !!c._estToll;
   pendingMeta = { km: c.res.km, min: candMin(c) };
   /* TomTom実勢値がある候補では、案内中の到着予測にも補正として引き継ぐ */
   if(c.ttMin != null && c.res.min > 0) pendingRoute.ttCorr = c.ttMin / c.res.min;
@@ -13647,6 +15332,14 @@ function ptsShapeSane(pts, totalM, detourMul, detourAdd, monotonic, skipLoop){
     }
   }
   if(!skipLoop && !loopGeom){
+    /* v136: 再訪イベントを数えてから判定する。旧実装は最初の1件で
+       即座に不合格にしていたが、長距離の実ルートでは立体交差や
+       分割車線の並走で「900m超離れてから230m以内へ接近」が正当に
+       起きる（実測：東京→仙台の国道4号で2箇所）。本物の往復・
+       ループは再訪が経路沿いに密集して大量に出るため、イベントを
+       1.5km単位でクラスタ化し、密集度と総量が長さ比例の上限を
+       超えた場合だけ不合格にする。30km以下は従来どおり1件で落とす */
+    var evPos = [];
     for(var a = 0; a < pts.length; a++){
       var maxEx = 0;
       for(var b = a + 2; b < pts.length; b++){
@@ -13657,8 +15350,22 @@ function ptsShapeSane(pts, totalM, detourMul, detourAdd, monotonic, skipLoop){
            細道では、大きく離れずに2km進んで200m圏内へ戻るのは普通の
            道順（実測：狭山の住宅地で最大離隔687m）。一度大きく
            （900m超）離れてから戻った場合だけ、往復・放射とみなす */
-        if(dab < 230 && maxEx > 900) return false; /* 通った場所へ戻るループ・往復 */
+        if(dab < 230 && maxEx > 900){ evPos.push(cum[a] / 1000); break; }
       }
+      if(evPos.length > 80) return false;
+    }
+    if(evPos.length){
+      if(total <= 30000) return false;
+      evPos.sort(function(x, y){ return x - y; });
+      var clusters = 1, runLen = 1, maxRun = 1;
+      for(var e2 = 1; e2 < evPos.length; e2++){
+        if(evPos[e2] - evPos[e2 - 1] <= 1.5){ runLen++; if(runLen > maxRun) maxRun = runLen; }
+        else { clusters++; runLen = 1; }
+      }
+      var totalKmL = total / 1000;
+      if(maxRun >= 6) return false;
+      if(clusters > Math.max(3, Math.round(totalKmL / 100))) return false;
+      if(evPos.length > Math.max(8, Math.round(totalKmL / 25))) return false;
     }
   }
   return true;
@@ -13791,24 +15498,37 @@ function starShapeSane(pts, stops){
       return true;
     }
   }
-  var P = thinPtsForCheck(pts, 130), n = P.length, i, j;
+  /* v136: 判定を長さ対応にした。旧方式は130点へ間引いて「交差3回・
+     再訪2回」で落としていたが、長距離の実ルート（山道のヘアピン・
+     並行する旧道／バイパス・立体交差）では正常な形状でも交差や
+     自己近接が距離に比例して増え、東京→秋田・仙台の一般道候補が
+     丸ごと落ちていた（実測：秋田の一般道で交差8回）。星型・放射の
+     壊れた形状は「狭い範囲に交差・再訪が密集する」ことが特徴なので、
+     イベント（交差／近接再訪）を沿道位置で数え、局所的な密集
+     （1.5km圏に5件以上）と総量（距離比）でのみ落とす。
+     標本は短距離では従来どおり最大130点、長距離では沿道2.5km間隔を
+     上限として標本間隔が荒くならないようにする（上限500点） */
+  var fullM = 0, fi2;
+  for(fi2 = 1; fi2 < pts.length; fi2++) fullM += haversine(pts[fi2 - 1][0], pts[fi2 - 1][1], pts[fi2][0], pts[fi2][1]);
+  if(!(fullM > 0)) return true;
+  var totalKmS = fullM / 1000;
+  var nSamp = Math.min(500, Math.max(Math.min(130, pts.length), Math.ceil(fullM / 2500) + 1));
+  var P = thinPtsForCheck(pts, nSamp), n = P.length, i, j;
   var cum = [0];
   for(i = 1; i < n; i++) cum.push(cum[i - 1] + haversine(P[i - 1][0], P[i - 1][1], P[i][0], P[i][1]));
   /* 始点≈終点のループ経路では「終端が始点近くへ戻る」のは経路の設計
      そのものなので、両端の近接だけは再訪と数えない（途中の再訪・
      放射の検出は従来どおり効かせる） */
   var loopEnds = n > 3 && haversine(P[0][0], P[0][1], P[n - 1][0], P[n - 1][1]) < 60 && cum[n - 1] > 1500;
-  var revisits = 0;
+  var evPos = [];
   for(i = 0; i < n; i++){
     for(j = i + 2; j < n; j++){
       if(cum[j] - cum[i] < 700) continue;
       if(loopEnds && i <= 1 && j >= n - 2) continue; /* ループの両端の近接 */
       var d = haversine(P[i][0], P[i][1], P[j][0], P[j][1]);
-      if(d < 40) return false; /* ほぼ同一点へ戻る＝往復・放射の芯 */
-      if(d < 110) revisits++;
+      if(d < 110) evPos.push((cum[i] + cum[j]) / 2000);
     }
   }
-  if(revisits >= 2) return false;
   function cross(ax, ay, bx, by, cx, cy){ return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax); }
   function segInt(a, b, c, d){
     var d1 = cross(c[1], c[0], d[1], d[0], a[1], a[0]);
@@ -13817,13 +15537,31 @@ function starShapeSane(pts, stops){
     var d4 = cross(a[1], a[0], b[1], b[0], d[1], d[0]);
     return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0));
   }
-  var crosses = 0;
   for(i = 0; i + 1 < n; i++){
     for(j = i + 2; j + 1 < n; j++){
       if(i === 0 && j + 1 === n - 1) continue; /* 始点と終点が近い環状は対象外 */
-      if(segInt(P[i], P[i + 1], P[j], P[j + 1])){ crosses++; if(crosses > (loopEnds ? 6 : 2)) return false; }
+      if(segInt(P[i], P[i + 1], P[j], P[j + 1])) evPos.push(cum[i] / 1000);
     }
   }
+  if(!evPos.length) return true;
+  evPos.sort(function(a, b){ return a - b; });
+  /* 1.5km以内で連なるイベントを1クラスタとして数える */
+  var clusters = 1, runLen = 1, maxRun = 1;
+  for(i = 1; i < evPos.length; i++){
+    if(evPos[i] - evPos[i - 1] <= 1.5){ runLen++; if(runLen > maxRun) maxRun = runLen; }
+    else { clusters++; runLen = 1; }
+  }
+  /* 狭い範囲への密集＝星型・放射の芯。ただし長距離では、川沿いの
+     対向並行路やヘアピンが続く区間で標本区間同士の交差・近接が
+     1.5km圏に最大8件ほど正当に密集する（実測：東京→秋田の一般道、
+     大曲付近）。星型の芯は数十件規模で密集するため、長距離では
+     上限を段階的に緩める（短距離は従来どおり5件で落とす） */
+  var runLimit = totalKmS < 30 ? 5 : (totalKmS < 150 ? 7 : 10);
+  if(maxRun >= runLimit) return false;
+  var clLimit = totalKmS < 30 ? 3 : Math.max(4, Math.round(totalKmS / 50));
+  if(clusters > clLimit) return false;
+  var evLimit = totalKmS < 30 ? 6 : Math.max(10, Math.round(totalKmS / 8));
+  if(evPos.length > evLimit) return false;
   return true;
 }
 /* 候補の平均速度が種別に対して現実的か。無料候補は一般道前提で
@@ -14103,6 +15841,11 @@ function finalizeCandidateList(cands){
   cands.forEach(function(c){
     if(c.kind === "custom" || !c.res || !(c.res.toll > 0) || c.tollUnknown) return;
     if(!c.route || !c.route.geomPts || c.route.geomPts.length < 2) return;
+    /* ローカル生成候補で実ペアがグラフ側ペアから大きくずれている
+       ものは、実ペアのプランを正としてゲートを通す（グラフ側ペアで
+       検証すると、形状が秋田まで走っているのに宇都宮のペアで
+       「検出できた」ことになり、誤ったIC表示が残ってしまう） */
+    if(pairPlanAdopt(c)) return;
     var plan = null;
     try{ plan = tollPlanFor(c.res); }catch(err){ plan = null; }
     if(!plan) return;
@@ -14189,6 +15932,7 @@ function finalizeCandidateList(cands){
       /* IC選択の状態は共有元のものを引き継がず、距離優先自身として
          検出し直す（形状は同じなので検出結果も同じになる） */
       delete nc.icSel; delete nc.icPlan; delete nc.icToll; delete nc._icNone;
+      delete nc._pairAdopted;
       delete nc._icEls; delete nc._icGeomPair; delete nc._icHomePair;
       delete nc._icBaseSnap; delete nc._icOpt; delete nc._icReoptTimer; delete nc._icReoptSeq;
       return nc;
@@ -14203,6 +15947,11 @@ function finalizeCandidateList(cands){
       else cands.push(distClone(holder));
     }
   })();
+  /* ローカル生成の長距離候補：実ペアのプランをここで確定させ、
+     公式料金体系ベースの概算（出せる場合）を候補カードの表示へ
+     反映する。推奨スコア計算の後に行うので、概算がスコア計算へ
+     混ざることはない */
+  cands.forEach(function(c){ if(c.localIcPair && c.tollUnknown) pairPlanAdopt(c); });
 }
 function proceedDecide(from){
   /* 出発地が変更されている場合はGPSではなくその地点を起点にする（変更時のみ） */
@@ -14260,6 +16009,7 @@ function proceedDecide(from){
     pendingCandidates = cands;
     selectedCand = 0;
     pendingTollUnknown = !!cands[0].tollUnknown;
+    pendingEstToll = !!cands[0]._estToll;
     pendingRoute = cands[0].route;
     pendingFare = cands[0].fare;
     pendingMeta = { km: cands[0].res.km, min: candMin(cands[0]) };
@@ -14538,11 +16288,17 @@ syncDestDisplay();
     function bubbleReturn(){
       tabIndEl.classList.add("snap");
       if(wob.settle) clearTimeout(wob.settle);
+      /* v133: シャボン玉の解除は「指が離れた瞬間」に即時行う。
+         以前はスライド（約0.19s）が収まる頃に外していたため、離して
+         からもしばらくシャボン玉のままだった。ピルのスナップ移動と
+         同時に通常ハイライトへ戻し、.snap だけをスライド完了まで
+         残す（掴み直した場合は wobStart 側でタイマーごと解除） */
+      wob.settle = 0;
+      tabIndEl.classList.remove("bubble");
+      clearLensIcons();
       wob.settle = setTimeout(function(){
         wob.settle = 0;
-        tabIndEl.classList.remove("bubble");
         tabIndEl.classList.remove("snap");
-        clearLensIcons();
       }, 195);
     }
     /* ===== v123: 拡大鏡に合わせたアイコンの明るさ・拡大 =====
@@ -14644,9 +16400,9 @@ syncDestDisplay();
         tabIndIn.style.transitionProperty = "";
         tabIndIn.style.transform = "";
       }
-      /* シャボン玉のままタブ位置へ滑り込み、収まった頃に現状の
-         ハイライトへ戻す。v62で復帰は短く（bubbleReturn＝約0.19s）。
-         その間に再びなぞり始めたら wobStart 側でタイマーを取り消す */
+      /* 指が離れた瞬間にシャボン玉を解除し、通常ハイライトのまま
+         タブ位置へ滑り込む（bubbleReturn）。その間に再びなぞり
+         始めたら wobStart 側で .snap のタイマーを取り消す */
       bubbleReturn();
     }
     tabbarEl.addEventListener("pointerdown", function(e){
@@ -15498,7 +17254,7 @@ syncDestDisplay();
       try{
         homeMap.fitBounds(L.latLngBounds(pts), { paddingTopLeft: L.point(30, 100), paddingBottomRight: L.point(30, 370) });
         /* v127: 全体フィット後の縮小はルート長で可変（fitOutDelta）。
-           短いルートは1.8倍まで引き、長いルートほど縮小を弱める。
+           v136: 長いルートほど強く引く向きに反転した（fitOutDelta側）。
            中心はフィットで決めた中心のまま変えない */
         var rkm = (route && isFinite(route.km)) ? route.km : ((typeof ptsKm === "function") ? ptsKm(pts) : NaN);
         var fod = (typeof fitOutDelta === "function") ? fitOutDelta(rkm) : 0.848;
@@ -15589,9 +17345,10 @@ syncDestDisplay();
           if(ub && homeMap){
             homeMap.fitBounds(ub, { paddingTopLeft: L.point(30, 100), paddingBottomRight: L.point(30, 370) });
             /* v127: 全体フィット後の縮小はルート長で可変（fitOutDelta）。
-               候補の中で最長のルート長を基準にし、長いルートほど縮小を
-               弱める。中心はフィットで決めた中心のまま変えない。固定される
-               拡大率はこの縮小後のもの（以後のチップ切替では変えない） */
+               候補の中で最長のルート長を基準にする。v136: 長いルートほど
+               強く引く向きに反転した。中心はフィットで決めた中心のまま
+               変えない。固定される拡大率はこの縮小後のもの（以後の
+               チップ切替では変えない） */
             var ukm = NaN;
             list.forEach(function(c){
               if(c.route && isFinite(c.route.km)) ukm = isFinite(ukm) ? Math.max(ukm, c.route.km) : c.route.km;
@@ -15690,6 +17447,7 @@ syncDestDisplay();
     if(!c.route) return;
     pendingRoute = c.route; pendingFare = c.fare || null;
     pendingTollUnknown = !!c.tollUnknown;
+    pendingEstToll = !!c._estToll;
     pendingMeta = { km: (c.res && c.res.km != null) ? c.res.km : (c.route.km || 0), min: candMin(c) };
     /* TomTom実勢値がある候補では、案内中の到着予測にも補正として引き継ぐ */
     if(c.ttMin != null && c.res && c.res.min > 0) pendingRoute.ttCorr = c.ttMin / c.res.min;
@@ -15732,6 +17490,35 @@ syncDestDisplay();
 
   /* ---- ホーム全画面地図 ---- */
   var homeMap = null, homePosMarker = null, homeTapMarker = null, homeTap = null, homeCentered = false;
+  /* v133: ホーム地図の回転・傾き（案内地図と同じ見た目・操作にする）。
+     地図要素ごとCSS変形させるため、Leaflet標準のドラッグ／ピンチは
+     座標変換がずれる。標準操作を切り、自前ポインタ処理で補正する */
+  var homeRot = 0;    /* 適用中の回転角（deg、北が上＝0） */
+  var homeTilt = 0;   /* 傾き（0〜55°） */
+  var homeScaleNow = 1;
+  function homeTransformStr(){
+    homeScaleNow = homeTilt > 0.5 ? 1.14 + homeTilt * 0.006 : 1;
+    var t = "translate(-50%,-50%)";
+    if(homeTilt > 0.5) t += " rotateX(" + homeTilt + "deg)";
+    t += " rotate(" + (-homeRot) + "deg)";
+    if(homeTilt > 0.5) t += " scale(" + homeScaleNow + ")";
+    return t;
+  }
+  function applyHomeTransform(){
+    var el = $id("homeMap"); if(!el) return;
+    el.style.transform = homeTransformStr();
+    /* 回転・傾き中は Leaflet のマーカードラッグが座標ずれで壊れるため止める */
+    if(homeTapMarker && homeTapMarker.dragging){
+      try{
+        if(homeRot > 0.5 || homeTilt > 0.5) homeTapMarker.dragging.disable();
+        else homeTapMarker.dragging.enable();
+      }catch(e){}
+    }
+  }
+  function setHomeTilt(v){
+    homeTilt = Math.max(0, Math.min(55, v));
+    applyHomeTransform();
+  }
   var searchPinMarker = null; /* v62: 検索結果から直接セットした地点のピン（ルート線なし） */
   function clearSearchPin(){
     if(searchPinMarker && homeMap){ try{ homeMap.removeLayer(searchPinMarker); }catch(e){} }
@@ -15757,48 +17544,53 @@ syncDestDisplay();
     if(typeof window.__mapPickClick === "function"){ window.__mapPickClick(e.latlng); return; }
     setHomeTap([e.latlng.lat, e.latlng.lng]);
   }
-  /* ===== v56: ホーム地図のタップ判定とピンチ速度 =====
+  /* 画面座標→緯度経度（ホーム地図用）。地図要素には170%＋回転・傾きの
+     CSS変形が掛かるため、変形を逆算してから Leaflet へ渡す（変形が
+     無い場合は従来の矩形基準と一致する）。タップ判定と2本指ズームの
+     中心計算で共用する */
+  function homeClientLatLng(map, clientX, clientY){
+    try{
+      var mc = map.getContainer();
+      var vr = (mc.parentElement || mc).getBoundingClientRect();
+      var sx = clientX - (vr.left + vr.width / 2), sy = clientY - (vr.top + vr.height / 2);
+      var X = sx, Y = sy;
+      if(homeTilt > 0.5){
+        var P = 1100, th = homeTilt * Math.PI / 180, cosT = Math.cos(th), sinT = Math.sin(th);
+        Y = sy * P / (cosT * P + sy * sinT);
+        X = sx / (P / (P - Y * sinT));
+      }
+      var hr = homeRot * Math.PI / 180, cosH = Math.cos(hr), sinH = Math.sin(hr);
+      var rx = X * cosH - Y * sinH, ry = X * sinH + Y * cosH;
+      var S = homeScaleNow || 1;
+      return map.containerPointToLatLng(L.point(mc.clientWidth / 2 + rx / S, mc.clientHeight / 2 + ry / S));
+    }catch(e){ return null; }
+  }
+  /* ===== v56: ホーム地図のタップ判定 =====
      - 単発タップ：指を離してから300msだけ確定を待ち、その間に2回目の
        タップが来たら単発側（ピン／地点カード／地図から選ぶ）を発火させず
        ダブルタップとして扱う。ダブルタップはタップ地点を中心に
        アニメーション付きで1段拡大する。
-     - ピンチ：Leaflet 標準のピンチズームはそのまま使い、ポインタを
-       観測して指間距離の変化速度（ズーム段／秒）を平滑化して保持。
-       2本→1本でスタッシュし、残りの指がほぼ動かず短時間で離れたら
-       startZoomInertia で短い慣性を付ける（中心はピンチ重心の地点）。
-     観測は passive リスナーだけで行い、パン／ピンチ／マーカードラッグ
-     など Leaflet 側の既存ジェスチャーには一切干渉しない。 */
+     - 2本指の拡縮・回転・傾きと離指後の慣性ズームは setupHomeGestures
+       がフレーム単位で担う。ここでは観測だけを行い、ピンチに参加した
+       指をタップと誤認しないよう印を付ける。
+     観測は passive リスナーだけで行い、既存ジェスチャーには干渉しない。 */
   function setupHomeTapZoom(map){
     var mc = map.getContainer();
     var ptrs = {}, downRec = {};
     var pendingTap = null, tapTimer = null;
-    var pinch = { active: false, v: 0, lastLog: 0, lastT: 0, cx: 0, cy: 0 };
-    var stash = null;
+    var pinchSeen = false; /* この接触列で2本指になったことがあるか */
     function clearPending(){
       if(tapTimer){ clearTimeout(tapTimer); tapTimer = null; }
       pendingTap = null;
     }
-    function tapLatLng(clientX, clientY){
-      try{
-        var r = mc.getBoundingClientRect();
-        return map.containerPointToLatLng(L.point(clientX - r.left, clientY - r.top));
-      }catch(e){ return null; }
-    }
+    function tapLatLng(clientX, clientY){ return homeClientLatLng(map, clientX, clientY); }
     mc.addEventListener("pointerdown", function(e){
       stopZoomInertia(map);
       ptrs[e.pointerId] = { x: e.clientX, y: e.clientY };
       downRec[e.pointerId] = { x: e.clientX, y: e.clientY, t: performance.now(), moved: false };
-      var ids = Object.keys(ptrs);
-      if(ids.length === 2){
+      if(Object.keys(ptrs).length === 2){
         clearPending(); /* ピンチ開始＝タップではない */
-        stash = null;
-        var a = ptrs[ids[0]], b = ptrs[ids[1]];
-        var d = Math.hypot(a.x - b.x, a.y - b.y);
-        pinch.active = d > 0;
-        pinch.v = 0;
-        pinch.lastLog = d > 0 ? Math.log2(d) : 0;
-        pinch.lastT = performance.now();
-        pinch.cx = (a.x + b.x) / 2; pinch.cy = (a.y + b.y) / 2;
+        pinchSeen = true;
       }
     }, { passive: true });
     mc.addEventListener("pointermove", function(e){
@@ -15806,49 +17598,20 @@ syncDestDisplay();
       p.x = e.clientX; p.y = e.clientY;
       var dr = downRec[e.pointerId];
       if(dr && Math.hypot(e.clientX - dr.x, e.clientY - dr.y) > 10) dr.moved = true;
-      var ids = Object.keys(ptrs);
-      if(ids.length === 1){
-        if(stash && Math.hypot(p.x - stash.ax, p.y - stash.ay) > 6) stash = null;
-        /* 2回目のタッチがパンに化けたら、保留中の単発タップを取り消す */
-        if(pendingTap && dr && dr.moved) clearPending();
-        return;
-      }
-      if(ids.length === 2 && pinch.active){
-        var a = ptrs[ids[0]], b = ptrs[ids[1]];
-        var d = Math.hypot(a.x - b.x, a.y - b.y);
-        if(d > 0){
-          var now = performance.now(), dt = (now - pinch.lastT) / 1000, lg = Math.log2(d);
-          if(dt >= 0.008){
-            var inst = (lg - pinch.lastLog) / dt;
-            if(isFinite(inst)) pinch.v = pinch.v * 0.55 + inst * 0.45;
-            pinch.lastLog = lg; pinch.lastT = now;
-          }
-          pinch.cx = (a.x + b.x) / 2; pinch.cy = (a.y + b.y) / 2;
-        }
-      }
+      /* 2回目のタッチがパンに化けたら、保留中の単発タップを取り消す */
+      if(pendingTap && dr && dr.moved) clearPending();
     }, { passive: true });
     function ptrEnd(e){
       var dr = downRec[e.pointerId]; delete downRec[e.pointerId];
-      var nBefore = Object.keys(ptrs).length;
       delete ptrs[e.pointerId];
       var ids = Object.keys(ptrs);
-      if(pinch.active && nBefore === 2 && ids.length === 1){
-        var rp = ptrs[ids[0]];
-        stash = { v: pinch.v, t: performance.now(), ax: rp.x, ay: rp.y, cx: pinch.cx, cy: pinch.cy };
-        pinch.active = false;
-        /* 残った指（ピンのドラッグ等）はタップ扱いしない */
+      if(ids.length === 1 && pinchSeen){
+        /* ピンチから残った指（ピンのドラッグ等）はタップ扱いしない */
         var rd = downRec[ids[0]]; if(rd) rd.moved = true;
       }
       if(ids.length) return;
-      if(e.type === "pointercancel"){ stash = null; return; }
-      if(stash){
-        var age = performance.now() - stash.t;
-        if(age < 250){
-          var cll = tapLatLng(stash.cx, stash.cy);
-          if(cll) startZoomInertia(map, cll, stash.v * Math.exp(-age / 250));
-        }
-        stash = null;
-      }
+      if(pinchSeen){ pinchSeen = false; clearPending(); }
+      if(e.type === "pointercancel") return;
       /* --- タップ判定 --- */
       if(!dr || dr.moved) return;
       if(performance.now() - dr.t > 400) return;
@@ -15874,6 +17637,148 @@ syncDestDisplay();
     mc.addEventListener("pointerup", ptrEnd, { passive: true });
     mc.addEventListener("pointercancel", ptrEnd, { passive: true });
     mc.addEventListener("wheel", function(){ stopZoomInertia(map); }, { passive: true });
+  }
+  /* ===== v133: ホーム地図のパン／ピンチ／回転／傾き（案内地図と同方式） =====
+     地図要素ごとCSS変形させるため Leaflet 標準操作は切り、自前の
+     ポインタ処理で回転・傾きを補正してパンする。タップ判定
+     （setupHomeTapZoom）は観測専用として併走し、パンで動いた指は
+     そちらの moved 判定でタップから除外される。ピンチの速度計測と
+     離指後の慣性ズームもここで担う */
+  function setupHomeGestures(map){
+    var mc = map.getContainer();
+    var ptrs = {};
+    var pendDx = 0, pendDy = 0, panQueued = false;
+    function flushPan(){
+      panQueued = false;
+      if(!pendDx && !pendDy) return;
+      var dx = pendDx / (homeScaleNow || 1), dy = pendDy / (homeScaleNow || 1);
+      pendDx = 0; pendDy = 0;
+      var h = homeRot * Math.PI / 180;
+      var lx = dx * Math.cos(h) - dy * Math.sin(h);
+      var ly = dx * Math.sin(h) + dy * Math.cos(h);
+      ly = ly / Math.max(0.45, Math.cos(homeTilt * Math.PI / 180));
+      try{ map.panBy([-lx, -ly], { animate: false }); }catch(e){}
+    }
+    function panScreenDelta(dx, dy){
+      pendDx += dx; pendDy += dy;
+      if(!panQueued){ panQueued = true; requestAnimationFrame(flushPan); }
+    }
+    /* ===== 2本指はフレーム単位で適用する =====
+       以前はポインタごとの pointermove のたびにその場で setZoom して
+       いたため、(1) 片方の指のイベントが先に届いた瞬間の見かけの
+       指間距離・角度で誤った拡縮・回転が入り（平行移動しただけでも
+       地図が斜めに跳ぶ）、(2) setZoom が rAF 経由の panBy の蓄積を
+       打ち消し、2本指パンが逆方向になったり消えたりした（実測）。
+       両指の現在位置から重心・距離・角度をフレームごとに差分し、
+       ズーム（重心中心）→回転→傾き→パンの順に一度だけ適用する。
+       間隔・角度・重心は互いに影響しない量なので、ピンチしながら
+       ひねる／滑らせる操作がそのまま全部効く。縦移動は傾きが受け持つ
+       ため、2本指中のパンは横方向だけ（従来どおり） */
+    var g2 = null;          /* 前フレームに適用した2本指の状態 {cx, cy, d, ang} */
+    var g2Raf = 0;
+    var pinchSamples = [];  /* {t, logd}：離指後の慣性ズーム用 */
+    var pinchStash = null;  /* 2本→1本になった瞬間の慣性予約 */
+    function applyTwoFinger(){
+      g2Raf = 0;
+      var ids = Object.keys(ptrs);
+      if(ids.length !== 2){ g2 = null; return; }
+      var a = ptrs[ids[0]], b = ptrs[ids[1]];
+      var cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+      var d = Math.hypot(b.x - a.x, b.y - a.y);
+      var ang = Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
+      if(g2 && d > 0 && g2.d > 0){
+        var dz = Math.log2(d / g2.d);
+        if(dz){
+          var nz = Math.max(mapZoomMin(), Math.min(mapZoomCap(), map.getZoom() + dz));
+          var cll = homeClientLatLng(map, cx, cy);
+          try{
+            if(cll) map.setZoomAround(cll, nz, { animate: false });
+            else map.setZoom(nz, { animate: false });
+          }catch(err){}
+        }
+        var dAng = ((ang - g2.ang + 540) % 360) - 180;
+        if(dAng){ homeRot = (homeRot - dAng + 360) % 360; applyHomeTransform(); }
+        var cdy = cy - g2.cy;
+        if(cdy) setHomeTilt(homeTilt - cdy * 0.32); /* 重心換算なので従来（動いた指1本分×0.16）の2倍で等価 */
+        var cdx = cx - g2.cx;
+        if(cdx) panScreenDelta(cdx, 0);
+        pinchSamples.push({ t: performance.now(), logd: Math.log2(d) });
+        if(pinchSamples.length > 10) pinchSamples.shift();
+      }
+      g2 = { cx: cx, cy: cy, d: d, ang: ang };
+    }
+    function queueTwoFinger(){
+      if(!g2Raf) g2Raf = requestAnimationFrame(applyTwoFinger);
+    }
+    mc.addEventListener("pointerdown", function(e){
+      /* ドラッグ可能なピンの上では Leaflet のマーカードラッグに任せる */
+      if(e.target && e.target.closest && e.target.closest(".leaflet-marker-draggable")) return;
+      stopZoomInertia(map);
+      ptrs[e.pointerId] = { x: e.clientX, y: e.clientY };
+      if(Object.keys(ptrs).length === 2){
+        g2 = null; /* 基準を取り直す（既適用分からのジャンプ防止） */
+        pinchSamples = [];
+        pinchStash = null;
+        queueTwoFinger();
+      } else {
+        pinchStash = null;
+      }
+    }, { passive: true });
+    mc.addEventListener("pointermove", function(e){
+      var p = ptrs[e.pointerId]; if(!p) return;
+      var dx = e.clientX - p.x, dy = e.clientY - p.y;
+      p.x = e.clientX; p.y = e.clientY;
+      var ids = Object.keys(ptrs);
+      if(ids.length === 1){
+        if(pinchStash && Math.hypot(p.x - pinchStash.ax, p.y - pinchStash.ay) > 6) pinchStash = null;
+        if(dx || dy) panScreenDelta(dx, dy);
+      } else if(ids.length === 2){
+        queueTwoFinger();
+      }
+    }, { passive: true });
+    function gEnd(e){
+      var nBefore = Object.keys(ptrs).length;
+      delete ptrs[e.pointerId];
+      var ids = Object.keys(ptrs);
+      if(nBefore === 2 && ids.length === 1){
+        /* ピンチ終了：直近約150msの拡縮速度を予約し、残った指がほぼ
+           動かず短時間で離れたら慣性ズームを付ける（中心はピンチ重心） */
+        var v = 0, now = performance.now();
+        if(pinchSamples.length >= 2){
+          var last = pinchSamples[pinchSamples.length - 1], first = last;
+          for(var i = pinchSamples.length - 1; i >= 0; i--){
+            if(last.t - pinchSamples[i].t <= 150) first = pinchSamples[i]; else break;
+          }
+          var dt = (last.t - first.t) / 1000;
+          if(dt >= 0.03) v = (last.logd - first.logd) / dt;
+        }
+        var rp = ptrs[ids[0]];
+        pinchStash = { v: v, t: now, ax: rp.x, ay: rp.y, cx: g2 ? g2.cx : rp.x, cy: g2 ? g2.cy : rp.y };
+        g2 = null;
+        if(g2Raf){ cancelAnimationFrame(g2Raf); g2Raf = 0; }
+      }
+      if(!ids.length){
+        if(g2Raf){ cancelAnimationFrame(g2Raf); g2Raf = 0; }
+        g2 = null;
+        if(e.type !== "pointercancel" && pinchStash){
+          var age = performance.now() - pinchStash.t;
+          if(age < 250){
+            var cll2 = homeClientLatLng(map, pinchStash.cx, pinchStash.cy);
+            if(cll2) startZoomInertia(map, cll2, pinchStash.v * Math.exp(-age / 250));
+          }
+        }
+        pinchStash = null;
+        pinchSamples = [];
+      }
+    }
+    mc.addEventListener("pointerup", gEnd, { passive: true });
+    mc.addEventListener("pointercancel", gEnd, { passive: true });
+    mc.addEventListener("wheel", function(e){
+      e.preventDefault();
+      stopZoomInertia(map);
+      var z = map.getZoom() + (e.deltaY < 0 ? 1 : -1);
+      try{ map.setZoom(Math.max(mapZoomMin(), Math.min(mapZoomCap(), z)), { animate: false }); }catch(err){}
+    }, { passive: false });
   }
   function setHomeTap(latlng, preset){
     /* 地図から選ぶモード中は地点カードを出さない（POIピンのタップ等が
@@ -15929,10 +17834,11 @@ syncDestDisplay();
     } else {
       homePosMarker.setLatLng(ll);
     }
-    if(center && !homeCentered){
-      homeCentered = true;
-      try{ homeMap.setView(ll, Math.max(homeMap.getZoom(), 14)); }catch(e){}
-    }
+    /* v136: 現在地へのセンタリングは廃止した。以前は初回フィックス時に
+       地図が自動で現在地へ寄り、利用者が見ている場所を奪っていた。
+       青ドットの位置同期だけを行い、地図を現在地へ動かすのは
+       「現在地に戻る」ボタンを押したときだけにする（center 引数は
+       互換のため残すが無視する） */
   }
   function initHomeMap(){
     if(homeMap){ try{ homeMap.invalidateSize(); }catch(e){} return; }
@@ -15940,13 +17846,16 @@ syncDestDisplay();
     if(typeof L === "undefined"){ if(fb) fb.textContent = "地図を読み込めませんでした"; return; }
     if(fb) fb.style.display = "none";
     var start = (typeof state !== "undefined" && state.gps && state.gps.lat != null) ? [state.gps.lat, state.gps.lng] : [35.72, 139.75];
-    homeMap = L.map("homeMap", smoothMapOpts({ zoomControl: false, doubleClickZoom: false })).setView(start, 12);
+    homeMap = L.map("homeMap", smoothMapOpts({ zoomControl: false, doubleClickZoom: false,
+      dragging: false, touchZoom: false, scrollWheelZoom: false, boxZoom: false, keyboard: false })).setView(start, 12);
     addBaseLayer(homeMap, function(){
       if(fb){ fb.style.display = "flex"; fb.textContent = "地図を読み込めませんでした"; }
     });
     /* 単発タップ（ピン＋地点カード）とダブルタップ拡大を両立させるため、
        Leaflet の click は使わず自前のタップ判定で onHomeTap を呼ぶ */
     setupHomeTapZoom(homeMap);
+    setupHomeGestures(homeMap);
+    applyHomeTransform();
     syncHomePos(true);
     try{ homeMap.invalidateSize(); }catch(e){}
   }
@@ -16000,11 +17909,39 @@ syncDestDisplay();
     }).observe(vh, { attributes: true, attributeFilter: ["class"] });
   }
   initHomeMap();
+  /* 現在地に戻るボタン（ホーム地図）：回転・傾きをリセットして
+     現在地へ寄せる。GPS未取得なら取得をキックして、取れたら寄せる */
+  var hlb = $id("homeLocateBtn");
+  if(hlb) hlb.addEventListener("click", function(){
+    homeRot = 0; homeTilt = 0; applyHomeTransform();
+    if(homeMap && typeof state !== "undefined" && state.gps && state.gps.lat != null){
+      homeCentered = true;
+      try{ homeMap.setView([state.gps.lat, state.gps.lng], Math.max(homeMap.getZoom(), 14), { animate: true }); }catch(e){}
+      return;
+    }
+    if(typeof ensureGpsWatch === "function"){ try{ ensureGpsWatch(); }catch(e){} }
+    if("geolocation" in navigator){
+      navigator.geolocation.getCurrentPosition(function(pos){
+        try{
+          if(typeof state !== "undefined" && state.gps && state.gps.lat == null){
+            state.gps.lat = pos.coords.latitude; state.gps.lng = pos.coords.longitude;
+            state.gps.acc = pos.coords.accuracy; state.gps.t = pos.timestamp || Date.now();
+          }
+        }catch(e){}
+        homeCentered = false; syncHomePos(true);
+        if(homeMap && typeof state !== "undefined" && state.gps && state.gps.lat != null){
+          try{ homeMap.setView([state.gps.lat, state.gps.lng], Math.max(homeMap.getZoom(), 14), { animate: true }); }catch(e){}
+        }
+      }, function(){ /* 許可なし・測位不可：何もしない */ },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 });
+    }
+  });
   /* ---- 起動時の現在地取得と青ドット ----
      アプリを開いた瞬間（ナビ画面の初期表示時）に、操作を待たず位置情報の
      取得を開始する。ウォッチが state.gps を更新し続け、ホーム地図の
      青ドット（白フチ付きの円。syncHomePos が 1.5 秒間隔で同期）が
-     出て、位置の更新に追従する。初回フィックス時は地図も現在地へ寄せる。
+     出て、位置の更新に追従する。地図そのものは現在地へ寄せない
+     （v136：センタリングは「現在地に戻る」ボタンのときだけ）。
      許可されていない／取れない場合はドットを出さないだけで、エラーで
      固まったりダイアログを繰り返したりはしない（GPSカード側の表示のみ）。
      案内中の紙飛行機マーカーは従来どおり別系統で、ここでは触らない。 */
@@ -16972,7 +18909,10 @@ syncDestDisplay();
     return { setFold: setFold, reset: function(){
       if(animTimer){ clearTimeout(animTimer); animTimer = 0; }
       folded = false;
-      el.classList.remove("folded");
+      /* "folded" が無いのに remove すると class 属性の変更として扱われ、
+         resetOnHide の MutationObserver を再発火させる（自己ループの
+         直接の引き金）。付いているときだけ外す */
+      if(el.classList.contains("folded")) el.classList.remove("folded");
       el.style.height = "";
       grip.setAttribute("aria-expanded", "true");
     } };
@@ -16980,18 +18920,30 @@ syncDestDisplay();
 
   function resetOnHide(el, fn){
     if(!el || !("MutationObserver" in window)) return;
+    /* 「隠れた瞬間」だけ fn を呼ぶ（遷移ガード）。fn 側の class 書き換え
+       （classList.remove 等）が observer を再発火させても、既に隠れて
+       いる間の再入では呼ばない。ガードが無いと、fn の書き換え→observer
+       →fn→… の自己再帰でメインスレッドが固まる（実機で「目的地に設定」
+       「案内開始」を押した瞬間に操作不能になった主因：地点カードを
+       隠すたびに reset() の remove が変更を積み続けていた） */
+    var was = el.classList.contains("hidden");
     new MutationObserver(function(){
-      if(el.classList.contains("hidden")) fn();
+      var h = el.classList.contains("hidden");
+      if(h && !was) fn();
+      was = h;
     }).observe(el, { attributes: true, attributeFilter: ["class"] });
   }
 
-  /* ルート選択の候補シート（畳み残し 88px ＝ CSS の .folded と一致） */
-  var pvFold = foldableTransform($id("pvSheet"), [$id("pvSheetGrip"), document.querySelector("#pvSheet .pv-head")], 88);
+  /* ルート選択の候補シート（畳み残し 116px ＝ CSS の .folded と一致。
+     以前の 88px では畳みすぎでハンドルが下端に埋もれ気味だったため、
+     ハンドル＋見出しが余裕を持って残る位置まで止まり位置を上げた） */
+  var pvFold = foldableTransform($id("pvSheet"), [$id("pvSheetGrip"), document.querySelector("#pvSheet .pv-head")], 116);
   window.__pvSheetReset = function(){ if(pvFold) pvFold.setFold(false); };
 
-  /* ルート設定シート（畳み残し 168px ＝ CSS の .folded と一致。
-     ハンドルと「ルート設定」見出し行の両方をドラッグ面にする） */
-  var hsFold = foldableTransform($id("homeSheet"), [$id("homeSheetGrip"), document.querySelector("#homeSheet .hs-head")], 168);
+  /* ルート設定シート（畳み残し 204px ＝ CSS の .folded と一致。
+     タブバーの上で止まり、ハンドルと「ルート設定」見出しがタブに
+     隠れない位置。ハンドルと見出し行の両方をドラッグ面にする） */
+  var hsFold = foldableTransform($id("homeSheet"), [$id("homeSheetGrip"), document.querySelector("#homeSheet .hs-head")], 204);
   resetOnHide($id("homeSheet"), function(){ if(hsFold) hsFold.setFold(false); });
 
   /* 地点カード（ピンプレビュー） */
