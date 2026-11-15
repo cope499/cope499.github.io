@@ -1802,5 +1802,31 @@ function init(){
 }
 document.addEventListener("DOMContentLoaded",init);
 </script>
+<script>
+/* Service Worker: GitHub Pages 上でのみ登録する（プレビュー等 sw.js が無い環境では登録しない）。
+   更新版が有効化されたら1回だけ自動リロードして最新化する。初回登録時はリロードしない。 */
+(function(){
+  if(location.hostname!=="cope499.github.io")return;
+  if(!("serviceWorker" in navigator))return;
+  var hadController=!!navigator.serviceWorker.controller;
+  var refreshing=false;
+  navigator.serviceWorker.addEventListener("controllerchange",function(){
+    if(!hadController)return;
+    if(refreshing)return;
+    refreshing=true;
+    location.reload();
+  });
+  function registerSW(){
+    try{
+      var p=navigator.serviceWorker.register("sw.js");
+      if(p&&typeof p.catch==="function")p.catch(function(){});
+    }catch(e){}
+  }
+  try{
+    if(document.readyState==="complete"){registerSW();}
+    else{window.addEventListener("load",registerSW);}
+  }catch(e){}
+})();
+</script>
 </body>
 </html>
