@@ -397,16 +397,11 @@ html.lens-ok .tab-ind.bubble .tab-ind-in::after{box-shadow:inset 0 0 5px rgba(12
 #toast.on{opacity:1; transform:translate(-50%,0);}
 .hiddenFile{display:none;}
 @media (min-width:760px){ .view{padding-top:calc(22px + env(safe-area-inset-top));} }
-/* ---------- diagnostic overlay (diag-20261115-1845) ---------- */
-#diagOverlay{position:fixed; top:calc(env(safe-area-inset-top, 0px) + 8px); left:8px; z-index:9999; max-width:calc(100vw - 16px); background:rgba(0,0,0,.78); color:#e8e8e8; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:11px; line-height:1.5; padding:8px 28px 8px 10px; border-radius:8px; border:1px solid rgba(255,255,255,.25); pointer-events:none; white-space:pre-wrap; word-break:break-all;}
-#diagOverlay .diagTitle{font-weight:700; color:#fff;}
-#diagClose{position:absolute; top:2px; right:2px; width:24px; height:24px; min-height:24px; padding:0; display:flex; align-items:center; justify-content:center; font-size:16px; line-height:1; color:#fff; background:transparent; border:0; pointer-events:auto; cursor:pointer;}
 </style>
 </head>
 <body>
 <div id="bg"></div>
 <div id="bgShade"></div>
-<div id="diagOverlay" aria-label="診断情報"><button id="diagClose" type="button" aria-label="診断を閉じる">×</button><div id="diagBody">diag…</div></div>
 
 <div id="app">
   <div id="views">
@@ -1844,80 +1839,6 @@ document.addEventListener("DOMContentLoaded",init);
     if(document.readyState==="complete"){registerSW();}
     else{window.addEventListener("load",registerSW);}
   }catch(e){}
-})();
-</script>
-<script>
-(function(){
-  "use strict";
-  var BUILD_ID="diag-20261115-1845";
-  function fmt(n){ if(n==null||typeof n!=="number"||!isFinite(n)) return String(n); return Math.round(n*10)/10; }
-
-  /* ---- safe-area-inset-top 実測用プローブ ---- */
-  var safeTopProbe=null;
-  function ensureSafeTopProbe(){
-    if(safeTopProbe) return safeTopProbe;
-    try{
-      if(!document.body) return null;
-      safeTopProbe=document.createElement("div");
-      safeTopProbe.setAttribute("aria-hidden","true");
-      safeTopProbe.style.cssText="position:fixed;top:0;left:0;width:0;height:env(safe-area-inset-top, 0px);visibility:hidden;pointer-events:none;z-index:-1;";
-      document.body.appendChild(safeTopProbe);
-      return safeTopProbe;
-    }catch(e){ return null; }
-  }
-  function measureSafeAreaInsetTop(){
-    try{
-      var p=ensureSafeTopProbe();
-      if(!p) return "n/a";
-      var h=p.getBoundingClientRect().height;
-      if(typeof h!=="number" || !isFinite(h)) h=p.offsetHeight;
-      if(typeof h!=="number" || !isFinite(h)) return "n/a";
-      return fmt(h);
-    }catch(e){ return "n/a"; }
-  }
-
-  function updateDiag(){
-    var body=document.getElementById("diagBody");
-    if(!body) return;
-    var lines=[];
-    lines.push("build: "+BUILD_ID);
-    lines.push("inner: "+window.innerWidth+" × "+window.innerHeight);
-    var vvH="n/a";
-    try{ if(window.visualViewport && typeof window.visualViewport.height==="number") vvH=fmt(window.visualViewport.height); }catch(e){}
-    lines.push("visualViewport.height: "+vvH);
-    lines.push("screen: "+screen.width+" × "+screen.height);
-    var delta="n/a";
-    try{ if(typeof screen.height==="number" && typeof window.innerHeight==="number") delta=String(screen.height-window.innerHeight); }catch(e){}
-    lines.push("delta (screen.height - innerHeight): "+delta);
-    lines.push("safe-area-inset-top: "+measureSafeAreaInsetTop());
-    lines.push("docEl.clientHeight: "+document.documentElement.clientHeight);
-    var bg=document.getElementById("bg");
-    if(bg){ var r1=bg.getBoundingClientRect(); lines.push("#bg rect: height="+fmt(r1.height)+" bottom="+fmt(r1.bottom)); } else { lines.push("#bg rect: n/a"); }
-    var app=document.getElementById("app");
-    if(app){ var r2=app.getBoundingClientRect(); lines.push("#app rect: height="+fmt(r2.height)+" bottom="+fmt(r2.bottom)); } else { lines.push("#app rect: n/a"); }
-    var standalone="n/a";
-    try{ standalone=String(window.matchMedia("(display-mode: standalone)").matches); }catch(e){}
-    lines.push("display-mode standalone: "+standalone);
-    lines.push("navigator.standalone: "+String(navigator.standalone));
-    var sw="なし";
-    try{ if(navigator.serviceWorker && navigator.serviceWorker.controller) sw="あり"; }catch(e){}
-    lines.push("SW controller: "+sw);
-    body.textContent=lines.join("\n");
-  }
-
-  function initDiag(){
-    ensureSafeTopProbe();
-    var close=document.getElementById("diagClose");
-    if(close){ close.addEventListener("click",function(){ var o=document.getElementById("diagOverlay"); if(o) o.style.display="none"; }); }
-    updateDiag();
-    // レイアウト確定後にも再計測する
-    setTimeout(updateDiag,300);
-    setTimeout(updateDiag,1000);
-  }
-  window.addEventListener("resize",function(){ updateDiag(); });
-  window.addEventListener("orientationchange",function(){ setTimeout(function(){ updateDiag(); },200); });
-  try{ if(window.visualViewport) window.visualViewport.addEventListener("resize",updateDiag); }catch(e){}
-  if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded",initDiag); } else { initDiag(); }
 })();
 </script>
 </body>
