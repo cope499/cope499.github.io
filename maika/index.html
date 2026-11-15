@@ -30,9 +30,9 @@
   color-scheme:dark;
 }
 *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; -webkit-touch-callout:none;}
-html{overscroll-behavior:none; overflow-x:hidden; height:100%; height:100dvh; min-height:100lvh; touch-action:manipulation; background:#07080f;}
+html{overscroll-behavior:none; overflow-x:hidden; height:100%; height:100dvh; touch-action:manipulation; background:#07080f;}
 body{
-  margin:0; height:100%; height:100dvh; min-height:100lvh; overflow:hidden; background:#07080f;
+  margin:0; height:100%; height:100dvh; overflow:hidden; background:#07080f;
   font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
   color:var(--ink);
   -webkit-user-select:none; user-select:none;
@@ -52,7 +52,7 @@ img{display:block; max-width:100%;}
 #bgShade{position:fixed; inset:0; height:100vh; height:100lvh; min-height:100lvh; z-index:1; background:linear-gradient(180deg,rgba(4,5,10,.34),rgba(4,5,10,.55)); pointer-events:none;}
 
 /* ---------- layout ---------- */
-#app{position:fixed; inset:0; z-index:2; display:flex; flex-direction:column;}
+#app{position:relative; z-index:2; height:100%; display:flex; flex-direction:column;}
 #views{flex:1; position:relative; overflow:hidden;}
 .view{position:absolute; inset:0; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; padding:12px 12px calc(78px + env(safe-area-inset-bottom)); display:none; -webkit-overflow-scrolling:touch; scrollbar-width:none; -ms-overflow-style:none;}
 .view::-webkit-scrollbar{display:none; width:0; height:0;}
@@ -348,6 +348,13 @@ html.lens-ok .tab-ind.bubble .tab-ind-in::after{box-shadow:inset 0 0 5px rgba(12
 .kvRow{display:flex; justify-content:space-between; padding:9px 0; border-bottom:1px solid var(--hair); font-size:14px;}
 .kvRow span{color:var(--ink2);}
 .kvRow b{font-variant-numeric:tabular-nums;}
+.ivRow{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:7px 0; border-bottom:1px solid var(--hair);}
+.ivRow:last-child{border-bottom:0;}
+.ivRow > span{font-size:13.5px; font-weight:600; min-width:0; overflow-wrap:anywhere;}
+.ivIn{display:flex; align-items:center; gap:6px; flex:none;}
+.ivIn input{width:96px; min-height:38px; border-radius:10px; border:1px solid var(--hair); background:var(--field); padding:6px 10px; font-size:15px; text-align:right; outline:none; font-variant-numeric:tabular-nums; color:var(--ink);}
+.ivIn input:focus{border-color:var(--accent);}
+.ivIn em{font-style:normal; font-size:12px; color:var(--ink2);}
 
 /* ---------- dialog / toast ---------- */
 #dialogWrap{position:fixed; inset:0; height:100vh; height:100lvh; min-height:100lvh; z-index:70; display:none; align-items:center; justify-content:center; padding:22px; background:var(--scrim);}
@@ -495,6 +502,10 @@ html.lens-ok .tab-ind.bubble .tab-ind-in::after{box-shadow:inset 0 0 5px rgba(12
       <div class="field"><label>キッカー文字</label><input id="setHeroKicker" type="text" placeholder="ROADSTER" /></div>
       <div class="field"><label>オドメーター（km）</label><input id="setOdo" type="number" inputmode="numeric" min="0" /></div>
       <div class="toggleRow" style="margin-top:8px;"><span>GPS走行をオドメーターに加算</span><button class="tgl on" id="tglGpsAddDrawer" role="switch" aria-checked="true" aria-label="GPS走行をオドメーターに加算（設定）"></button></div>
+    </div>
+    <div class="dsec">
+      <h3>交換間隔</h3>
+      <div id="intervalList"></div>
     </div>
     <div class="dsec">
       <h3>背景</h3>
@@ -661,7 +672,7 @@ var CIRC=301.6, JP={latMin:31,latMax:45.6,lngMin:129,lngMax:146};
 
 /* ================= state ================= */
 var S={
-  settings:{carName:"NCロードスター",odometer:0,odoSet:false,gpsAdd:true,heroKicker:"ROADSTER",heroModel:"NC3",heroBadge:"RS",heroYear:"2013",specChips:"後期 NC3,RS,ホワイト,黒幌",accent:"mono",bg:"car",hero:"car",mapTheme:"light",snapUrl:""},
+  settings:{carName:"NCロードスター",odometer:0,odoSet:false,gpsAdd:true,heroKicker:"ROADSTER",heroModel:"NC3",heroBadge:"RS",heroYear:"2013",specChips:"後期 NC3,RS,ホワイト,黒幌",accent:"mono",bg:"car",hero:"car",mapTheme:"light",snapUrl:"",intervals:{}},
   customBg:null, customHero:null,
   maint:[], drives:[],
   tab:"home", drawerOpen:false, sheetOpen:null,
@@ -780,6 +791,53 @@ function buildSettingsUI(){
   $("setHeroYear").value=S.settings.heroYear||"";
   $("setSpecChips").value=S.settings.specChips||"";
   $("setSnapUrl").value=S.settings.snapUrl||"";
+  buildIntervalSettings();
+}
+/* ================= 交換間隔の設定 =================
+   優先順: 設定画面の値（settings.intervals）＞ 最新記録に保存された間隔 ＞ MAINT_TYPES の既定値 */
+function intervalFor(name,recInterval){
+  var ov=S.settings.intervals&&S.settings.intervals[name];
+  if(ov&&ov>0)return ov;
+  if(recInterval&&recInterval>0)return recInterval;
+  var d=MAINT_TYPES.filter(function(t){return t.name===name;})[0];
+  return d?d.interval:5000;
+}
+function currentInterval(name){
+  var best=null;
+  S.maint.forEach(function(r){
+    var tp=r.type==="タイヤローテーション"?"タイヤ":r.type;
+    if(tp===name&&r.interval&&(!best||r.odo>best.odo))best=r;
+  });
+  return intervalFor(name,best?best.interval:null);
+}
+function knownMaintTypes(){
+  var out=[], seen={};
+  MAINT_TYPES.forEach(function(t){if(!seen[t.name]){seen[t.name]=1;out.push(t.name);}});
+  S.maint.forEach(function(r){
+    var tp=r.type==="タイヤローテーション"?"タイヤ":r.type;
+    if(tp==="ワイパー")return;
+    if(!seen[tp]){seen[tp]=1;out.push(tp);}
+  });
+  if(S.settings.intervals)Object.keys(S.settings.intervals).forEach(function(k){if(!seen[k]){seen[k]=1;out.push(k);}});
+  return out;
+}
+function buildIntervalSettings(){
+  var box=$("intervalList"); if(!box)return;
+  box.innerHTML="";
+  knownMaintTypes().forEach(function(name){
+    var row=document.createElement("div"); row.className="ivRow";
+    row.innerHTML="<span>"+esc(name)+'</span><span class="ivIn"><input type="number" inputmode="numeric" min="0" step="100" value="'+currentInterval(name)+'" aria-label="'+esc(name)+'の交換間隔"><em>km</em></span>';
+    var inp=row.querySelector("input");
+    inp.addEventListener("change",function(){
+      var v=parseInt(inp.value,10);
+      if(!S.settings.intervals)S.settings.intervals={};
+      if(!isNaN(v)&&v>0)S.settings.intervals[name]=v; else delete S.settings.intervals[name];
+      inp.value=currentInterval(name);
+      saveSettings(); renderHome();
+      toast(name+" の交換間隔を "+fmtInt(currentInterval(name))+" kmに設定しました");
+    });
+    box.appendChild(row);
+  });
 }
 function readImageFile(file,cb){
   var img=new Image(), url=URL.createObjectURL(file);
@@ -1113,7 +1171,7 @@ function maintStatus(){
     if(!byType[t.name])byType[t.name]={type:t.name,interval:t.interval,odo:null,date:null};
   });
   Object.keys(byType).forEach(function(k){
-    if(!byType[k].interval){var d=MAINT_TYPES.filter(function(t){return t.name===k;})[0];byType[k].interval=d?d.interval:5000;}
+    byType[k].interval=intervalFor(k,byType[k].interval);
   });
   return Object.keys(byType).map(function(k){
     var r=byType[k], interval=r.interval||5000;
@@ -1193,8 +1251,7 @@ function fillMaintTypes(sel){
     if(!found){var o2=document.createElement("option");o2.value=sel;o2.textContent=sel;s.appendChild(o2);}
     s.value=sel;
   }
-  var d=MAINT_TYPES.filter(function(t){return t.name===s.value;})[0];
-  $("mInterval").value=d?d.interval:5000;
+  $("mInterval").value=currentInterval(s.value);
 }
 /* 記録がまだ無い項目では、登録する実施日＋実施時走行距離が交換タイミング計算の基準になることを示す */
 function updateMaintBaseNote(){
@@ -1232,6 +1289,9 @@ function saveMaint(){
   var dv=$("mDate").value, ts=dv?new Date(dv+"T12:00:00").getTime():Date.now();
   var rec={id:S.editingMaint||uid(),type:type,interval:interval,odo:odo,ts:ts,
     cost:parseInt($("mCost").value,10)||0,memo:$("mMemo").value.trim()};
+  /* シートで指定した間隔は、その項目の設定値として保持する（新規項目も設定画面で変更可能になる） */
+  if(!S.settings.intervals)S.settings.intervals={};
+  S.settings.intervals[type]=interval; saveSettings(); buildIntervalSettings();
   var ix=S.maint.findIndex(function(r){return r.id===rec.id;});
   if(ix>=0)S.maint[ix]=rec; else S.maint.push(rec);
   putRec("maint",rec); closeSheet(); renderHome(); renderMaintList(); toast("保存しました");
@@ -1585,8 +1645,7 @@ function wire(){
   }
   bindGpsToggle($("tglGpsAdd")); bindGpsToggle($("tglGpsAddDrawer"));
   $("mType").addEventListener("change",function(){
-    var d=MAINT_TYPES.filter(function(t){return t.name===$("mType").value;})[0];
-    if(d)$("mInterval").value=d.interval;
+    $("mInterval").value=currentInterval($("mType").value);
     updateMaintBaseNote();
   });
   $("btnMaintSave").addEventListener("click",saveMaint);
@@ -1658,7 +1717,7 @@ function wire(){
     if(this.getAttribute("data-arm")){ 
       clearStore("maint");clearStore("drives");kvSet("settings",null);kvSet("customBg",null);kvSet("customHero",null);
       S.maint=[];S.drives=[];S.customBg=null;S.customHero=null;
-      S.settings={carName:"NCロードスター",odometer:0,odoSet:false,gpsAdd:true,heroKicker:"ROADSTER",heroModel:"NC3",heroBadge:"RS",heroYear:"2013",specChips:"後期 NC3,RS,ホワイト,黒幌",accent:"mono",bg:"car",hero:"car",mapTheme:"light",snapUrl:""};
+      S.settings={carName:"NCロードスター",odometer:0,odoSet:false,gpsAdd:true,heroKicker:"ROADSTER",heroModel:"NC3",heroBadge:"RS",heroYear:"2013",specChips:"後期 NC3,RS,ホワイト,黒幌",accent:"mono",bg:"car",hero:"car",mapTheme:"light",snapUrl:"",intervals:{}};
       buildSettingsUI();applyTheme();renderHome();renderMaintList();renderDriveList();drawFallbackMap();
       this.removeAttribute("data-arm");this.textContent="すべてのデータを削除";toast("削除しました");
     }else{this.setAttribute("data-arm","1");this.textContent="もう一度押すと削除します";
@@ -1683,6 +1742,7 @@ function init(){
   Promise.all([kvGet("settings"),kvGet("customBg"),kvGet("customHero"),allRecs("maint"),allRecs("drives")]).then(function(r){
     if(r[0])S.settings=Object.assign(S.settings,r[0]);
     delete S.settings.apiKey; /* 旧Google APIキーは使わない */
+    if(!S.settings.intervals||typeof S.settings.intervals!=="object")S.settings.intervals={};
     if(r[0]&&r[0].odoSet===undefined&&S.settings.odometer>0)S.settings.odoSet=true;
     S.customBg=r[1]||null; S.customHero=r[2]||null;
     S.maint=r[3]||[]; S.drives=r[4]||[];
