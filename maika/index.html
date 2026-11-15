@@ -61,13 +61,13 @@ button{font:inherit; color:inherit; background:none; border:0; padding:0; cursor
 img{display:block; max-width:100%;}
 
 /* ---------- background ---------- */
-#bg{position:fixed; inset:0; height:100lvh; z-index:0; background:#07080f center/cover no-repeat; transition:opacity .4s;}
-#bgShade{position:fixed; inset:0; height:100lvh; z-index:1; background:linear-gradient(180deg,rgba(4,5,10,.34),rgba(4,5,10,.55)); pointer-events:none;}
+#bg{position:fixed; inset:0; height:var(--app-h, 100lvh); z-index:0; background:#07080f center/cover no-repeat; transition:opacity .4s;}
+#bgShade{position:fixed; inset:0; height:var(--app-h, 100lvh); z-index:1; background:linear-gradient(180deg,rgba(4,5,10,.34),rgba(4,5,10,.55)); pointer-events:none;}
 
 /* ---------- layout ---------- */
-#app{position:fixed; inset:0; z-index:2; display:flex; flex-direction:column;}
+#app{position:fixed; inset:0; height:var(--app-h, 100%); z-index:2; display:flex; flex-direction:column;}
 #views{flex:1; position:relative; overflow:hidden;}
-.view{position:fixed; inset:0; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; padding:calc(12px + env(safe-area-inset-top)) 12px calc(78px + env(safe-area-inset-bottom)); display:none; -webkit-overflow-scrolling:touch; scrollbar-width:none; -ms-overflow-style:none;}
+.view{position:fixed; inset:0; height:var(--app-h, 100%); overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; padding:calc(12px + env(safe-area-inset-top)) 12px calc(78px + env(safe-area-inset-bottom)); display:none; -webkit-overflow-scrolling:touch; scrollbar-width:none; -ms-overflow-style:none;}
 .view::-webkit-scrollbar{display:none; width:0; height:0;}
 .view.on{display:block;}
 /* 縦スクロールは許可し、自然な縦レイアウトにする。横方向のはみ出しは全ビューで出さない */
@@ -397,7 +397,7 @@ html.lens-ok .tab-ind.bubble .tab-ind-in::after{box-shadow:inset 0 0 5px rgba(12
 #toast.on{opacity:1; transform:translate(-50%,0);}
 .hiddenFile{display:none;}
 @media (min-width:760px){ .view{padding-top:calc(22px + env(safe-area-inset-top));} }
-/* ---------- diagnostic overlay (diag-20261115-1745) ---------- */
+/* ---------- diagnostic overlay (diag-20261115-1815) ---------- */
 #diagOverlay{position:fixed; top:calc(env(safe-area-inset-top, 0px) + 8px); left:8px; z-index:9999; max-width:calc(100vw - 16px); background:rgba(0,0,0,.78); color:#e8e8e8; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:11px; line-height:1.5; padding:8px 28px 8px 10px; border-radius:8px; border:1px solid rgba(255,255,255,.25); pointer-events:none; white-space:pre-wrap; word-break:break-all;}
 #diagOverlay .diagTitle{font-weight:700; color:#fff;}
 #diagClose{position:absolute; top:2px; right:2px; width:24px; height:24px; min-height:24px; padding:0; display:flex; align-items:center; justify-content:center; font-size:16px; line-height:1; color:#fff; background:transparent; border:0; pointer-events:auto; cursor:pointer;}
@@ -1849,8 +1849,44 @@ document.addEventListener("DOMContentLoaded",init);
 <script>
 (function(){
   "use strict";
-  var BUILD_ID="diag-20261115-1745";
+  var BUILD_ID="diag-20261115-1815";
   function fmt(n){ if(n==null||typeof n!=="number"||!isFinite(n)) return String(n); return Math.round(n*10)/10; }
+
+  /* ---- 1. 物理画面高でシェルを組む: --app-h = screen.height (CSS px) ---- */
+  function setAppH(){
+    try{
+      var h=window.screen && window.screen.height;
+      if(typeof h==="number" && isFinite(h) && h>0){
+        document.documentElement.style.setProperty("--app-h", h+"px");
+      }
+    }catch(e){}
+  }
+  setAppH();
+
+  /* ---- safe-area-inset-top 実測用プローブ ---- */
+  var safeTopProbe=null;
+  function ensureSafeTopProbe(){
+    if(safeTopProbe) return safeTopProbe;
+    try{
+      if(!document.body) return null;
+      safeTopProbe=document.createElement("div");
+      safeTopProbe.setAttribute("aria-hidden","true");
+      safeTopProbe.style.cssText="position:fixed;top:0;left:0;width:0;height:env(safe-area-inset-top, 0px);visibility:hidden;pointer-events:none;z-index:-1;";
+      document.body.appendChild(safeTopProbe);
+      return safeTopProbe;
+    }catch(e){ return null; }
+  }
+  function measureSafeAreaInsetTop(){
+    try{
+      var p=ensureSafeTopProbe();
+      if(!p) return "n/a";
+      var h=p.getBoundingClientRect().height;
+      if(typeof h!=="number" || !isFinite(h)) h=p.offsetHeight;
+      if(typeof h!=="number" || !isFinite(h)) return "n/a";
+      return fmt(h);
+    }catch(e){ return "n/a"; }
+  }
+
   function updateDiag(){
     var body=document.getElementById("diagBody");
     if(!body) return;
@@ -1861,6 +1897,10 @@ document.addEventListener("DOMContentLoaded",init);
     try{ if(window.visualViewport && typeof window.visualViewport.height==="number") vvH=fmt(window.visualViewport.height); }catch(e){}
     lines.push("visualViewport.height: "+vvH);
     lines.push("screen: "+screen.width+" × "+screen.height);
+    var delta="n/a";
+    try{ if(typeof screen.height==="number" && typeof window.innerHeight==="number") delta=String(screen.height-window.innerHeight); }catch(e){}
+    lines.push("delta (screen.height - innerHeight): "+delta);
+    lines.push("safe-area-inset-top: "+measureSafeAreaInsetTop());
     lines.push("docEl.clientHeight: "+document.documentElement.clientHeight);
     var bg=document.getElementById("bg");
     if(bg){ var r1=bg.getBoundingClientRect(); lines.push("#bg rect: height="+fmt(r1.height)+" bottom="+fmt(r1.bottom)); } else { lines.push("#bg rect: n/a"); }
@@ -1875,7 +1915,37 @@ document.addEventListener("DOMContentLoaded",init);
     lines.push("SW controller: "+sw);
     body.textContent=lines.join("\n");
   }
+
+  /* ---- 2. ビューポート再計測ヒール ---- */
+  var lastHealAt=0;
+  function healViewport(){
+    var now=Date.now();
+    if(now-lastHealAt<500) return;
+    try{ if(!(window.innerHeight < window.screen.height)) return; }catch(e){ return; }
+    lastHealAt=now;
+    var app=document.getElementById("app");
+    if(!app) return;
+    var prev=app.style.display;
+    app.style.display="none";
+    void app.offsetHeight;
+    app.style.display=prev;
+    setAppH();
+    setTimeout(updateDiag,50);
+  }
+  window.addEventListener("focus",healViewport);
+  document.addEventListener("visibilitychange",function(){
+    if(document.visibilityState==="visible" || !document.hidden) healViewport();
+  });
+  document.addEventListener("blur",function(ev){
+    var t=ev && ev.target;
+    if(t && (t.tagName==="INPUT" || t.tagName==="TEXTAREA")){
+      setTimeout(healViewport,0);
+    }
+  },true);
+
   function initDiag(){
+    setAppH();
+    ensureSafeTopProbe();
     var close=document.getElementById("diagClose");
     if(close){ close.addEventListener("click",function(){ var o=document.getElementById("diagOverlay"); if(o) o.style.display="none"; }); }
     updateDiag();
@@ -1883,8 +1953,8 @@ document.addEventListener("DOMContentLoaded",init);
     setTimeout(updateDiag,300);
     setTimeout(updateDiag,1000);
   }
-  window.addEventListener("resize",updateDiag);
-  window.addEventListener("orientationchange",function(){ setTimeout(updateDiag,200); });
+  window.addEventListener("resize",function(){ setAppH(); updateDiag(); });
+  window.addEventListener("orientationchange",function(){ setAppH(); setTimeout(function(){ setAppH(); updateDiag(); },200); });
   try{ if(window.visualViewport) window.visualViewport.addEventListener("resize",updateDiag); }catch(e){}
   if(document.readyState==="loading"){ document.addEventListener("DOMContentLoaded",initDiag); } else { initDiag(); }
 })();
