@@ -1,0 +1,12 @@
+{
+  "name": "カーナビ2 — 関東・分岐ナビ（首都高・圏央道）",
+  "short_name": "カーナビ2",
+  "start_url": "../kanabi2-preview.html",
+  "scope": "../",
+  "display": "standalone",
+  "background_color": "#141416",
+  "theme_color": "#141416",
+  "icons": [
+    { "src": "icon-180.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}
