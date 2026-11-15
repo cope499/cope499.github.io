@@ -3,8 +3,9 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-<meta name="color-scheme" content="light dark" />
-<meta name="theme-color" content="#141416" />
+<meta name="color-scheme" content="dark" />
+<meta name="theme-color" content="#0b0d16" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -18,27 +19,15 @@
 <style>
 :root{
   --accent:#9aa0a6;
-  --ink:#17181a; --ink2:rgba(23,24,26,.62); --ink3:rgba(23,24,26,.42);
-  --glass:rgba(255,255,255,.55); --glass2:rgba(255,255,255,.38);
-  --stroke:rgba(255,255,255,.65); --hair:rgba(20,20,22,.10);
-  --field:rgba(255,255,255,.65);
-  --danger:#d92d20;
-  --scrim:rgba(10,10,12,.38);
-  --sheet:rgba(244,244,246,.82);
-  --drawer:rgba(238,238,240,.78);
-  color-scheme:light;
-}
-@media (prefers-color-scheme:dark){
-  :root{
-    --ink:#f2f2f4; --ink2:rgba(242,242,244,.66); --ink3:rgba(242,242,244,.44);
-    --glass:rgba(24,24,28,.52); --glass2:rgba(24,24,28,.36);
-    --stroke:rgba(255,255,255,.16); --hair:rgba(255,255,255,.12);
-    --field:rgba(255,255,255,.10);
-    --scrim:rgba(0,0,0,.5);
-    --sheet:rgba(26,26,30,.86);
-    --drawer:rgba(22,22,26,.82);
-    color-scheme:dark;
-  }
+  --ink:#f4f4f7; --ink2:rgba(244,244,247,.64); --ink3:rgba(244,244,247,.42);
+  --glass:rgba(17,19,30,.55); --glass2:rgba(17,19,30,.38);
+  --stroke:rgba(255,255,255,.16); --hair:rgba(255,255,255,.12);
+  --field:rgba(255,255,255,.09);
+  --danger:#ff5a4e;
+  --scrim:rgba(0,0,0,.52);
+  --sheet:rgba(18,19,28,.88);
+  --drawer:rgba(14,15,24,.85);
+  color-scheme:dark;
 }
 *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
 html{overscroll-behavior:none; height:100%;}
@@ -55,9 +44,8 @@ button{font:inherit; color:inherit; background:none; border:0; padding:0; cursor
 img{display:block; max-width:100%;}
 
 /* ---------- background ---------- */
-#bg{position:fixed; inset:0; z-index:0; background:#0c0c0e center/cover no-repeat; transition:opacity .4s;}
-#bgShade{position:fixed; inset:0; z-index:1; background:linear-gradient(180deg,rgba(0,0,0,.10),rgba(0,0,0,.28)); pointer-events:none;}
-@media (prefers-color-scheme:light){ #bgShade{background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.22));} }
+#bg{position:fixed; inset:0; z-index:0; background:#07080f center/cover no-repeat; transition:opacity .4s;}
+#bgShade{position:fixed; inset:0; z-index:1; background:linear-gradient(180deg,rgba(4,5,10,.34),rgba(4,5,10,.55)); pointer-events:none;}
 
 /* ---------- layout ---------- */
 #app{position:relative; z-index:2; height:100dvh; display:flex; flex-direction:column;}
@@ -68,45 +56,66 @@ img{display:block; max-width:100%;}
 
 .glass{
   background:var(--glass);
-  -webkit-backdrop-filter:blur(22px) saturate(1.5); backdrop-filter:blur(22px) saturate(1.5);
-  border:1px solid var(--stroke); border-radius:22px;
-  box-shadow:0 10px 30px rgba(0,0,0,.14);
+  -webkit-backdrop-filter:blur(22px) saturate(1.45); backdrop-filter:blur(22px) saturate(1.45);
+  border:1px solid var(--stroke); border-radius:26px;
+  box-shadow:0 14px 34px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.07);
 }
 .pad{padding:16px;}
 
-/* ---------- hero ---------- */
-.hero{position:relative; overflow:hidden; border-radius:24px; min-height:168px; border:1px solid var(--stroke); box-shadow:0 12px 32px rgba(0,0,0,.22);}
+/* ---------- hero (reference design) ---------- */
+.hero{position:relative; overflow:hidden; border-radius:28px; min-height:348px; border:1px solid rgba(255,255,255,.20); box-shadow:0 16px 40px rgba(0,0,0,.42); background:rgba(20,24,34,.5); display:flex; flex-direction:column;}
 .hero img{position:absolute; inset:0; width:100%; height:100%; object-fit:cover;}
-.hero .veil{position:absolute; inset:0; background:linear-gradient(180deg,rgba(0,0,0,.02) 40%,rgba(0,0,0,.62));}
-.hero .hbody{position:absolute; left:0; right:0; bottom:0; padding:16px; color:#fff;}
-.hero .carname{font-size:15px; font-weight:600; letter-spacing:.02em; opacity:.92;}
-.hero .odo{display:flex; align-items:baseline; gap:6px; margin-top:2px;}
-.hero .odo b{font-size:40px; font-weight:800; letter-spacing:-.01em; font-variant-numeric:tabular-nums; line-height:1;}
-.hero .odo span{font-size:14px; opacity:.85;}
-.hero .hrow{display:flex; gap:8px; margin-top:12px;}
-.chipbtn{min-height:38px; padding:0 14px; border-radius:999px; background:rgba(255,255,255,.18); -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,.35); color:#fff; font-size:13px; font-weight:600; display:inline-flex; align-items:center; gap:6px;}
-.chipbtn:active{background:rgba(255,255,255,.34);}
+.hero .veil{position:absolute; inset:0; background:linear-gradient(180deg,rgba(6,8,14,.30) 0%,rgba(6,8,14,0) 34%,rgba(6,8,14,0) 52%,rgba(6,8,14,.42) 100%);}
+.heroTop{position:relative; z-index:2; display:flex; align-items:flex-start; justify-content:space-between; padding:18px 20px 0;}
+.heroKicker{font-size:12.5px; font-weight:700; letter-spacing:.42em; color:rgba(255,255,255,.88); text-shadow:0 1px 6px rgba(0,0,0,.45);}
+.heroModel{font-size:46px; font-weight:800; letter-spacing:.01em; line-height:1.02; color:#fff; text-shadow:0 2px 12px rgba(0,0,0,.5); margin-top:2px;}
+.heroModel span{font-weight:300;}
+.heroBadge{flex:none; min-height:36px; padding:0 18px; border-radius:999px; border:1.5px solid rgba(255,255,255,.55); background:rgba(10,12,18,.28); -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px); color:#fff; font-size:14.5px; font-weight:800; letter-spacing:.22em; display:inline-flex; align-items:center; justify-content:center;}
+.heroSpacer{flex:1; min-height:118px;}
+.heroBand{position:relative; z-index:2; margin:0 12px 12px; border-radius:20px; background:rgba(9,10,15,.74); -webkit-backdrop-filter:blur(18px) saturate(1.3); backdrop-filter:blur(18px) saturate(1.3); border:1px solid rgba(255,255,255,.12); padding:14px 16px 13px; color:#fff;}
+.heroBand::before{content:""; position:absolute; left:10px; right:10px; top:-1px; height:2.5px; border-radius:99px; background:#e63329; box-shadow:0 0 8px rgba(230,51,41,.55);}
+.heroBandTitle{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;}
+.heroBandTitle b{font-size:21px; font-weight:800; letter-spacing:.01em;}
+.heroBandTitle span{font-size:14.5px; color:rgba(255,255,255,.62); font-variant-numeric:tabular-nums;}
+.specChips{display:flex; gap:7px; flex-wrap:wrap; margin-top:10px;}
+.specChip{min-height:32px; padding:0 13px; border-radius:999px; border:1px solid rgba(255,255,255,.34); background:rgba(255,255,255,.06); color:#fff; font-size:12.5px; font-weight:700; letter-spacing:.04em; display:inline-flex; align-items:center;}
+.heroBandBtns{display:flex; gap:8px; margin-top:12px;}
+.chipbtn{min-height:36px; padding:0 14px; border-radius:999px; background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.30); color:#fff; font-size:12.5px; font-weight:700; display:inline-flex; align-items:center; gap:6px;}
+.chipbtn:active{background:rgba(255,255,255,.30);}
 
-/* ---------- gauge ---------- */
-.gaugeBox{display:flex; flex-direction:column; align-items:center; padding:18px 16px 14px;}
-.gaugeTitle{font-size:13px; color:var(--ink2); font-weight:600;}
-.gaugeName{font-size:17px; font-weight:700; margin-top:2px;}
-.gaugeWrap{position:relative; width:164px; height:164px; margin-top:8px;}
-.gaugeWrap svg{transform:rotate(-90deg); width:164px; height:164px;}
-.gaugeC{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;}
-.gaugeC b{font-size:24px; font-weight:800; font-variant-numeric:tabular-nums; letter-spacing:-.01em;}
-.gaugeC span{font-size:11px; color:var(--ink2); margin-top:2px;}
-.gaugeRemain{margin-top:10px; font-size:15px; font-weight:700;}
-.gaugeRemain.over{color:var(--danger);}
-.miniList{width:100%; margin-top:12px; border-top:1px solid var(--hair);}
-.miniRow{display:flex; align-items:center; gap:10px; padding:7px 2px; border-bottom:1px solid var(--hair); width:100%; text-align:left; min-height:40px;}
-.miniRow:last-child{border-bottom:0;}
-.miniRow .nm{font-size:13px; font-weight:600; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-.miniRow .bar{width:62px; height:5px; border-radius:99px; background:rgba(128,128,128,.28); overflow:hidden; flex:none;}
-.miniRow .bar i{display:block; height:100%; border-radius:99px; background:var(--accent);}
-.miniRow .bar i.over{background:var(--danger);}
-.miniRow .rm{font-size:11.5px; color:var(--ink2); font-variant-numeric:tabular-nums; width:82px; text-align:right; flex:none;}
-.miniRow .rm.over{color:var(--danger); font-weight:700;}
+/* ---------- odometer card ---------- */
+.odoCard{padding:18px 18px 16px;}
+.odoLabel{font-size:15.5px; font-weight:800; letter-spacing:.01em;}
+.odoBig{display:flex; align-items:baseline; gap:7px; margin-top:14px;}
+.odoBig b{font-size:34px; font-weight:800; font-variant-numeric:tabular-nums; letter-spacing:.01em; line-height:1;}
+.odoBig span{font-size:16px; color:var(--ink2); font-weight:600;}
+.odoState{font-size:13px; color:var(--ink2); margin-top:7px; min-height:17px;}
+.odoInputRow{display:flex; gap:10px; margin-top:12px; align-items:stretch;}
+.odoInputRow input{flex:1; min-width:0; min-height:52px; border-radius:14px; border:1px solid rgba(255,255,255,.20); background:rgba(255,255,255,.08); padding:10px 14px; font-size:16.5px; color:var(--ink); outline:none; font-variant-numeric:tabular-nums;}
+.odoInputRow input::placeholder{color:rgba(244,244,247,.38);}
+.odoInputRow input:focus{border-color:rgba(255,255,255,.45);}
+.odoUpdateBtn{flex:none; width:118px; border-radius:999px; background:#f4f4f7; color:#14151c; font-size:14.5px; font-weight:800; line-height:1.35; padding:8px 10px; box-shadow:0 6px 18px rgba(0,0,0,.30);}
+.odoUpdateBtn:active{opacity:.82;}
+.gpsAddRow{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:14px; padding:13px 14px; border-radius:16px; border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.05);}
+.gpsAddRow span{font-size:13.5px; font-weight:800; line-height:1.4;}
+
+/* ---------- gauges: all items, 2-column ring grid ---------- */
+.gaugeBox{padding:16px 14px 8px;}
+.gaugeHead{display:flex; align-items:center; justify-content:space-between; padding:0 4px 4px;}
+.gaugeTitle{font-size:13px; color:var(--ink2); font-weight:700;}
+.gaugeAddBtn{font-size:12.5px; font-weight:700; color:var(--ink); border:1px solid var(--hair); border-radius:999px; padding:0 12px; min-height:32px; background:rgba(255,255,255,.06);}
+.gaugeGrid{display:grid; grid-template-columns:1fr 1fr; gap:6px 8px;}
+.gaugeCell{display:flex; flex-direction:column; align-items:center; padding:12px 4px 12px; border-radius:18px; width:100%; text-align:center;}
+.gaugeCell:active{background:rgba(255,255,255,.06);}
+.gaugeWrap{position:relative; width:118px; height:118px;}
+.gaugeWrap svg{transform:rotate(-90deg); width:118px; height:118px;}
+.gaugeC{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:0 12px;}
+.gaugeC b{font-size:14.5px; font-weight:800; font-variant-numeric:tabular-nums; letter-spacing:-.01em; line-height:1.15; white-space:nowrap;}
+.gaugeC b.long{font-size:12.5px;}
+.gaugeC span{font-size:10.5px; color:var(--ink2); font-variant-numeric:tabular-nums; margin-top:1px; white-space:nowrap;}
+.gaugeNm{font-size:13.5px; font-weight:700; margin-top:8px; line-height:1.3;}
+.gaugeRm{font-size:12px; color:var(--ink2); font-variant-numeric:tabular-nums; margin-top:2px;}
+.gaugeRm.over{color:var(--danger); font-weight:700;}
 
 /* ---------- stats / rows ---------- */
 .stats{display:flex; padding:14px 6px;}
@@ -126,10 +135,26 @@ img{display:block; max-width:100%;}
 .listCard{padding:0; overflow:hidden;}
 
 /* ---------- drive / map ---------- */
-.mapBox{position:relative; height:44dvh; min-height:280px; border-radius:22px; overflow:hidden; border:1px solid var(--stroke); box-shadow:0 10px 30px rgba(0,0,0,.16); background:#dfe3e6;}
-.mapBox.dark{background:#0a1628;}
+.mapBox{position:relative; height:44dvh; min-height:280px; border-radius:22px; overflow:hidden; border:1px solid var(--stroke); box-shadow:0 10px 30px rgba(0,0,0,.16); background:#e8ebee;}
+.mapBox.dark{background:#1d2a44;}
 #gmap{position:absolute; inset:0; display:none;}
+#leafMap{position:absolute; inset:0; display:none; z-index:1;}
 #fallbackMap{position:absolute; inset:0; width:100%; height:100%;}
+/* ===== カーナビ移植: 地図テーマ（タイル着色フィルタ） =====
+   ダーク: Esri Dark Gray を紺色に着色、地≒RGB(38,48,74)／道路≒RGB(74,92,136)。
+   ライト: 同じタイルスタックに反転＋色相補正を足して明転させる（CARTO廃止後の方式）。
+   フィルタは Leaflet の className 経由でタイル画像だけに掛かる */
+.tilefx-std{filter:saturate(1.38) brightness(.92) contrast(1.06)}
+.tilefx-esri{filter:contrast(1.28) sepia(.68) hue-rotate(186deg) saturate(2.9) brightness(.88)}
+.tilefx-darkhi{filter:saturate(0) invert(.88) contrast(.92) sepia(.55) hue-rotate(186deg) saturate(2.7) brightness(1.25)}
+.tilefx-invert{filter:invert(.94) hue-rotate(202deg) brightness(.78) contrast(1.12) saturate(1.1)}
+.tilefx-esri-light{filter:contrast(1.28) sepia(.68) hue-rotate(186deg) saturate(2.9) brightness(.88) invert(1) hue-rotate(180deg) brightness(1.05) contrast(.92) saturate(.75)}
+.tilefx-lighthi{filter:saturate(0) invert(.88) contrast(.92) sepia(.55) hue-rotate(186deg) saturate(2.7) brightness(1.25) invert(1) hue-rotate(180deg) brightness(1.04) contrast(.94) saturate(.8)}
+.leaflet-container{background:#e8ebee; font:inherit;}
+.mapBox.dark .leaflet-container{background:#1d2a44}
+.leaflet-control-attribution{background:transparent !important; box-shadow:none !important; font-size:8.5px !important; line-height:1.3 !important; padding:0 4px; color:rgba(110,110,118,.78); text-shadow:0 1px 2px rgba(255,255,255,.7);}
+.leaflet-control-attribution a{color:inherit; text-decoration:none;}
+.mapBox.dark .leaflet-control-attribution{color:rgba(205,205,212,.5); text-shadow:0 1px 2px rgba(0,0,0,.65);}
 .mapChip{position:absolute; left:10px; top:10px; z-index:3; font-size:11.5px; font-weight:600; padding:7px 11px; border-radius:999px; background:var(--glass); -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px); border:1px solid var(--stroke); color:var(--ink);}
 .recPanel{padding:16px;}
 .recTop{display:flex; align-items:center; gap:10px;}
@@ -146,32 +171,81 @@ img{display:block; max-width:100%;}
 .recBtns{display:flex; gap:8px; margin-top:14px;}
 .btn{flex:1; min-height:48px; border-radius:14px; font-size:15px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; gap:7px; border:1px solid var(--hair); background:var(--glass2); -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px);}
 .btn:active{opacity:.75;}
-.btn.primary{background:var(--ink); color:var(--bgInverse,#fff); border-color:transparent;}
-@media (prefers-color-scheme:dark){ .btn.primary{color:#141416;} }
+.btn.primary{background:var(--ink); color:#14151c; border-color:transparent;}
 .btn.accentBtn{background:var(--accent); color:#fff; border-color:transparent;}
 .btn.danger{color:var(--danger);}
 .btn.small{flex:none; padding:0 16px; min-height:42px; font-size:13.5px;}
 .recNote{font-size:11.5px; color:var(--ink2); margin-top:10px; display:none;}
 .recNote.on{display:block;}
 
-/* ---------- tab bar ---------- */
+/* ---------- tab bar (カーナビ移植: リキッドガラス＋滑るピル＋シャボン玉) ---------- */
 #tabbar{
   position:fixed; left:50%; transform:translateX(-50%);
-  bottom:calc(12px + env(safe-area-inset-bottom)); z-index:40;
-  width:min(430px,calc(100vw - 28px)); height:64px; border-radius:22px;
-  background:rgba(20,20,22,.82); -webkit-backdrop-filter:blur(24px) saturate(1.4); backdrop-filter:blur(24px) saturate(1.4);
-  border:1px solid rgba(255,255,255,.14); box-shadow:0 14px 34px rgba(0,0,0,.35);
-  display:flex; padding:6px;
+  bottom:calc(10px + env(safe-area-inset-bottom)); z-index:40;
+  width:min(640px,calc(100vw - 24px));
+  display:flex; gap:4px; padding:6px; border-radius:32px;
+  background:rgba(246,246,249,.46);
+  -webkit-backdrop-filter:blur(22px) saturate(1.5) brightness(1.03);
+  backdrop-filter:blur(22px) saturate(1.5) brightness(1.03);
+  backdrop-filter:url(#tabGlass) blur(1.6px) saturate(1.45) brightness(1.02);
+  border:1px solid rgba(255,255,255,.55);
+  box-shadow:0 16px 40px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.32), inset 0 0 14px rgba(255,255,255,.05);
+  touch-action:none;
 }
-.tabbtn{flex:1; position:relative; display:flex; align-items:center; justify-content:center; border-radius:16px; min-height:52px;}
-.tabbtn .pill{position:absolute; inset:0; border-radius:16px; background:transparent; transition:background .12s;}
-.tabbtn.pressing .pill{background:rgba(255,255,255,.20);}
-.tabbtn .tin{position:relative; display:flex; flex-direction:column; align-items:center; gap:2px; color:rgba(255,255,255,.48);}
-.tabbtn.sel .tin{color:#fff;}
-.tabbtn .tin svg{width:22px; height:22px;}
-.tabbtn .tin span{font-size:10.5px; font-weight:600;}
-.tabbtn .dot{position:absolute; bottom:5px; left:50%; transform:translateX(-50%); width:4px; height:4px; border-radius:50%; background:var(--accent); opacity:0;}
-.tabbtn.sel .dot{opacity:1;}
+#tabbar::before{content:""; position:absolute; inset:0; border-radius:inherit; z-index:0; pointer-events:none;
+  background:linear-gradient(180deg,rgba(255,255,255,.13) 0%,rgba(255,255,255,.05) 48%,rgba(255,255,255,.02) 100%);}
+@media (prefers-color-scheme: dark){
+  #tabbar{background:rgba(10,10,12,.62); border-color:rgba(255,255,255,.13);
+    -webkit-backdrop-filter:blur(22px) saturate(1.3);
+    backdrop-filter:blur(22px) saturate(1.3);
+    backdrop-filter:url(#tabGlass) blur(1.6px) saturate(1.25);
+    box-shadow:0 16px 44px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.07);}
+  #tabbar::before{background:linear-gradient(180deg,rgba(255,255,255,.03) 0%,rgba(255,255,255,.01) 55%,rgba(255,255,255,0) 100%);}
+}
+.tabbtn{flex:1; position:relative; z-index:1; border:none; background:transparent; border-radius:26px; padding:7px 2px 6px; display:flex; flex-direction:column; align-items:center; gap:3px; font-size:10.5px; font-weight:800; letter-spacing:.01em; color:var(--ink2); cursor:pointer; min-height:52px; transition:color .3s ease; -webkit-tap-highlight-color:transparent;}
+.tabbtn svg{width:24px; height:24px; transition:transform .4s cubic-bezier(.3,1.35,.4,1);}
+.tabbtn span{transition:transform .3s ease;}
+.tabbtn[aria-selected="true"]{color:var(--ink); background:transparent;}
+.tabbtn[aria-selected="true"] svg{transform:scale(1.13);}
+/* 選択ハイライト: バーの中を滑るピル */
+.tab-ind{position:absolute; left:0; top:0; z-index:0; width:0; height:0; border-radius:26px; opacity:0; pointer-events:none;
+  background:rgba(120,120,128,.22);
+  transition:transform .55s cubic-bezier(.32,.9,.25,1),width .55s cubic-bezier(.32,.9,.25,1),height .55s cubic-bezier(.32,.9,.25,1),opacity .3s ease,background-color .2s ease;}
+@media (prefers-color-scheme: dark){ .tab-ind{background:rgba(255,255,255,.16);} }
+.tab-ind.noanim{transition:none !important;}
+/* シャボン玉から通常ハイライトへの復帰専用の速いスライド */
+.tab-ind.snap{transition:transform .18s cubic-bezier(.32,.9,.25,1),width .18s cubic-bezier(.32,.9,.25,1),height .18s cubic-bezier(.32,.9,.25,1),opacity .15s ease,background-color .15s ease;}
+.tab-ind.bubble{background-color:transparent;}
+.tab-ind-in{position:absolute; inset:0; border-radius:26px; background:transparent; border:1.5px solid transparent;
+  transition:transform .22s ease,background .22s ease,border-color .22s ease,box-shadow .22s ease;}
+/* シャボン玉: 拡大鏡（枠は最小限・内側は均一なごく薄い無彩色・一回り大きい） */
+.tab-ind.bubble .tab-ind-in{background:rgba(120,120,128,.06); border:1px solid rgba(60,60,67,.18);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.08),inset 0 0 6px rgba(120,120,128,.07);
+  transform:scale(1.14);
+  -webkit-backdrop-filter:blur(1.5px) brightness(1.04) saturate(1.05);
+  backdrop-filter:blur(1.5px) brightness(1.04) saturate(1.05);}
+@media (prefers-color-scheme: dark){
+  .tab-ind.bubble .tab-ind-in{background:rgba(255,255,255,.03); border-color:rgba(255,255,255,.16);
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.04),inset 0 0 6px rgba(255,255,255,.03);}
+}
+html.lens-ok .tab-ind.bubble .tab-ind-in{
+  -webkit-backdrop-filter:blur(1.5px) brightness(1.04) saturate(1.05);
+  backdrop-filter:url(#bubbleLens) brightness(1.03) saturate(1.04);}
+.tab-ind.bubble .tab-ind-in::after{content:""; position:absolute; inset:0; border-radius:inherit;
+  box-shadow:inset 0 0 7px rgba(128,128,128,.16),inset 0 1px 2px rgba(255,255,255,.08),inset 0 -1px 2px rgba(0,0,0,.05); pointer-events:none;}
+html.lens-ok .tab-ind.bubble .tab-ind-in::after{box-shadow:inset 0 0 5px rgba(128,128,128,.08);}
+/* バブルの内側に入ったタブ: アイコンを明るく＋拡大 */
+.tabbtn.lens-in{color:var(--ink);}
+.tabbtn.lens-in svg{transform:scale(1.32);}
+.tabbtn.lens-in span{transform:scale(1.18);}
+@media (prefers-color-scheme: dark){
+  .tabbtn.lens-in{color:#ffffff;}
+  .tabbtn.lens-in svg{filter:brightness(1.3);}
+}
+@media (prefers-reduced-motion: reduce){
+  .tab-ind{transition:none;}
+  .tabbtn,.tabbtn svg,.tab-ind-in{transition:none;}
+}
 .fab{
   position:fixed; right:16px; bottom:calc(90px + env(safe-area-inset-bottom)); z-index:39;
   width:54px; height:54px; border-radius:50%; background:#141416; color:#fff;
@@ -281,28 +355,44 @@ img{display:block; max-width:100%;}
         <div class="hero">
           <img id="heroImg" src="assets/bg-car.jpg" alt="車両写真" />
           <div class="veil"></div>
-          <div class="hbody">
-            <div class="carname" id="heroCarName">マイカー</div>
-            <div class="odo"><b id="odoVal">0</b><span>km</span></div>
-            <div class="hrow">
-              <button class="chipbtn" id="btnOdoEdit">オドメーター編集</button>
+          <div class="heroTop">
+            <div>
+              <div class="heroKicker" id="heroKicker">ROADSTER</div>
+              <div class="heroModel" id="heroModel">NC<span>3</span></div>
+            </div>
+            <span class="heroBadge" id="heroBadge">RS</span>
+          </div>
+          <div class="heroSpacer"></div>
+          <div class="heroBand">
+            <div class="heroBandTitle"><b id="heroCarName">NCロードスター</b><span id="heroYear">2013</span></div>
+            <div class="specChips" id="specChips"></div>
+            <div class="heroBandBtns">
               <button class="chipbtn" id="btnQuickMaint">整備を追加</button>
+              <button class="chipbtn" id="btnOdoEdit">オドメーター編集</button>
             </div>
           </div>
         </div>
 
-        <div class="glass gaugeBox">
-          <div class="gaugeTitle">次回整備まで</div>
-          <div class="gaugeName" id="gaugeName">—</div>
-          <div class="gaugeWrap">
-            <svg width="212" height="212" viewBox="0 0 212 212">
-              <circle cx="106" cy="106" r="88" fill="none" stroke="rgba(128,128,128,.25)" stroke-width="13"/>
-              <circle id="gaugeArc" cx="106" cy="106" r="88" fill="none" stroke="var(--accent)" stroke-width="13" stroke-linecap="round" stroke-dasharray="552.9" stroke-dashoffset="552.9"/>
-            </svg>
-            <div class="gaugeC"><b id="gaugeCenter">0/5000km</b><span id="gaugeSub">経過 / 間隔</span></div>
+        <div class="glass odoCard">
+          <div class="odoLabel">現在のオドメーター</div>
+          <div class="odoBig"><b id="odoVal">—</b><span>km</span></div>
+          <div class="odoState" id="odoState">未入力</div>
+          <div class="odoInputRow">
+            <input id="odoQuickInput" type="number" inputmode="numeric" min="0" placeholder="例）52340" aria-label="オドメーター手入力" />
+            <button class="odoUpdateBtn" id="btnOdoQuick">手入力で<br>更新</button>
           </div>
-          <div class="gaugeRemain" id="gaugeRemain">—</div>
-          <div class="miniList" id="miniList"></div>
+          <div class="gpsAddRow">
+            <span>GPS走行をオドメーターに加算</span>
+            <button class="tgl on" id="tglGpsAdd" role="switch" aria-checked="true" aria-label="GPS走行をオドメーターに加算"></button>
+          </div>
+        </div>
+
+        <div class="glass gaugeBox">
+          <div class="gaugeHead">
+            <div class="gaugeTitle">整備インジケーター</div>
+            <button class="gaugeAddBtn" id="btnGaugeAdd">＋ 整備を追加</button>
+          </div>
+          <div class="gaugeGrid" id="gaugeGrid"></div>
         </div>
 
         <div class="glass stats">
@@ -330,6 +420,7 @@ img{display:block; max-width:100%;}
       <div class="wrap">
         <div class="mapBox" id="mapBox">
           <canvas id="fallbackMap"></canvas>
+          <div id="leafMap"></div>
           <div id="gmap"></div>
           <div class="mapChip" id="mapChip">軌跡プレビュー</div>
         </div>
@@ -373,8 +464,14 @@ img{display:block; max-width:100%;}
   <div class="dbody">
     <div class="dsec" style="margin-top:6px;">
       <h3>車両</h3>
-      <div class="field"><label>車名</label><input id="setCarName" type="text" placeholder="マイカー" /></div>
+      <div class="field"><label>車名</label><input id="setCarName" type="text" placeholder="NCロードスター" /></div>
       <div class="field"><label>オドメーター（km）</label><input id="setOdo" type="number" inputmode="numeric" min="0" /></div>
+      <div class="field"><label>ヒーロー上部ラベル</label><input id="setHeroKicker" type="text" placeholder="ROADSTER" /></div>
+      <div class="field"><label>ヒーロー型式（大きく表示）</label><input id="setHeroModel" type="text" placeholder="NC3" /></div>
+      <div class="field"><label>ヒーローバッジ</label><input id="setHeroBadge" type="text" placeholder="RS" /></div>
+      <div class="field"><label>年式</label><input id="setHeroYear" type="text" placeholder="2013" /></div>
+      <div class="field"><label>スペックチップ（カンマ区切り）</label><input id="setSpecChips" type="text" placeholder="後期 NC3,RS,ホワイト,黒幌" /></div>
+      <div class="toggleRow" style="margin-top:8px;"><span>GPS走行をオドメーターに加算</span><button class="tgl on" id="tglGpsAddDrawer" role="switch" aria-checked="true" aria-label="GPS走行をオドメーターに加算（設定）"></button></div>
     </div>
     <div class="dsec">
       <h3>背景</h3>
@@ -399,7 +496,7 @@ img{display:block; max-width:100%;}
     <div class="dsec">
       <h3>Google Maps</h3>
       <div class="field"><label>APIキー</label><input id="setApiKey" type="password" autocomplete="off" placeholder="未入力" /></div>
-      <div class="recBtns" style="margin-top:10px;"><button class="btn small" id="btnApiSave" style="flex:1;">保存して地図を読み込む</button></div>
+      <div class="recBtns" style="margin-top:10px;"><button class="btn small" id="btnApiSave" style="flex:1;">保存</button></div>
     </div>
     <div class="dsec">
       <h3>データ</h3>
@@ -410,10 +507,25 @@ img{display:block; max-width:100%;}
   </div>
 </aside>
 
-<nav id="tabbar">
-  <button class="tabbtn sel" data-tab="home"><span class="pill"></span><span class="tin"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5"/></svg><span>ホーム</span></span><span class="dot"></span></button>
-  <button class="tabbtn" data-tab="maint"><span class="pill"></span><span class="tin"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4.5 4.5 0 0 0-6 6L3 18l3 3 5.7-5.7a4.5 4.5 0 0 0 6-6L14 13l-3-3 3.7-3.7z"/></svg><span>整備履歴</span></span><span class="dot"></span></button>
-  <button class="tabbtn" data-tab="drive"><span class="pill"></span><span class="tin"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-5.6-7-11a7 7 0 1 1 14 0c0 5.4-7 11-7 11z"/><circle cx="12" cy="10" r="2.6"/></svg><span>走行</span></span><span class="dot"></span></button>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <filter id="tabGlass" x="-10%" y="-80%" width="120%" height="260%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.011 0.085" numOctaves="2" seed="7" result="noise"/>
+      <feDisplacementMap in="SourceGraphic" in2="noise" scale="17" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <filter id="bubbleLens" x="0%" y="0%" width="100%" height="100%" color-interpolation-filters="sRGB">
+      <feImage href="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='0'%3E%3Cstop offset='0' stop-color='rgb(238,128,0)'/%3E%3Cstop offset='.07' stop-color='rgb(200,128,0)'/%3E%3Cstop offset='.5' stop-color='rgb(128,128,0)'/%3E%3Cstop offset='.93' stop-color='rgb(55,128,0)'/%3E%3Cstop offset='1' stop-color='rgb(17,128,0)'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' fill='url(%23g)'/%3E%3C/svg%3E" x="0%" y="0%" width="100%" height="100%" preserveAspectRatio="none" result="mapX"/>
+      <feDisplacementMap in="SourceGraphic" in2="mapX" scale="40" xChannelSelector="R" yChannelSelector="G" result="dispX"/>
+      <feImage href="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='rgb(128,238,0)'/%3E%3Cstop offset='.15' stop-color='rgb(128,200,0)'/%3E%3Cstop offset='.5' stop-color='rgb(128,128,0)'/%3E%3Cstop offset='.85' stop-color='rgb(128,55,0)'/%3E%3Cstop offset='1' stop-color='rgb(128,17,0)'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' fill='url(%23g)'/%3E%3C/svg%3E" x="0%" y="0%" width="100%" height="100%" preserveAspectRatio="none" result="mapY"/>
+      <feDisplacementMap in="dispX" in2="mapY" scale="17" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+  </defs>
+</svg>
+<nav id="tabbar" aria-label="メインタブ">
+  <span class="tab-ind" id="tabInd" aria-hidden="true"><span class="tab-ind-in"></span></span>
+  <button type="button" class="tabbtn" data-tab="home" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10.5 12 3l8 7.5"/><path d="M6 9.5V21h12V9.5"/></svg><span>ホーム</span></button>
+  <button type="button" class="tabbtn" data-tab="maint" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a4.5 4.5 0 0 0-6 6L3 18l3 3 5.7-5.7a4.5 4.5 0 0 0 6-6L14 13l-3-3 3.7-3.7z"/></svg><span>整備履歴</span></button>
+  <button type="button" class="tabbtn" data-tab="drive" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="5" r="2.5"/><path d="M8.5 19H15a3 3 0 0 0 0-6h-4.5a3 3 0 0 1 0-6H13"/></svg><span>走行</span></button>
 </nav>
 
 <!-- odometer sheet -->
@@ -422,7 +534,7 @@ img{display:block; max-width:100%;}
   <div class="shead"><b>オドメーター</b><button data-close>閉じる</button></div>
   <div class="sheetScroll">
     <div class="field"><label>現在の走行距離（km）</label><input id="odoInput" type="number" inputmode="numeric" min="0" /></div>
-    <div class="recNote on">走行を保存すると、GPS距離が自動で加算されます。</div>
+    <div class="recNote on">「GPS走行をオドメーターに加算」がオンのとき、走行を保存するとGPS距離が加算されます。</div>
     <div class="sheetBtns"><button class="btn primary" id="btnOdoSave">保存</button></div>
   </div>
 </div></div>
@@ -474,6 +586,7 @@ img{display:block; max-width:100%;}
 <input type="file" id="fileHero" class="hiddenFile" accept="image/*" />
 <input type="file" id="fileDrivePhoto" class="hiddenFile" accept="image/*" />
 
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 "use strict";
 /* ================= constants ================= */
@@ -495,8 +608,7 @@ var ACCENTS={
 var MAINT_TYPES=[
   {name:"エンジンオイル",interval:5000},
   {name:"オイルフィルター",interval:10000},
-  {name:"タイヤローテーション",interval:10000},
-  {name:"ワイパー",interval:10000},
+  {name:"タイヤ",interval:10000},
   {name:"エアフィルター",interval:20000},
   {name:"スパークプラグ",interval:20000},
   {name:"ブレーキフルード",interval:20000},
@@ -506,11 +618,11 @@ var MAINT_TYPES=[
   {name:"車検",interval:40000},
   {name:"その他",interval:5000}
 ];
-var CIRC=552.9, JP={latMin:31,latMax:45.6,lngMin:129,lngMax:146};
+var CIRC=301.6, JP={latMin:31,latMax:45.6,lngMin:129,lngMax:146};
 
 /* ================= state ================= */
 var S={
-  settings:{carName:"マイカー",odometer:0,accent:"mono",bg:"car",hero:"car",mapTheme:"light",apiKey:""},
+  settings:{carName:"NCロードスター",odometer:0,odoSet:false,gpsAdd:true,heroKicker:"ROADSTER",heroModel:"NC3",heroBadge:"RS",heroYear:"2013",specChips:"後期 NC3,RS,ホワイト,黒幌",accent:"mono",bg:"car",hero:"car",mapTheme:"light",apiKey:""},
   customBg:null, customHero:null,
   maint:[], drives:[],
   tab:"home", drawerOpen:false, sheetOpen:null,
@@ -565,11 +677,24 @@ function themeSrc(which){
   for(var i=0;i<THEMES.length;i++)if(THEMES[i].id===v)return THEMES[i].src;
   return "assets/bg-car.jpg";
 }
+function heroModelHTML(m){
+  m=String(m||"");
+  if(m.length>1)return esc(m.slice(0,-1))+"<span>"+esc(m.slice(-1))+"</span>";
+  return esc(m);
+}
 function applyTheme(){
   document.documentElement.style.setProperty("--accent",accentHex());
   $("bg").style.backgroundImage="url('"+themeSrc("bg")+"')";
   $("heroImg").src=themeSrc("hero");
-  $("heroCarName").textContent=S.settings.carName||"マイカー";
+  $("heroCarName").textContent=S.settings.carName||"NCロードスター";
+  $("heroKicker").textContent=S.settings.heroKicker||"ROADSTER";
+  $("heroModel").innerHTML=heroModelHTML(S.settings.heroModel||"NC3");
+  $("heroBadge").textContent=S.settings.heroBadge||"RS";
+  $("heroYear").textContent=S.settings.heroYear||"";
+  var chips=String(S.settings.specChips||"").split(",").map(function(s){return s.trim();}).filter(Boolean);
+  $("specChips").innerHTML=chips.map(function(c){return '<span class="specChip">'+esc(c)+"</span>";}).join("");
+  var ga=!!S.settings.gpsAdd;
+  [$("tglGpsAdd"),$("tglGpsAddDrawer")].forEach(function(t){if(t){t.classList.toggle("on",ga);t.setAttribute("aria-checked",String(ga));}});
   $("mapBox").classList.toggle("dark",S.settings.mapTheme==="dark");
   var seg=$("mapThemeSeg").children;
   for(var i=0;i<seg.length;i++)seg[i].classList.toggle("sel",seg[i].getAttribute("data-mt")===S.settings.mapTheme);
@@ -601,11 +726,16 @@ function buildSettingsUI(){
   Object.keys(ACCENTS).forEach(function(k){
     var b=document.createElement("button"); b.className="swatch"; b.setAttribute("data-ac",k); b.setAttribute("aria-label",ACCENTS[k].name);
     b.innerHTML='<i style="background:'+ACCENTS[k].hex+'"></i>';
-    b.addEventListener("click",function(){S.settings.accent=k;saveSettings();applyTheme();drawFallbackMap();drawGmapAll();});
+    b.addEventListener("click",function(){S.settings.accent=k;saveSettings();applyTheme();drawFallbackMap();drawLeafAll();});
     sw.appendChild(b);
   });
   $("setCarName").value=S.settings.carName||"";
   $("setOdo").value=S.settings.odometer||0;
+  $("setHeroKicker").value=S.settings.heroKicker||"";
+  $("setHeroModel").value=S.settings.heroModel||"";
+  $("setHeroBadge").value=S.settings.heroBadge||"";
+  $("setHeroYear").value=S.settings.heroYear||"";
+  $("setSpecChips").value=S.settings.specChips||"";
   $("setApiKey").value=S.settings.apiKey||"";
 }
 function readImageFile(file,cb){
@@ -625,9 +755,194 @@ function switchTab(name){
   S.tab=name;
   ["home","maint","drive"].forEach(function(t){$("view-"+t).classList.toggle("on",t===name);});
   var btns=document.querySelectorAll(".tabbtn");
-  for(var i=0;i<btns.length;i++)btns[i].classList.toggle("sel",btns[i].getAttribute("data-tab")===name);
+  for(var i=0;i<btns.length;i++)btns[i].setAttribute("aria-selected",String(btns[i].getAttribute("data-tab")===name));
   $("fabAdd").classList.toggle("on",name==="maint");
-  if(name==="drive"){setTimeout(function(){resizeFallback();drawFallbackMap();if(window.__gmapReady)drawGmapAll();},60);}
+  moveTabInd(false);
+  if(name==="drive"){setTimeout(function(){resizeFallback();initLeafMap();drawFallbackMap();drawLeafAll();},60);}
+}
+/* ===== カーナビ移植: 滑るピル＋シャボン玉（指追従・バネ揺れ・拡大鏡アイコン・長押し） ===== */
+var tabbarEl=null, tabIndEl=null;
+function moveTabInd(instant){
+  if(!tabbarEl||!tabIndEl)return;
+  var btn=tabbarEl.querySelector('.tabbtn[data-tab="'+S.tab+'"]');
+  if(!btn||!btn.offsetWidth)return;
+  tabIndEl.style.width=btn.offsetWidth+"px";
+  tabIndEl.style.height=btn.offsetHeight+"px";
+  tabIndEl.style.opacity="1";
+  if(instant)tabIndEl.classList.add("noanim");
+  tabIndEl.style.transform="translate("+btn.offsetLeft+"px,"+btn.offsetTop+"px)";
+  if(instant){void tabIndEl.offsetWidth;tabIndEl.classList.remove("noanim");}
+}
+function initTabBar(){
+  tabbarEl=$("tabbar"); tabIndEl=$("tabInd");
+  if(!tabbarEl||!tabIndEl)return;
+  var tabIndIn=tabIndEl.querySelector(".tab-ind-in");
+  var tabDrag=null, tabDragSuppressClick=false;
+  function tabIndFollow(cx,cy){
+    var btns=tabbarEl.querySelectorAll(".tabbtn");
+    if(!btns.length||!tabIndEl.offsetWidth)return;
+    var w=tabIndEl.offsetWidth,h=tabIndEl.offsetHeight;
+    var first=btns[0],last=btns[btns.length-1];
+    var nx=Math.max(first.offsetLeft,Math.min(last.offsetLeft+last.offsetWidth-w,cx-w/2));
+    var ny=Math.max(first.offsetTop,Math.min(first.offsetTop+first.offsetHeight-h,cy-h/2));
+    tabIndEl.style.transform="translate("+nx+"px,"+ny+"px)";
+  }
+  var wob={on:false,raf:0,settle:0,tilt:0,grow:1,str:0,vx:0,lastX:0,lastT:0,lastMoveAt:0};
+  function bubbleReturn(){
+    tabIndEl.classList.add("snap");
+    if(wob.settle)clearTimeout(wob.settle);
+    wob.settle=0;
+    tabIndEl.classList.remove("bubble");
+    clearLensIcons();
+    wob.settle=setTimeout(function(){wob.settle=0;tabIndEl.classList.remove("snap");},195);
+  }
+  try{
+    var lensProbe=document.createElement("div");
+    lensProbe.style.backdropFilter="url(#bubbleLens)";
+    if(lensProbe.style.backdropFilter)document.documentElement.classList.add("lens-ok");
+  }catch(e){}
+  var lensRAF=0;
+  function clearLensIcons(){tabbarEl.querySelectorAll(".tabbtn.lens-in").forEach(function(b){b.classList.remove("lens-in");});}
+  function lensTick(){
+    lensRAF=0;
+    if(!tabIndEl.classList.contains("bubble")){clearLensIcons();return;}
+    if(tabIndIn){
+      var br=tabIndIn.getBoundingClientRect();
+      tabbarEl.querySelectorAll(".tabbtn").forEach(function(b){
+        var s=b.querySelector("svg"); if(!s)return;
+        var r=s.getBoundingClientRect();
+        var cx=r.left+r.width/2, cy=r.top+r.height/2;
+        var inside=cx>=br.left&&cx<=br.right&&cy>=br.top-6&&cy<=br.bottom+6;
+        b.classList.toggle("lens-in",inside);
+      });
+    }
+    lensRAF=requestAnimationFrame(lensTick);
+  }
+  function startLens(){if(!lensRAF)lensRAF=requestAnimationFrame(lensTick);}
+  window.__tabTapBubble=function(name){
+    if(tabDragSuppressClick)return;
+    var btns=tabbarEl.querySelectorAll(".tabbtn");
+    var ci=-1,ti=-1;
+    for(var i=0;i<btns.length;i++){
+      var t=btns[i].getAttribute("data-tab");
+      if(t===S.tab)ci=i;
+      if(t===name)ti=i;
+    }
+    if(ci<0||ti<0||Math.abs(ti-ci)!==1)return;
+    if(wob.settle){clearTimeout(wob.settle);wob.settle=0;}
+    tabIndEl.classList.remove("snap");
+    tabIndEl.classList.add("bubble");
+    startLens();
+    bubbleReturn();
+  };
+  var wobReduced=!!(window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  function wobFrame(){
+    wob.raf=0;
+    if(!wob.on)return;
+    var v=(performance.now()-wob.lastMoveAt>70)?0:wob.vx;
+    var tTilt=Math.max(-3,Math.min(3,v*2.4));
+    var tStretch=Math.min(0.035,Math.abs(v)*0.022);
+    wob.tilt+=(tTilt-wob.tilt)*0.16;
+    wob.grow+=(1.14-wob.grow)*0.14;
+    wob.str+=(tStretch-wob.str)*0.16;
+    if(tabIndIn){
+      var sx=wob.grow+wob.str, sy=wob.grow-wob.str*0.55;
+      tabIndIn.style.transform="rotate("+wob.tilt.toFixed(2)+"deg) scale("+sx.toFixed(3)+","+sy.toFixed(3)+")";
+    }
+    wob.raf=requestAnimationFrame(wobFrame);
+  }
+  function wobStart(e){
+    if(wob.settle){clearTimeout(wob.settle);wob.settle=0;}
+    tabIndEl.classList.remove("snap");
+    tabIndEl.classList.add("bubble");
+    startLens();
+    if(!tabIndIn||wobReduced)return;
+    wob.on=true; wob.tilt=0; wob.grow=1; wob.str=0; wob.vx=0;
+    wob.lastX=e.clientX; wob.lastT=performance.now(); wob.lastMoveAt=wob.lastT;
+    tabIndIn.style.transitionProperty="background,border-color,box-shadow";
+    if(!wob.raf)wob.raf=requestAnimationFrame(wobFrame);
+  }
+  function wobMove(e){
+    if(!wob.on)return;
+    var now=performance.now(), dt=now-wob.lastT;
+    if(dt>=8){
+      var inst=(e.clientX-wob.lastX)/dt;
+      if(isFinite(inst))wob.vx=wob.vx*0.55+inst*0.45;
+      wob.lastX=e.clientX; wob.lastT=now;
+    }
+    wob.lastMoveAt=now;
+  }
+  function wobEnd(){
+    if(wob.raf){cancelAnimationFrame(wob.raf);wob.raf=0;}
+    wob.on=false;
+    if(tabIndIn){tabIndIn.style.transitionProperty="";tabIndIn.style.transform="";}
+    bubbleReturn();
+  }
+  var tabLpTimer=0;
+  function tabLpClear(){if(tabLpTimer){clearTimeout(tabLpTimer);tabLpTimer=0;}}
+  tabbarEl.addEventListener("pointerdown",function(e){
+    tabDrag={x:e.clientX,y:e.clientY,moved:false};
+    tabLpClear();
+    tabLpTimer=setTimeout(function(){
+      tabLpTimer=0;
+      if(!tabDrag||tabDrag.moved)return;
+      tabDrag.moved=true; tabDrag.lp=true;
+      tabIndEl.classList.add("noanim");
+      wobStart({clientX:tabDrag.x});
+      var r=tabbarEl.getBoundingClientRect();
+      tabIndFollow(tabDrag.x-r.left,tabDrag.y-r.top);
+    },230);
+  });
+  window.addEventListener("pointermove",function(e){
+    if(!tabDrag)return;
+    if(!tabDrag.moved&&Math.abs(e.clientX-tabDrag.x)<5&&Math.abs(e.clientY-tabDrag.y)<5)return;
+    if(!tabDrag.moved){
+      tabLpClear();
+      tabDrag.moved=true;
+      tabIndEl.classList.add("noanim");
+      wobStart(e);
+    }else{
+      wobMove(e);
+    }
+    var r=tabbarEl.getBoundingClientRect();
+    tabIndFollow(e.clientX-r.left,e.clientY-r.top);
+  },{passive:true});
+  window.addEventListener("pointerup",function(e){
+    tabLpClear();
+    if(!tabDrag)return;
+    var wasMoved=tabDrag.moved; tabDrag=null;
+    if(!wasMoved)return;
+    wobEnd();
+    tabDragSuppressClick=true;
+    setTimeout(function(){tabDragSuppressClick=false;},350);
+    tabIndEl.classList.remove("noanim");
+    var r=tabbarEl.getBoundingClientRect(), cx=e.clientX-r.left;
+    var best=null,bd=Infinity;
+    tabbarEl.querySelectorAll(".tabbtn").forEach(function(b){
+      var d=Math.abs(b.offsetLeft+b.offsetWidth/2-cx);
+      if(d<bd){bd=d;best=b;}
+    });
+    if(best)switchTab(best.getAttribute("data-tab"));
+    else moveTabInd(false);
+  });
+  window.addEventListener("pointercancel",function(){
+    tabLpClear();
+    if(!tabDrag)return;
+    var wasMoved=tabDrag.moved; tabDrag=null;
+    if(wasMoved){wobEnd();tabIndEl.classList.remove("noanim");moveTabInd(false);}
+  });
+  tabbarEl.addEventListener("click",function(e){
+    if(tabDragSuppressClick){e.stopPropagation();e.preventDefault();}
+  },true);
+  tabbarEl.querySelectorAll(".tabbtn").forEach(function(b){
+    b.addEventListener("click",function(){
+      if(typeof window.__tabTapBubble==="function"){try{window.__tabTapBubble(b.getAttribute("data-tab"));}catch(e){}}
+      switchTab(b.getAttribute("data-tab"));
+    });
+  });
+  window.addEventListener("resize",function(){moveTabInd(true);});
+  window.addEventListener("load",function(){moveTabInd(true);});
+  moveTabInd(true);
 }
 function openDrawer(){if(S.sheetOpen)return;S.drawerOpen=true;var d=$("drawer");d.classList.add("render");$("scrim").classList.add("on");requestAnimationFrame(function(){requestAnimationFrame(function(){d.classList.add("on");});});}
 function closeDrawer(){S.drawerOpen=false;var d=$("drawer");d.classList.remove("on");$("scrim").classList.remove("on");setTimeout(function(){if(!S.drawerOpen)d.classList.remove("render");},300);}
@@ -650,14 +965,15 @@ document.addEventListener("touchmove",function(e){
 document.addEventListener("contextmenu",function(e){if(!e.target.closest("input,textarea,select"))e.preventDefault();});
 
 /* edge swipe: drawer + tab swipe */
-var tsX=0,tsY=0,tsT=0,tsEdge=false,tsOnMap=false;
+var tsX=0,tsY=0,tsT=0,tsEdge=false,tsOnMap=false,tsOnTab=false;
 document.addEventListener("touchstart",function(e){
   if(e.touches.length!==1)return; var t=e.touches[0];
-  tsX=t.clientX; tsY=t.clientY; tsT=Date.now(); tsEdge=tsX<22; tsOnMap=!!e.target.closest("#mapBox");
+  tsX=t.clientX; tsY=t.clientY; tsT=Date.now(); tsEdge=tsX<22; tsOnMap=!!e.target.closest("#mapBox"); tsOnTab=!!e.target.closest("#tabbar");
 },{passive:true});
 document.addEventListener("touchend",function(e){
   var t=e.changedTouches[0]; if(!t)return;
   var dx=t.clientX-tsX, dy=t.clientY-tsY;
+  if(tsOnTab)return;
   if(Math.abs(dy)>70||Date.now()-tsT>600)return;
   if(anySheetOpen())return;
   if(S.drawerOpen){ if(dx<-60)closeDrawer(); return; }
@@ -680,7 +996,9 @@ function lastMaintOf(name){
 function maintStatus(){
   var byType={};
   S.maint.forEach(function(r){
-    if(!byType[r.type]||r.odo>byType[r.type].odo)byType[r.type]=r;
+    var tp=r.type==="タイヤローテーション"?"タイヤ":r.type;
+    if(tp==="ワイパー")return;
+    if(!byType[tp]||r.odo>byType[tp].odo)byType[tp]=Object.assign({},r,{type:tp});
   });
   MAINT_TYPES.forEach(function(t){
     if(!byType[t.name])byType[t.name]={type:t.name,interval:t.interval,odo:null,date:null};
@@ -695,27 +1013,34 @@ function maintStatus(){
   }).sort(function(a,b){return b.ratio-a.ratio;});
 }
 function renderHome(){
-  $("odoVal").textContent=fmtInt(S.settings.odometer);
-  $("heroCarName").textContent=S.settings.carName||"マイカー";
-  var st=maintStatus(), top=st[0];
-  if(top){
-    $("gaugeName").textContent=top.type;
-    $("gaugeCenter").textContent=fmtInt(top.elapsed)+"/"+fmtInt(top.interval)+"km";
-    var pct=Math.min(1,top.ratio);
-    $("gaugeArc").style.strokeDashoffset=String(CIRC*(1-pct));
-    $("gaugeArc").style.stroke=top.ratio>=1?"var(--danger)":"var(--accent)";
-    var gr=$("gaugeRemain");
-    if(top.remain>0){gr.textContent="あと "+fmtInt(top.remain)+" km";gr.classList.remove("over");}
-    else if(top.remain===0){gr.textContent="交換時期です";gr.classList.add("over");}
-    else{gr.textContent=fmtInt(-top.remain)+" km 超過";gr.classList.add("over");}
+  if(S.settings.odoSet){
+    $("odoVal").textContent=fmtInt(S.settings.odometer);
+    $("odoState").textContent="";
+  }else{
+    $("odoVal").textContent="—";
+    $("odoState").textContent="未入力";
   }
-  var ml=$("miniList"); ml.innerHTML="";
-  st.slice(0,4).forEach(function(it){
-    var b=document.createElement("button"); b.className="miniRow";
-    var rm=it.remain>=0?"あと "+fmtInt(it.remain)+" km":fmtInt(-it.remain)+" km 超過";
-    b.innerHTML='<span class="nm">'+esc(it.type)+'</span><span class="bar"><i class="'+(it.ratio>=1?"over":"")+'" style="width:'+Math.min(100,it.ratio*100)+'%"></i></span><span class="rm'+(it.ratio>=1?" over":"")+'">'+rm+"</span>";
+  $("heroCarName").textContent=S.settings.carName||"NCロードスター";
+  var st=maintStatus();
+  var grid=$("gaugeGrid"); grid.innerHTML="";
+  st.forEach(function(it){
+    var b=document.createElement("button"); b.className="gaugeCell";
+    var pct=Math.min(1,it.ratio);
+    var off=(CIRC*(1-pct)).toFixed(1);
+    var colStyle=it.ratio>=1?"stroke:var(--danger)":"stroke:var(--accent)";
+    var elapsedTxt=fmtInt(it.elapsed);
+    var longCls=(elapsedTxt.length+fmtInt(it.interval).length)>9?" long":"";
+    var rm, rmCls="gaugeRm";
+    if(it.remain>0)rm="あと "+fmtInt(it.remain)+" km";
+    else if(it.remain===0){rm="交換時期です"; rmCls+=" over";}
+    else{rm=fmtInt(-it.remain)+" km 超過"; rmCls+=" over";}
+    b.innerHTML='<span class="gaugeWrap"><svg width="118" height="118" viewBox="0 0 118 118">'
+      +'<circle cx="59" cy="59" r="48" fill="none" stroke="rgba(160,165,180,.28)" stroke-width="9"/>'
+      +'<circle cx="59" cy="59" r="48" fill="none" style="'+colStyle+'" stroke-width="9" stroke-linecap="round" stroke-dasharray="'+CIRC+'" stroke-dashoffset="'+off+'"/>'
+      +'</svg><span class="gaugeC"><b class="'+longCls.trim()+'">'+elapsedTxt+'</b><span>/ '+fmtInt(it.interval)+' km</span></span></span>'
+      +'<span class="gaugeNm">'+esc(it.type)+'</span><span class="'+rmCls+'">'+rm+"</span>";
     b.addEventListener("click",function(){openMaintSheet(null,it.type);});
-    ml.appendChild(b);
+    grid.appendChild(b);
   });
   var totalKm=S.drives.reduce(function(a,d){return a+(d.distance||0);},0);
   $("statDriveKm").textContent=(totalKm/1000).toFixed(1)+" km";
@@ -751,7 +1076,13 @@ function renderMaintList(){
 function fillMaintTypes(sel){
   var s=$("mType"); s.innerHTML="";
   MAINT_TYPES.forEach(function(t){var o=document.createElement("option");o.value=t.name;o.textContent=t.name;s.appendChild(o);});
-  if(sel)s.value=sel;
+  if(sel==="タイヤローテーション")sel="タイヤ";
+  if(sel){
+    var found=false;
+    for(var i=0;i<s.options.length;i++)if(s.options[i].value===sel)found=true;
+    if(!found){var o2=document.createElement("option");o2.value=sel;o2.textContent=sel;s.appendChild(o2);}
+    s.value=sel;
+  }
   var d=MAINT_TYPES.filter(function(t){return t.name===s.value;})[0];
   $("mInterval").value=d?d.interval:5000;
 }
@@ -882,13 +1213,18 @@ function stopRec(save){
   R.active=false; R.watchId=null;
   if(save){
     persistRec(true).then(function(){
-      S.settings.odometer=Math.round((S.settings.odometer||0)+dist/1000);
-      saveSettings(); renderHome(); renderDriveList(); drawFallbackMap(); drawGmapAll(); toast("保存しました");
+      if(S.settings.gpsAdd){
+        S.settings.odometer=Math.round((S.settings.odometer||0)+dist/1000);
+        if(dist>0)S.settings.odoSet=true;
+        saveSettings();
+        var so=$("setOdo"); if(so)so.value=S.settings.odometer;
+      }
+      renderHome(); renderDriveList(); drawFallbackMap(); drawLeafAll(); toast("保存しました");
     });
   }else{
     delRec("drives",id);
     S.drives=S.drives.filter(function(d){return d.id!==id;});
-    renderHome(); renderDriveList(); drawFallbackMap(); drawGmapAll(); toast("破棄しました");
+    renderHome(); renderDriveList(); drawFallbackMap(); drawLeafAll(); toast("破棄しました");
   }
   R.sections=[]; R.distance=0; R.points=0; R.elapsedBase=0;
   updateRecUI(); drawLive();
@@ -915,11 +1251,11 @@ function resizeFallback(){
 }
 function drawFallbackMap(){
   var c=$("fallbackMap"); if(!c)return;
-  if(window.__gmapReady&&$("gmap").style.display==="block"){drawLiveGmap();return;}
+  if(leafMap){drawLeafLive();return;}
   resizeFallback();
   var ctx=c.getContext("2d"), w=c.width, h=c.height;
   var dark=S.settings.mapTheme==="dark";
-  ctx.fillStyle=dark?"#0a1628":"#e8ebee"; ctx.fillRect(0,0,w,h);
+  ctx.fillStyle=dark?"#1d2a44":"#e8ebee"; ctx.fillRect(0,0,w,h);
   ctx.strokeStyle=dark?"rgba(255,255,255,.06)":"rgba(20,30,40,.06)"; ctx.lineWidth=1;
   for(var gx=0;gx<w;gx+=w/8){ctx.beginPath();ctx.moveTo(gx,0);ctx.lineTo(gx,h);ctx.stroke();}
   for(var gy=0;gy<h;gy+=h/8){ctx.beginPath();ctx.moveTo(0,gy);ctx.lineTo(w,gy);ctx.stroke();}
@@ -936,89 +1272,96 @@ function drawFallbackMap(){
     ctx.fillStyle=accentHex(); ctx.beginPath(); ctx.arc(q.x,q.y,Math.max(4,(window.devicePixelRatio||1)*3.4),0,7); ctx.fill();
     ctx.fillStyle=dark?"#fff":"#141416"; ctx.beginPath(); ctx.arc(q.x,q.y,Math.max(1.8,(window.devicePixelRatio||1)*1.4),0,7); ctx.fill();
   }
-  $("mapChip").textContent=S.settings.apiKey?"地図を読み込み中":"軌跡プレビュー（日本全国）";
+  $("mapChip").textContent="軌跡プレビュー（日本全国）";
 }
-function drawLive(){drawFallbackMap();}
+function drawLive(){ if(leafMap){drawLeafLive();} else {drawFallbackMap();} }
 
-/* ================= Google Maps ================= */
-var gmap=null,gPolys=[],gLive=null,gLoading=false;
-function gmapStylesDark(){
-  return [
-    {elementType:"geometry",stylers:[{color:"#0a1628"}]},
-    {elementType:"labels.text.fill",stylers:[{color:"#8ea6c1"}]},
-    {elementType:"labels.text.stroke",stylers:[{color:"#0a1628"}]},
-    {featureType:"water",elementType:"geometry",stylers:[{color:"#06101f"}]},
-    {featureType:"road",elementType:"geometry",stylers:[{color:"#1b2f4a"}]},
-    {featureType:"road.highway",elementType:"geometry",stylers:[{color:"#274a75"}]},
-    {featureType:"poi",elementType:"geometry",stylers:[{color:"#0e2038"}]},
-    {featureType:"transit",elementType:"geometry",stylers:[{color:"#12263f"}]},
-    {featureType:"administrative",elementType:"geometry.stroke",stylers:[{color:"#2b4a6e"}]}
-  ];
+/* ================= 地図（カーナビ移植: Leaflet＋テーマ別タイル） =================
+   ダーク: Esri Dark Gray（≤17, .tilefx-esri で紺色化）＋地理院淡色（≥17, .tilefx-darkhi）
+   ライト: 同じスタックに反転フィルタ（.tilefx-esri-light / .tilefx-lighthi）
+   Esri が落ちたら地理院淡色＋.tilefx-invert へフォールバック（カーナビと同じ） */
+var leafMap=null, leafBase=null, leafPolys=[], leafLive=null, leafFitted=false;
+function leafDark(){return S.settings.mapTheme==="dark";}
+function attachLeafBase(){
+  if(!leafMap||!window.L)return;
+  try{leafMap.attributionControl.setPrefix(false);}catch(e){}
+  var retina=!!(window.L&&L.Browser&&L.Browser.retina);
+  var nativeCap=function(n){return retina?n-1:n;};
+  if(leafBase){try{leafMap.removeLayer(leafBase);}catch(e){} leafBase=null;}
+  var group, primaryTiles, fbClass;
+  if(leafDark()){
+    var o1={maxZoom:(retina?18:17),maxNativeZoom:(retina?15:16),detectRetina:true,className:"tilefx-esri",attribution:"Esri, HERE, Garmin, © OpenStreetMap contributors"};
+    var b1=L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",o1);
+    var r1=L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}",o1);
+    var h1=L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png",{minZoom:17,maxZoom:19,maxNativeZoom:nativeCap(18),detectRetina:true,className:"tilefx-darkhi",attribution:"地理院タイル（国土地理院）"});
+    var he=0;
+    h1.on("tileerror",function(){he++; if(he<6)return; b1.options.maxZoom=19; r1.options.maxZoom=19; try{b1.redraw();r1.redraw();}catch(e){}});
+    group=L.layerGroup([b1,r1,h1]); primaryTiles=b1; fbClass="tilefx-invert";
+  }else{
+    var o2={maxZoom:(retina?18:17),maxNativeZoom:(retina?15:16),detectRetina:true,className:"tilefx-esri-light",attribution:"Esri, HERE, Garmin, © OpenStreetMap contributors"};
+    var b2=L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",o2);
+    var r2=L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}",o2);
+    var h2=L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png",{minZoom:17,maxZoom:19,maxNativeZoom:nativeCap(18),detectRetina:true,className:"tilefx-lighthi",attribution:"地理院タイル（国土地理院）"});
+    var he2=0;
+    h2.on("tileerror",function(){he2++; if(he2<6)return; b2.options.maxZoom=19; r2.options.maxZoom=19; try{b2.redraw();r2.redraw();}catch(e){}});
+    group=L.layerGroup([b2,r2,h2]); primaryTiles=b2; fbClass="tilefx-lighthi";
+  }
+  leafBase=group.addTo(leafMap);
+  var errs=0, curGroup=group;
+  primaryTiles.on("tileerror",function(){
+    errs++; if(errs<6)return;
+    if(leafBase!==curGroup)return;
+    try{leafMap.removeLayer(curGroup);}catch(e){}
+    var fb=L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png",{maxZoom:18,maxNativeZoom:nativeCap(18),detectRetina:true,className:fbClass,attribution:"地理院タイル（国土地理院）"});
+    leafBase=fb.addTo(leafMap);
+  });
 }
-function initGmap(){
-  if(!window.google||!window.google.maps)return;
-  window.__gmapReady=true;
-  $("gmap").style.display="block"; $("fallbackMap").style.display="none";
-  gmap=new google.maps.Map($("gmap"),{center:{lat:36.8,lng:138.2},zoom:5,disableDefaultUI:true,zoomControl:true,
-    styles:S.settings.mapTheme==="dark"?gmapStylesDark():[]});
+function refreshLeafBase(){ if(leafMap)attachLeafBase(); }
+function initLeafMap(){
+  if(!window.L)return false;
+  if(leafMap){ setTimeout(function(){try{leafMap.invalidateSize();}catch(e){} drawLeafAll();},40); return true; }
+  var el=$("leafMap"); if(!el)return false;
+  el.style.display="block"; $("fallbackMap").style.display="none"; $("gmap").style.display="none";
+  leafMap=L.map("leafMap",{zoomControl:true}).setView([36.8,138.2],5);
+  leafMap.options.maxZoom=18; leafMap.options.minZoom=4;
+  attachLeafBase();
   $("mapChip").textContent="日本全国";
-  drawGmapAll();
+  drawLeafAll();
+  return true;
 }
-function drawGmapAll(){
-  if(!gmap)return;
-  gPolys.forEach(function(p){p.setMap(null);}); gPolys=[];
-  var bounds=new google.maps.LatLngBounds(), has=false;
+function drawLeafAll(){
+  if(!leafMap)return;
+  leafPolys.forEach(function(p){try{leafMap.removeLayer(p);}catch(e){}}); leafPolys=[];
+  var pts=[];
   S.drives.forEach(function(d){
     (d.sections||[]).forEach(function(s){
       if(s.length<2)return;
-      var path=s.map(function(p){return {lat:p.lat,lng:p.lng};});
-      path.forEach(function(pt){bounds.extend(pt);has=true;});
-      var pl=new google.maps.Polyline({path:path,strokeColor:accentHex(),strokeWeight:4,strokeOpacity:.9,map:gmap});
-      gPolys.push(pl);
+      var path=s.map(function(p){return [p.lat,p.lng];});
+      path.forEach(function(pt){pts.push(pt);});
+      leafPolys.push(L.polyline(path,{color:accentHex(),weight:4,opacity:.9}).addTo(leafMap));
     });
   });
-  if(has)gmap.fitBounds(bounds);
-  drawLiveGmap();
+  if(pts.length&&!leafFitted){ try{leafMap.fitBounds(pts,{padding:[18,18]}); leafFitted=true; }catch(e){} }
+  drawLeafLive();
 }
-function drawLiveGmap(){
-  if(!gmap)return;
-  if(gLive)gLive.forEach(function(p){p.setMap(null);});
-  gLive=[];
+function drawLeafLive(){
+  if(!leafMap)return;
+  if(leafLive){leafLive.forEach(function(p){try{leafMap.removeLayer(p);}catch(e){}}); leafLive=null;}
   if(!S.rec.active)return;
+  leafLive=[];
   S.rec.sections.forEach(function(s){
     if(s.length<2)return;
-    gLive.push(new google.maps.Polyline({path:s.map(function(p){return {lat:p.lat,lng:p.lng};}),strokeColor:accentHex(),strokeWeight:5,strokeOpacity:1,map:gmap}));
+    leafLive.push(L.polyline(s.map(function(p){return [p.lat,p.lng];}),{color:accentHex(),weight:5,opacity:1}).addTo(leafMap));
   });
   var secs=S.rec.sections,last=secs[secs.length-1];
-  if(last&&last.length){var lp=last[last.length-1];gmap.panTo({lat:lp.lat,lng:lp.lng});}
+  if(last&&last.length){var lp=last[last.length-1]; try{leafMap.panTo([lp.lat,lp.lng]);}catch(e){}}
 }
-function loadGmap(){
-  var key=(S.settings.apiKey||"").trim();
-  if(!key){$("gmap").style.display="none";$("fallbackMap").style.display="block";drawFallbackMap();return;}
-  if(window.__gmapReady){initGmap();return;}
-  if(gLoading)return; gLoading=true;
-  window.__onGmapLoad=function(){gLoading=false;initGmap();};
-  window.gm_authFailure=function(){gLoading=false;window.__gmapReady=false;$("gmap").style.display="none";$("fallbackMap").style.display="block";$("mapChip").textContent="地図を読み込めませんでした";drawFallbackMap();};
-  var sc=document.createElement("script");
-  sc.src="https://maps.googleapis.com/maps/api/js?key="+encodeURIComponent(key)+"&callback=__onGmapLoad&language=ja&region=JP";
-  sc.async=true; sc.defer=true;
-  sc.onerror=function(){gLoading=false;$("mapChip").textContent="地図を読み込めませんでした";};
-  document.head.appendChild(sc);
-  setTimeout(function(){if(!window.__gmapReady)$("mapChip").textContent="軌跡プレビュー（日本全国）";},6000);
-}
+function drawGmapAll(){drawLeafAll();}
+function loadGmap(){ /* 地図はカーナビ方式（Leaflet）に移行。APIキーは保存のみ */ }
 
 /* ================= wiring ================= */
 function wire(){
-  var btns=document.querySelectorAll(".tabbtn");
-  btns.forEach(function(b){
-    b.addEventListener("click",function(){switchTab(b.getAttribute("data-tab"));});
-    b.addEventListener("touchstart",function(){b.classList.add("pressing");},{passive:true});
-    b.addEventListener("touchend",function(){b.classList.remove("pressing");},{passive:true});
-    b.addEventListener("touchcancel",function(){b.classList.remove("pressing");});
-    b.addEventListener("mousedown",function(){b.classList.add("pressing");});
-    b.addEventListener("mouseup",function(){b.classList.remove("pressing");});
-    b.addEventListener("mouseleave",function(){b.classList.remove("pressing");});
-  });
+  initTabBar();
   $("edgeHandle").addEventListener("click",openDrawer);
   $("scrim").addEventListener("click",closeDrawer);
   $("btnDrawerClose").addEventListener("click",closeDrawer);
@@ -1028,11 +1371,24 @@ function wire(){
   });
   $("fabAdd").addEventListener("click",function(){openMaintSheet(null);});
   $("btnQuickMaint").addEventListener("click",function(){openMaintSheet(null);});
+  $("btnGaugeAdd").addEventListener("click",function(){openMaintSheet(null);});
   $("btnOdoEdit").addEventListener("click",function(){$("odoInput").value=S.settings.odometer||0;openSheet("sheetOdo");});
   $("btnOdoSave").addEventListener("click",function(){
     var v=parseInt($("odoInput").value,10); if(isNaN(v)||v<0){toast("数値を入力してください");return;}
-    S.settings.odometer=v; $("setOdo").value=v; saveSettings(); closeSheet(); renderHome(); toast("保存しました");
+    S.settings.odometer=v; S.settings.odoSet=true; $("setOdo").value=v; saveSettings(); closeSheet(); renderHome(); toast("保存しました");
   });
+  $("btnOdoQuick").addEventListener("click",function(){
+    var v=parseInt($("odoQuickInput").value,10); if(isNaN(v)||v<0){toast("オドメーターの数値を入力してください");return;}
+    S.settings.odometer=v; S.settings.odoSet=true; $("setOdo").value=v; $("odoQuickInput").value=""; saveSettings(); renderHome(); toast("オドメーターを更新しました");
+  });
+  function bindGpsToggle(el){
+    if(!el)return;
+    el.addEventListener("click",function(){
+      S.settings.gpsAdd=!S.settings.gpsAdd; saveSettings(); applyTheme();
+      toast(S.settings.gpsAdd?"GPS加算をオンにしました":"GPS加算をオフにしました");
+    });
+  }
+  bindGpsToggle($("tglGpsAdd")); bindGpsToggle($("tglGpsAddDrawer"));
   $("mType").addEventListener("change",function(){
     var d=MAINT_TYPES.filter(function(t){return t.name===$("mType").value;})[0];
     if(d)$("mInterval").value=d.interval;
@@ -1057,7 +1413,7 @@ function wire(){
     if(!S.editingDrive)return;
     delRec("drives",S.editingDrive);
     S.drives=S.drives.filter(function(d){return d.id!==S.editingDrive;});
-    closeSheet(); renderDriveList(); renderHome(); drawFallbackMap(); drawGmapAll(); toast("削除しました");
+    closeSheet(); renderDriveList(); renderHome(); drawFallbackMap(); drawLeafAll(); toast("削除しました");
   });
   $("btnDrivePhoto").addEventListener("click",function(){$("fileDrivePhoto").click();});
   $("fileDrivePhoto").addEventListener("change",function(){
@@ -1066,19 +1422,18 @@ function wire(){
     this.value="";
   });
   /* settings */
-  $("setCarName").addEventListener("change",function(){S.settings.carName=this.value.trim()||"マイカー";saveSettings();applyTheme();});
-  $("setOdo").addEventListener("change",function(){var v=parseInt(this.value,10);if(!isNaN(v)&&v>=0){S.settings.odometer=v;saveSettings();renderHome();}});
+  $("setCarName").addEventListener("change",function(){S.settings.carName=this.value.trim()||"NCロードスター";saveSettings();applyTheme();renderHome();});
+  $("setOdo").addEventListener("change",function(){var v=parseInt(this.value,10);if(!isNaN(v)&&v>=0){S.settings.odometer=v;S.settings.odoSet=true;saveSettings();renderHome();}});
+  [["setHeroKicker","heroKicker"],["setHeroModel","heroModel"],["setHeroBadge","heroBadge"],["setHeroYear","heroYear"],["setSpecChips","specChips"]].forEach(function(pair){
+    $(pair[0]).addEventListener("change",function(){S.settings[pair[1]]=this.value.trim();saveSettings();applyTheme();});
+  });
   $("mapThemeSeg").querySelectorAll("button").forEach(function(b){
     b.addEventListener("click",function(){
-      S.settings.mapTheme=b.getAttribute("data-mt"); saveSettings(); applyTheme(); drawFallbackMap();
-      if(window.__gmapReady&&gmap){gmap.setOptions({styles:S.settings.mapTheme==="dark"?gmapStylesDark():[]});}
+      S.settings.mapTheme=b.getAttribute("data-mt"); saveSettings(); applyTheme(); refreshLeafBase(); drawFallbackMap();
     });
   });
   $("btnApiSave").addEventListener("click",function(){
-    S.settings.apiKey=$("setApiKey").value.trim(); saveSettings();
-    window.__gmapReady=false; gmap=null; gLoading=false;
-    if(S.settings.apiKey){loadGmap();toast("地図を読み込んでいます");}
-    else{$("gmap").style.display="none";$("fallbackMap").style.display="block";drawFallbackMap();toast("保存しました");}
+    S.settings.apiKey=$("setApiKey").value.trim(); saveSettings(); toast("保存しました");
   });
   $("btnBgUpload").addEventListener("click",function(){$("fileBg").click();});
   $("btnHeroUpload").addEventListener("click",function(){$("fileHero").click();});
@@ -1096,7 +1451,7 @@ function wire(){
     if(this.getAttribute("data-arm")){ 
       clearStore("maint");clearStore("drives");kvSet("settings",null);kvSet("customBg",null);kvSet("customHero",null);
       S.maint=[];S.drives=[];S.customBg=null;S.customHero=null;
-      S.settings={carName:"マイカー",odometer:0,accent:"mono",bg:"car",hero:"car",mapTheme:"light",apiKey:""};
+      S.settings={carName:"NCロードスター",odometer:0,odoSet:false,gpsAdd:true,heroKicker:"ROADSTER",heroModel:"NC3",heroBadge:"RS",heroYear:"2013",specChips:"後期 NC3,RS,ホワイト,黒幌",accent:"mono",bg:"car",hero:"car",mapTheme:"light",apiKey:""};
       buildSettingsUI();applyTheme();renderHome();renderMaintList();renderDriveList();drawFallbackMap();
       this.removeAttribute("data-arm");this.textContent="すべてのデータを削除";toast("削除しました");
     }else{this.setAttribute("data-arm","1");this.textContent="もう一度押すと削除します";
@@ -1105,7 +1460,7 @@ function wire(){
   $("dlgSave").addEventListener("click",function(){
     var d=window.__pendingRec; if(d){d.status="done";d.endedAt=d.endedAt||Date.now();putRec("drives",d);}
     $("dialogWrap").classList.remove("on"); window.__pendingRec=null;
-    renderHome(); renderDriveList(); drawFallbackMap(); drawGmapAll();
+    renderHome(); renderDriveList(); drawFallbackMap(); drawLeafAll();
   });
   $("dlgDiscard").addEventListener("click",function(){
     var d=window.__pendingRec; if(d){delRec("drives",d.id);S.drives=S.drives.filter(function(x){return x.id!==d.id;});}
@@ -1120,11 +1475,13 @@ function init(){
   wire();
   Promise.all([kvGet("settings"),kvGet("customBg"),kvGet("customHero"),allRecs("maint"),allRecs("drives")]).then(function(r){
     if(r[0])S.settings=Object.assign(S.settings,r[0]);
+    if(r[0]&&r[0].odoSet===undefined&&S.settings.odometer>0)S.settings.odoSet=true;
     S.customBg=r[1]||null; S.customHero=r[2]||null;
     S.maint=r[3]||[]; S.drives=r[4]||[];
+    S.maint.forEach(function(rec){ if(rec.type==="タイヤローテーション"){rec.type="タイヤ"; putRec("maint",rec);} });
     buildSettingsUI(); applyTheme();
     renderHome(); renderMaintList(); renderDriveList(); updateRecUI();
-    resizeFallback(); drawFallbackMap(); loadGmap();
+    resizeFallback(); drawFallbackMap();
     var pending=S.drives.filter(function(d){return d.status==="recording";})[0];
     if(pending){
       window.__pendingRec=pending;
