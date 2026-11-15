@@ -30,9 +30,12 @@
   color-scheme:dark;
 }
 *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; -webkit-touch-callout:none;}
-html{overscroll-behavior:none; overflow-x:hidden; height:100%; touch-action:manipulation; background:#07080f;}
+/* シェル固定（カーナビ1 v42方式）: html/body はビューポートに固定して一切スクロールさせない。
+   overflow-x のみの指定だと overflow-y が auto に化けて html 自身がスクローラーになるため両軸 hidden。
+   スクロールは .view の内側だけで起こす。 */
+html{overscroll-behavior:none; overflow:hidden; height:100%; touch-action:manipulation; background:#07080f;}
 body{
-  margin:0; height:100%; overflow:hidden; background:#07080f;
+  margin:0; height:100%; height:100vh; height:100dvh; overflow:hidden; background:#07080f;
   font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
   color:var(--ink);
   -webkit-user-select:none; user-select:none;
@@ -54,7 +57,7 @@ img{display:block; max-width:100%;}
 /* ---------- layout ---------- */
 #app{position:fixed; inset:0; z-index:2; display:flex; flex-direction:column;}
 #views{flex:1; position:relative; overflow:hidden;}
-.view{position:absolute; inset:0; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; padding:calc(12px + env(safe-area-inset-top)) 12px calc(78px + env(safe-area-inset-bottom)); display:none; -webkit-overflow-scrolling:touch; scrollbar-width:none; -ms-overflow-style:none;}
+.view{position:fixed; inset:0; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; padding:calc(12px + env(safe-area-inset-top)) 12px calc(78px + env(safe-area-inset-bottom)); display:none; -webkit-overflow-scrolling:touch; scrollbar-width:none; -ms-overflow-style:none;}
 .view::-webkit-scrollbar{display:none; width:0; height:0;}
 .view.on{display:block;}
 /* 縦スクロールは許可し、自然な縦レイアウトにする。横方向のはみ出しは全ビューで出さない */
