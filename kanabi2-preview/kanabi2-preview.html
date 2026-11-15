@@ -24414,6 +24414,69 @@ function buildSpanPlan(eRef, xRef, groups, hwKm){
     baseEstParts: baseEst ? baseEst.parts : null
   };
   if(!plan.entries.length || !plan.exits.length) return null;
+  /* 【回廊全体の乗り口・降り口候補】実ペア製プラン（このビルダー）に
+     は従来、入口路線・出口路線の推奨±5件（entries/exits）しか無く、
+     候補画面のICレールでは回廊の後続路線のIC（例：清瀬→台場の推奨
+     形状で、関越の先の首都高5号・高島平から乗る）が構造的に選べ
+     なかった（料金グラフ製プランには区間設定パネル用に同じ列挙が
+     あるが、候補画面は使っていなかった）。チェーン全区間を進行順
+     にたどり、方向に合う乗降可能なICをすべて候補として返す。
+     列挙の意味はグラフ製プランの corridorEntries/corridorExits と
+     同一に揃える */
+  plan.corridorEntries = function(){
+    var out = [];
+    var segs = plan.chain.segs;
+    var sg0 = segs[0];
+    var step0 = sg0.entry <= sg0.exit ? 1 : -1;
+    var seen0 = {};
+    var idxs0 = [];
+    function push0(i){
+      if(i == null || i < 0 || i >= sg0.road.ics.length || seen0[i]) return;
+      if(!icUsable(sg0.road, i, "entry", sg0.exit)) return;
+      seen0[i] = 1; idxs0.push(i);
+    }
+    for(var i = sg0.entry; ; i += step0){ push0(i); if(i === sg0.exit) break; }
+    plan.entries.forEach(push0);
+    idxs0.sort(function(a, b){ return step0 * (a - b); });
+    idxs0.forEach(function(i){
+      out.push({ seg: 0, idx: i, road: sg0.road, name: sg0.road.ics[i][0] });
+    });
+    for(var si = 1; si < segs.length; si++){
+      var sg = segs[si];
+      var step = sg.entry <= sg.exit ? 1 : -1;
+      for(var j = sg.entry; ; j += step){
+        if(icUsable(sg.road, j, "entry", sg.exit) &&
+           !(si === segs.length - 1 && j === plan.defExit))
+          out.push({ seg: si, idx: j, road: sg.road, name: sg.road.ics[j][0] });
+        if(j === sg.exit) break;
+      }
+    }
+    return out;
+  };
+  plan.corridorExits = function(){
+    var out = [];
+    var segs = plan.chain.segs;
+    var lastSi = segs.length - 1;
+    for(var si = 0; si <= lastSi; si++){
+      var sg = segs[si];
+      var step = sg.entry <= sg.exit ? 1 : -1;
+      var seen = {};
+      var idxs = [];
+      function pushX(i){
+        if(i == null || i < 0 || i >= sg.road.ics.length || seen[i]) return;
+        if(si === 0 && i === sg.entry) return; /* 乗り口と同位置は有料区間ゼロ */
+        if(!icUsable(sg.road, i, "exit", sg.entry)) return;
+        seen[i] = 1; idxs.push(i);
+      }
+      for(var j = sg.entry; ; j += step){ pushX(j); if(j === sg.exit) break; }
+      if(si === lastSi) plan.exits.forEach(pushX);
+      idxs.sort(function(a, b){ return step * (a - b); });
+      idxs.forEach(function(i){
+        out.push({ seg: si, idx: i, road: sg.road, name: sg.road.ics[i][0] });
+      });
+    }
+    return out;
+  };
   return plan;
 }
 function buildPairPlan(eRef, xRef, segs, hwKm){
@@ -25478,16 +25541,70 @@ function renderPvIcPanel(){
     applyIcSelection(cand, plan, amtEl, dltEl, null);
     syncIcRails(false);
   }
-  function icRail(label, road, list, dirSign, defIdx, side, verMap){
+  /* 回廊候補（入口路線・出口路線以外のIC）が選ばれた場合の確定。
+     icSel は入口／出口路線の添字でしかペアを表せないため、選ばれた
+     ペアで実ペアプランを作り直して候補へ差し替え、パネルごと描き
+     直す。料金の再計算は pairPlanAdopt の反映処理（_pairFareDone）
+     に委ね、ピン・帯・再最適化は描き直し後の通常経路に乗せる。
+     実形状が新しいペアの区間を実際に高速で走っていない場合は
+     付け替えない（pairPlanAdopt の v170 検証と同じ物差し：
+     両端の射影1.5km以内＋区間の高速カバレッジ4割以上） */
+  function commitIcRef(side, ref){
+    if(!ref) return;
+    var sideRoad = side === "e" ? plan.entryRoad : plan.exitRoad;
+    if(ref.road === sideRoad){ commitIc(side, ref.idx); return; }
+    var eName = side === "e" ? ref.name : plan.entryName(cand.icSel.e);
+    var xName = side === "x" ? ref.name : plan.exitName(cand.icSel.x);
+    var hwKm = (cand.localIcPair && cand.localIcPair.hwKm) || plan.baseAlongKm || null;
+    var keepPair = cand.localIcPair;
+    cand.localIcPair = { entry: eName, exit: xName, hwKm: hwKm };
+    var np = null;
+    try{ np = localPairPlan(cand); }catch(e){ np = null; }
+    var ok = !!np;
+    if(ok && cand.route && cand.route.geomPts && cand.route.geomPts.length >= 8){
+      try{
+        var g = cand.route.geomPts;
+        var eIc = np.entryRoad.ics[np.defEntry], xIc = np.exitRoad.ics[np.defExit];
+        if(!eIc || eIc[1] == null || !xIc || xIc[1] == null) ok = false;
+        else {
+          var pe = projOnGeom(g, [eIc[1], eIc[2]]), px = projOnGeom(g, [xIc[1], xIc[2]]);
+          if(!pe || !px || pe.d > 1500 || px.d > 1500) ok = false;
+          else {
+            var cov = tollSpanCoverage(g, pe.chain, px.chain);
+            if(cov != null && cov < 0.4) ok = false;
+          }
+        }
+      }catch(e){ ok = false; }
+    }
+    if(!ok){ cand.localIcPair = keepPair; renderPvIcPanel(); return; }
+    cand.icPlan = np;
+    cand.icSel = { e: np.defEntry, x: np.defExit };
+    cand._icNone = false;
+    cand._pairAdopted = true;
+    cand._pairFareDone = false;
+    delete cand._icVerify;
+    if(cand.route){
+      cand.route.gIcPair = { entry: eName, exit: xName };
+      cand.route.gIcPairSrc = "user";
+    }
+    renderPvIcPanel();
+  }
+  function icRail(label, road, list, dirSign, defIdx, side, verMap, refsIn){
     var wrap = document.createElement("div"); wrap.className = "icr";
     var lb = document.createElement("div"); lb.className = "icr-lb"; lb.textContent = label;
     wrap.appendChild(lb);
     var rail = document.createElement("div"); rail.className = "icr-rail";
     var pill = document.createElement("div"); pill.className = "icr-pill";
     rail.appendChild(pill);
-    var ordered = list.slice().sort(function(a, b){ return dirSign > 0 ? a - b : b - a; });
+    /* refsIn（回廊候補）があれば進行順のまま使う。無い場合は従来
+       どおり入口／出口路線の候補を進行方向順に並べる */
+    var ordered;
+    if(refsIn && refsIn.length) ordered = refsIn.slice();
+    else ordered = list.slice().sort(function(a, b){ return dirSign > 0 ? a - b : b - a; })
+      .map(function(ix){ return { road: road, idx: ix, name: road.ics[ix][0] }; });
     var chips = [];
-    ordered.forEach(function(idx, oi){
+    ordered.forEach(function(ref, oi){
+      var idx = ref.idx;
       /* 進行方向が分かるよう、下の帯表示と同じ「›」をチップ間に挟む
          （並び順＝進行順）。矢印は装飾専用で、ドラッグ判定・タップ
          判定はチップ側だけで行う */
@@ -25497,15 +25614,16 @@ function renderPvIcPanel(){
         rail.appendChild(arw);
       }
       var c = document.createElement("button"); c.type = "button"; c.className = "icr-chip";
-      c.textContent = road.ics[idx][0];
-      if(idx === defIdx){
+      c.textContent = ref.name + (ref.road !== road ? "（" + ref.road.road.replace(/^首都高 /, "") + "）" : "");
+      if(ref.road === road && idx === defIdx){
         var tg = document.createElement("span"); tg.className = "icr-tag"; tg.textContent = "推奨";
         c.appendChild(tg);
       }
       /* 遠回りとして除外された IC も、消さずに理由つきで残す（候補が
          推奨1件しか無いように見える状態にしない）。選択はできない */
       var curSide = side === "e" ? cand.icSel.e : cand.icSel.x;
-      var isEx = !!(verMap && verMap[idx] && verMap[idx].excluded && idx !== curSide);
+      /* 遠回り判定は入口／出口路線の候補に対してだけ付いている */
+      var isEx = !!(ref.road === road && verMap && verMap[idx] && verMap[idx].excluded && idx !== curSide);
       if(isEx){
         c.classList.add("excluded");
         var tg2 = document.createElement("span"); tg2.className = "icr-tag"; tg2.textContent = "遠回り";
@@ -25513,7 +25631,7 @@ function renderPvIcPanel(){
         c.title = (verMap[idx] && verMap[idx].reason) || "遠回りになるため選択できません";
       }
       c.setAttribute("aria-pressed", "false");
-      c._icIdx = idx; c._icExcluded = isEx;
+      c._icIdx = idx; c._icRef = ref; c._icExcluded = isEx;
       rail.appendChild(c); chips.push(c);
     });
     wrap.appendChild(rail);
@@ -25521,7 +25639,7 @@ function renderPvIcPanel(){
       var val = side === "e" ? cand.icSel.e : cand.icSel.x;
       var chip = null;
       chips.forEach(function(c){
-        var on = c._icIdx === val;
+        var on = c._icRef ? (c._icRef.road === road && c._icRef.idx === val) : (c._icIdx === val);
         c.setAttribute("aria-pressed", String(on));
         if(on) chip = c;
       });
@@ -25552,7 +25670,7 @@ function renderPvIcPanel(){
       return best;
     }
     rail.addEventListener("pointerdown", function(ev){
-      drag = { id: ev.pointerId, moved: false, idx: null };
+      drag = { id: ev.pointerId, moved: false, idx: null, ref: null };
       try{ rail.setPointerCapture(ev.pointerId); }catch(err){}
     });
     rail.addEventListener("pointermove", function(ev){
@@ -25561,7 +25679,7 @@ function renderPvIcPanel(){
       if(!drag.moved){ drag.moved = true; pill.classList.add("noanim"); }
       var chip = nearestChip(p.x, p.y);
       if(!chip) return;
-      drag.idx = chip._icIdx;
+      drag.idx = chip._icIdx; drag.ref = chip._icRef;
       pill.style.width = chip.offsetWidth + "px";
       pill.style.height = chip.offsetHeight + "px";
       pill.style.opacity = "1";
@@ -25572,12 +25690,13 @@ function renderPvIcPanel(){
     });
     function endDrag(ev, commit){
       if(!drag || ev.pointerId !== drag.id) return;
-      var idx = drag.idx, wasMoved = drag.moved; drag = null;
+      var idx = drag.idx, ref = drag.ref, wasMoved = drag.moved; drag = null;
       pill.classList.remove("noanim");
       if(!wasMoved) return; /* タップは click 側で確定する */
       suppressClick = true;
       setTimeout(function(){ suppressClick = false; }, 350);
-      if(commit && idx != null) commitIc(side, idx);
+      if(commit && ref) commitIcRef(side, ref);
+      else if(commit && idx != null) commitIc(side, idx);
       else R.sync(false);
     }
     rail.addEventListener("pointerup", function(ev){ endDrag(ev, true); });
@@ -25585,8 +25704,9 @@ function renderPvIcPanel(){
     rail.addEventListener("click", function(ev){
       if(suppressClick){ ev.stopPropagation(); ev.preventDefault(); return; }
       var t = ev.target;
-      while(t && t !== rail && t._icIdx == null) t = t.parentNode;
-      if(t && t._icIdx != null) commitIc(side, t._icIdx);
+      while(t && t !== rail && !t._icRef && t._icIdx == null) t = t.parentNode;
+      if(t && t._icRef) commitIcRef(side, t._icRef);
+      else if(t && t._icIdx != null) commitIc(side, t._icIdx);
     });
     return wrap;
   }
@@ -25594,8 +25714,19 @@ function renderPvIcPanel(){
      icRail 側で「遠回り」タグ付きの選択不可チップとして出す（候補が
      推奨1件だけに見える状態にしないため） */
   var verE = (cand._icVerify && cand._icVerify.e) || {}, verX = (cand._icVerify && cand._icVerify.x) || {};
-  detail.appendChild(icRail("乗るIC（" + plan.entryRoad.road + "）", plan.entryRoad, plan.entries, eDir, plan.defEntry, "e", verE));
-  detail.appendChild(icRail("降りるIC（" + plan.exitRoad.road + "）", plan.exitRoad, plan.exits, xDir, plan.defExit, "x", verX));
+  /* レールの選択肢は回廊全体（チェーン全区間）から出す。従来は
+     入口／出口路線の±5件だけで、回廊の後続路線のIC（首都高5号の
+     高島平など）が候補画面に一切出なかった。回廊が取れないプラン
+     では従来の±5件に倒す */
+  var eRefs = null, xRefs = null;
+  try{ eRefs = (typeof plan.corridorEntries === "function") ? plan.corridorEntries() : null; }catch(e){ eRefs = null; }
+  try{ xRefs = (typeof plan.corridorExits === "function") ? plan.corridorExits() : null; }catch(e){ xRefs = null; }
+  if(eRefs && !eRefs.length) eRefs = null;
+  if(xRefs && !xRefs.length) xRefs = null;
+  var eMulti = !!(eRefs && eRefs.some(function(r){ return r.road !== plan.entryRoad; }));
+  var xMulti = !!(xRefs && xRefs.some(function(r){ return r.road !== plan.exitRoad; }));
+  detail.appendChild(icRail(eMulti ? "乗るIC" : "乗るIC（" + plan.entryRoad.road + "）", plan.entryRoad, plan.entries, eDir, plan.defEntry, "e", verE, eRefs));
+  detail.appendChild(icRail(xMulti ? "降りるIC" : "降りるIC（" + plan.exitRoad.road + "）", plan.exitRoad, plan.exits, xDir, plan.defExit, "x", verX, xRefs));
   var stripWrap = document.createElement("div"); stripWrap.className = "icp-strip-slot";
   detail.appendChild(stripWrap);
   var diffEl = document.createElement("div"); diffEl.className = "icp-diff";
