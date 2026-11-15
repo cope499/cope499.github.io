@@ -397,16 +397,27 @@ html.lens-ok .tab-ind.bubble .tab-ind-in::after{box-shadow:inset 0 0 5px rgba(12
 #toast.on{opacity:1; transform:translate(-50%,0);}
 .hiddenFile{display:none;}
 @media (min-width:760px){ .view{padding-top:calc(22px + env(safe-area-inset-top));} }
-/* ---------- diagnostic overlay (diag-20261115-1815) ---------- */
+/* ---------- diagnostic overlay (diag-20261115-1835) ---------- */
 #diagOverlay{position:fixed; top:calc(env(safe-area-inset-top, 0px) + 8px); left:8px; z-index:9999; max-width:calc(100vw - 16px); background:rgba(0,0,0,.78); color:#e8e8e8; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:11px; line-height:1.5; padding:8px 28px 8px 10px; border-radius:8px; border:1px solid rgba(255,255,255,.25); pointer-events:none; white-space:pre-wrap; word-break:break-all;}
 #diagOverlay .diagTitle{font-weight:700; color:#fff;}
 #diagClose{position:absolute; top:2px; right:2px; width:24px; height:24px; min-height:24px; padding:0; display:flex; align-items:center; justify-content:center; font-size:16px; line-height:1; color:#fff; background:transparent; border:0; pointer-events:auto; cursor:pointer;}
+/* ---------- 一時診断レイアウト (diag-20261115-1835): 下端の黒帯の切り分け用。確認後にこのブロックと .diagMark 要素を削除して戻す ---------- */
+html{background:#ff00ff;}
+#bg{background-image:repeating-linear-gradient(180deg,#ff0000 0 50px,#ff8000 50px 100px,#ffff00 100px 150px,#00c853 150px 200px,#2962ff 200px 250px,#aa00ff 250px 300px) !important;}
+#bgShade{opacity:0;}
+#app{box-shadow:inset 0 0 0 6px #ff0000;}
+#tabbar{background:#ff8000;}
+.diagMark{position:fixed; left:0; width:100%; height:6px; z-index:9998; pointer-events:none;}
+#diagMark812{top:812px; background:#ffff00;}
+#diagMarkAppH{top:calc(var(--app-h, 100lvh) - 6px); background:#00ff00;}
 </style>
 </head>
 <body>
 <div id="bg"></div>
 <div id="bgShade"></div>
 <div id="diagOverlay" aria-label="診断情報"><button id="diagClose" type="button" aria-label="診断を閉じる">×</button><div id="diagBody">diag…</div></div>
+<div class="diagMark" id="diagMark812" aria-hidden="true"></div>
+<div class="diagMark" id="diagMarkAppH" aria-hidden="true"></div>
 
 <div id="app">
   <div id="views">
@@ -1849,7 +1860,7 @@ document.addEventListener("DOMContentLoaded",init);
 <script>
 (function(){
   "use strict";
-  var BUILD_ID="diag-20261115-1815";
+  var BUILD_ID="diag-20261115-1835";
   function fmt(n){ if(n==null||typeof n!=="number"||!isFinite(n)) return String(n); return Math.round(n*10)/10; }
 
   /* ---- 1. 物理画面高でシェルを組む: --app-h = screen.height (CSS px) ---- */
