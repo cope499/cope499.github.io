@@ -68,10 +68,6 @@
               <button class="odoUpdateBtn" id="btnOdoQuick">更新</button>
             </div>
           </div>
-          <div class="gpsAddRow">
-            <span>GPS走行をオドメーターに加算</span>
-            <button class="tgl on" id="tglGpsAdd" role="switch" aria-checked="true" aria-label="GPS走行をオドメーターに加算"></button>
-          </div>
         </div>
 
         <div class="glass gaugeBox">
@@ -95,10 +91,30 @@
       </div>
     </section>
 
-    <!-- MAINTENANCE -->
+    <!-- HISTORY -->
     <section class="view" id="view-maint">
       <div class="wrap">
-        <div class="glass listCard" id="maintList"></div>
+        <div class="glass distCard">
+          <div class="secTitle" style="margin:0;">走行距離</div>
+          <div class="seg" id="distSeg">
+            <button type="button" data-p="day" class="sel">日</button>
+            <button type="button" data-p="week">週</button>
+            <button type="button" data-p="month">月</button>
+            <button type="button" data-p="year">年</button>
+          </div>
+          <div class="distPick" id="distPickRow" style="display:none;">
+            <span class="distPickLabel" id="distPickLabel">基準日</span>
+            <input type="date" id="distDateInput" aria-label="グラフの基準日を選択" />
+            <select id="distMonthSelect" aria-label="グラフの基準月を選択" style="display:none;"></select>
+            <button type="button" class="distResetBtn" id="distResetBtn" style="display:none;">最新に戻す</button>
+          </div>
+          <div id="distChart"></div>
+          <div class="distTotal" id="distTotal"></div>
+        </div>
+        <div>
+          <div class="secTitle" style="margin-top:4px;">購入履歴</div>
+          <div class="glass listCard" id="purchaseList" style="margin-top:8px;"></div>
+        </div>
       </div>
     </section>
 
@@ -111,12 +127,12 @@
           <div class="mapChip" id="mapChip">軌跡プレビュー</div>
         </div>
         <div class="glass recPanel">
-          <div class="recTop">
+          <div class="recTop" id="recTop" style="display:none;">
             <span class="recDot" id="recDot"></span>
-            <span class="recState" id="recState">待機中</span>
+            <span class="recState" id="recState">記録中</span>
             <span class="wakeChip" id="wakeChip">スリープ防止中</span>
           </div>
-          <div class="recNums">
+          <div class="recNums" id="recNums" style="display:none;">
             <div class="recNum"><b id="recTime">00:00:00</b><span>経過時間</span></div>
             <div class="recNum"><b id="recDist">0.00 km</b><span>GPS距離</span></div>
             <div class="recNum"><b id="recPts">0</b><span>地点</span></div>
@@ -136,10 +152,102 @@
         </div>
       </div>
     </section>
+
+    <!-- SETTINGS PAGE (メイン画面に出る設定。背景はドロワーと同じ) -->
+    <section class="view" id="view-settings">
+      <div class="wrap settingsWrap">
+        <div class="settingsHead">
+          <button class="settingsBack" id="btnSettingsBack" type="button" aria-label="戻る"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+          <div class="settingsTitle" id="settingsPageTitle">設定</div>
+        </div>
+
+        <div class="settingsPage" id="spage-vehicle">
+          <div class="glass ssec">
+            <h3>車両</h3>
+            <div class="field"><label>車名</label><input id="setCarName" type="text" placeholder="NCロードスター" /></div>
+            <div class="field"><label>グレード</label><input id="setHeroBadge" type="text" placeholder="RS" /></div>
+            <div class="field"><label>型式</label><input id="setHeroModel" type="text" placeholder="NC3" /></div>
+            <div class="field"><label>年式</label><input id="setHeroYear" type="text" placeholder="2013" /></div>
+            <div class="field"><label>スペック（カンマ区切り）</label><input id="setSpecChips" type="text" placeholder="後期 NC3,RS,ホワイト,黒幌" /></div>
+            <div class="field"><label>キッカー文字</label><input id="setHeroKicker" type="text" placeholder="ROADSTER" /></div>
+            <div class="field"><label>オドメーター（km）</label><input id="setOdo" type="number" inputmode="numeric" min="0" /></div>
+          </div>
+          <div class="glass ssec">
+            <h3>交換間隔</h3>
+            <div id="intervalList"></div>
+          </div>
+        </div>
+
+        <div class="settingsPage" id="spage-general">
+          <div class="glass ssec">
+            <h3>背景</h3>
+            <div class="thumbGrid" id="bgGrid"></div>
+            <button class="upBtn" id="btnBgUpload">画像をアップロード</button>
+          </div>
+          <div class="glass ssec">
+            <h3>ヒーロー画像</h3>
+            <div class="thumbGrid" id="heroGrid"></div>
+            <button class="upBtn" id="btnHeroUpload">画像をアップロード</button>
+          </div>
+          <div class="glass ssec">
+            <h3>インジケーター色</h3>
+            <div class="swatches" id="accentSwatches"></div>
+          </div>
+          <div class="glass ssec">
+            <h3>デバッグ</h3>
+            <div class="field"><label>今日走った距離（km）</label><input id="setDebugKm" type="number" inputmode="decimal" min="0" step="0.1" placeholder="例）32.5" /></div>
+            <div class="recBtns" style="margin-top:10px;"><button class="btn small" id="btnDebugAdd" style="flex:1;">オドメーターに加算</button></div>
+          </div>
+        </div>
+
+        <div class="settingsPage" id="spage-exchange">
+          <div class="glass listCard" id="exchangeList"></div>
+        </div>
+
+        <div class="settingsPage" id="spage-record">
+          <div class="glass ssec">
+            <h3>軌跡の吸着（Valhalla）</h3>
+            <div class="field"><label>吸着サーバーURL</label><input id="setSnapUrl" type="url" inputmode="url" autocomplete="off" placeholder="http://example:8002" /></div>
+            <div class="recNote on">設定すると、走行履歴の軌跡表示に自前Valhallaサーバーの吸着（マップマッチング）結果を使います。未設定・接続できないときは生のGPS軌跡を表示します。このURLは軌跡表示専用で、走行距離の記録と履歴タブの日別グラフは、URLが未設定でもGPS記録を保存すればそのまま反映されます。記録データ自体は生GPSのまま保持されます。</div>
+          </div>
+          <div class="glass ssec">
+            <h3>データ</h3>
+            <div class="kvRow"><span>整備記録</span><b id="cntMaint">0件</b></div>
+            <div class="kvRow"><span>購入記録</span><b id="cntPurchases">0件</b></div>
+            <div class="kvRow"><span>走行記録</span><b id="cntDrives">0件</b></div>
+            <div class="recBtns"><button class="btn danger" id="btnWipe">すべてのデータを削除</button></div>
+          </div>
+        </div>
+
+        <div class="settingsPage" id="spage-guide">
+          <div class="glass ssec">
+            <h3>走行の記録</h3>
+            <div class="guideText">「ドライブ」タブで <b>記録開始</b> を押すとGPS記録が始まります。走り終わったら <b>終了して保存</b> で履歴に残ります。記録中はこの画面を開いたままにしてください。保存した走行は履歴から軌跡を地図で確認でき、走った距離は「履歴」タブの日別グラフにも自動で入ります。途中でアプリが閉じてしまった場合も、そこまで保存された距離はその日の分としてグラフに集計されます。</div>
+          </div>
+          <div class="glass ssec">
+            <h3>オドメーター</h3>
+            <div class="guideText">走行を保存すると、GPSで測った距離がオドメーターに加算されます。GPSの計測には誤差があるため、実際のメーターとズレることがあります。ズレていた場合は、ホームの <b>手入力で更新</b> から正しい距離を入力して修正できます。</div>
+          </div>
+          <div class="glass ssec">
+            <h3>整備インジケーター</h3>
+            <div class="guideText">ホームのリングは、交換からの走行距離や経過日数の目安です。交換したらインジケーターをタップして <b>交換した</b> を押し、出てきたシートで日付・銘柄・費用などを入力して <b>登録</b> するとゲージが更新されます（過去の日付でも登録できます）。項目の追加は「＋ 整備を追加」から、交換間隔の変更は「車両・整備」ページでできます。</div>
+          </div>
+          <div class="glass ssec">
+            <h3>履歴と購入の記録</h3>
+            <div class="guideText">「履歴」タブの上部には、走行記録から集計した走行距離のグラフが日／週／月／年で切り替えて表示されます。日はカレンダーで基準日を、月はドロップダウンで基準月を選べます。その下の <b>購入履歴</b> には、買ったものと交換で購入したものが時系列で一緒に並びます。右下の＋ボタンからは、買ったものを自由に入力して購入記録として登録できます（購入の登録ではインジケーターはリセットされません）。交換だけを整備の項目で見たいときは、メニューの <b>交換履歴</b> から一覧を開けます。一覧の項目をタップすると編集・削除ができます。</div>
+          </div>
+          <div class="glass ssec">
+            <h3>見た目と車両情報</h3>
+            <div class="guideText">左上のボタンから開くメニューで、テーマ（ライト／ダーク）の切替ができます。背景やヒーロー画像、インジケーターの色は「設定」ページ、車名・年式・スペックなどの表示内容は「車両・整備」ページで変更できます。</div>
+          </div>
+        </div>
+
+      </div>
+    </section>
   </div>
 </div>
 
-<button class="fab" id="fabAdd" aria-label="整備を追加">
+<button class="fab" id="fabAdd" aria-label="購入を記録">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
 </button>
 
@@ -153,58 +261,19 @@
   <div class="dFillet fBot" aria-hidden="true"></div>
   <div class="dhead"><b>設定</b></div>
   <div class="dbody">
-    <div class="dsec" style="margin-top:6px;">
-      <h3>車両</h3>
-      <div class="field"><label>車名</label><input id="setCarName" type="text" placeholder="NCロードスター" /></div>
-      <div class="field"><label>グレード</label><input id="setHeroBadge" type="text" placeholder="RS" /></div>
-      <div class="field"><label>型式</label><input id="setHeroModel" type="text" placeholder="NC3" /></div>
-      <div class="field"><label>年式</label><input id="setHeroYear" type="text" placeholder="2013" /></div>
-      <div class="field"><label>スペック（カンマ区切り）</label><input id="setSpecChips" type="text" placeholder="後期 NC3,RS,ホワイト,黒幌" /></div>
-      <div class="field"><label>キッカー文字</label><input id="setHeroKicker" type="text" placeholder="ROADSTER" /></div>
-      <div class="field"><label>オドメーター（km）</label><input id="setOdo" type="number" inputmode="numeric" min="0" /></div>
-      <div class="toggleRow" style="margin-top:8px;"><span>GPS走行をオドメーターに加算</span><button class="tgl on" id="tglGpsAddDrawer" role="switch" aria-checked="true" aria-label="GPS走行をオドメーターに加算（設定）"></button></div>
-    </div>
-    <div class="dsec">
-      <h3>テーマ</h3>
+    <div class="dQuick">
+      <div class="dQuickLabel">テーマ</div>
       <div class="seg" id="themeSeg">
         <button data-th="light">ライト</button><button data-th="dark">ダーク</button>
       </div>
-      <div class="recNote on">アプリ全体の配色を切り替えます。走行タブの地図（白／黒）もテーマに連動します。</div>
     </div>
-    <div class="dsec">
-      <h3>交換間隔</h3>
-      <div id="intervalList"></div>
-    </div>
-    <div class="dsec">
-      <h3>背景</h3>
-      <div class="thumbGrid" id="bgGrid"></div>
-      <button class="upBtn" id="btnBgUpload">画像をアップロード</button>
-    </div>
-    <div class="dsec">
-      <h3>ヒーロー画像</h3>
-      <div class="thumbGrid" id="heroGrid"></div>
-      <button class="upBtn" id="btnHeroUpload">画像をアップロード</button>
-    </div>
-    <div class="dsec">
-      <h3>インジケーター色</h3>
-      <div class="swatches" id="accentSwatches"></div>
-    </div>
-    <div class="dsec">
-      <h3>軌跡の吸着（Valhalla）</h3>
-      <div class="field"><label>吸着サーバーURL</label><input id="setSnapUrl" type="url" inputmode="url" autocomplete="off" placeholder="http://example:8002" /></div>
-      <div class="recNote on">設定すると、走行履歴の軌跡表示に自前Valhallaサーバーの吸着（マップマッチング）結果を使います。未設定・接続できないときは生のGPS軌跡を表示します。記録データ自体は生GPSのまま保持されます。</div>
-    </div>
-    <div class="dsec">
-      <h3>デバッグ</h3>
-      <div class="field"><label>今日走った距離（km）</label><input id="setDebugKm" type="number" inputmode="decimal" min="0" step="0.1" placeholder="例）32.5" /></div>
-      <div class="recBtns" style="margin-top:10px;"><button class="btn small" id="btnDebugAdd" style="flex:1;">オドメーターに加算</button></div>
-    </div>
-    <div class="dsec">
-      <h3>データ</h3>
-      <div class="kvRow"><span>整備記録</span><b id="cntMaint">0件</b></div>
-      <div class="kvRow"><span>走行記録</span><b id="cntDrives">0件</b></div>
-      <div class="recBtns"><button class="btn danger" id="btnWipe">すべてのデータを削除</button></div>
-    </div>
+    <nav class="dNav" aria-label="設定カテゴリ">
+      <button class="dNavBtn" type="button" data-spage="general"><span class="dIco"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span><span class="grow"><span class="t1">設定</span></span></button>
+      <button class="dNavBtn" type="button" data-spage="vehicle"><span class="dIco"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span><span class="grow"><span class="t1">車両・整備</span></span></button>
+      <button class="dNavBtn" type="button" data-spage="exchange"><span class="dIco"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg></span><span class="grow"><span class="t1">交換履歴</span></span></button>
+      <button class="dNavBtn" type="button" data-spage="record"><span class="dIco"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></span><span class="grow"><span class="t1">記録・データ</span></span></button>
+      <button class="dNavBtn" type="button" data-spage="guide"><span class="dIco"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></span><span class="grow"><span class="t1">使い方</span></span></button>
+    </nav>
   </div>
 </aside>
 
@@ -225,7 +294,7 @@
 <nav id="tabbar" aria-label="メインタブ">
   <span class="tab-ind" id="tabInd" aria-hidden="true"><span class="tab-ind-in"></span></span>
   <button type="button" class="tabbtn" data-tab="home" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10.5 12 3l8 7.5"/><path d="M6 9.5V21h12V9.5"/></svg><span>ホーム</span></button>
-  <button type="button" class="tabbtn" data-tab="maint" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a4.5 4.5 0 0 0-6 6L3 18l3 3 5.7-5.7a4.5 4.5 0 0 0 6-6L14 13l-3-3 3.7-3.7z"/></svg><span>整備履歴</span></button>
+  <button type="button" class="tabbtn" data-tab="maint" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h16"/><path d="M7 20v-6"/><path d="M12 20V6"/><path d="M17 20v-9"/></svg><span>履歴</span></button>
   <button type="button" class="tabbtn" data-tab="drive" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="5" r="2.5"/><path d="M8.5 19H15a3 3 0 0 0 0-6h-4.5a3 3 0 0 1 0-6H13"/></svg><span>走行</span></button>
 </nav>
 
@@ -235,7 +304,7 @@
   <div class="shead"><b>オドメーター</b><button data-close>閉じる</button></div>
   <div class="sheetScroll">
     <div class="field"><label>現在の走行距離（km）</label><input id="odoInput" type="number" inputmode="numeric" min="0" /></div>
-    <div class="recNote on">「GPS走行をオドメーターに加算」がオンのとき、走行を保存するとGPS距離が加算されます。</div>
+    <div class="recNote on">走行を保存すると、GPSで測った距離がオドメーターに加算されます。</div>
     <div class="sheetBtns"><button class="btn primary" id="btnOdoSave">保存</button></div>
   </div>
 </div></div>
@@ -250,10 +319,25 @@
     <div class="field"><label>交換間隔（km）</label><input id="mInterval" type="number" inputmode="numeric" min="0" /></div>
     <div class="field"><label>実施日</label><input id="mDate" type="date" /></div>
     <div class="field"><label>実施時の走行距離（km）</label><input id="mOdo" type="number" inputmode="numeric" min="0" /></div>
+    <div class="field"><label>銘柄（製品名）</label><input id="mBrand" type="text" placeholder="任意" autocomplete="off" /></div>
     <div class="field"><label>費用（円）</label><input id="mCost" type="number" inputmode="numeric" min="0" placeholder="任意" /></div>
     <div class="field"><label>メモ</label><textarea id="mMemo" placeholder="任意"></textarea></div>
     <div class="sheetBtns"><button class="btn primary" id="btnMaintSave">保存</button></div>
     <div class="sheetBtns" id="maintDeleteRow" style="display:none;"><button class="btn danger" id="btnMaintDelete">この記録を削除</button></div>
+  </div>
+</div></div>
+
+<!-- purchase sheet -->
+<div class="sheetWrap" id="sheetPurchase"><div class="bk"></div><div class="sheet">
+  <div class="grab"></div>
+  <div class="shead"><b id="purchaseSheetTitle">購入を記録</b><button data-close>閉じる</button></div>
+  <div class="sheetScroll">
+    <div class="field"><label>買ったもの</label><input id="pName" type="text" placeholder="例）車用ワックス" autocomplete="off" /></div>
+    <div class="field"><label>購入日</label><input id="pDate" type="date" /></div>
+    <div class="field"><label>費用（円）</label><input id="pCost" type="number" inputmode="numeric" min="0" placeholder="任意" /></div>
+    <div class="field"><label>メモ</label><textarea id="pMemo" placeholder="任意"></textarea></div>
+    <div class="sheetBtns"><button class="btn primary" id="btnPurchaseSave">保存</button></div>
+    <div class="sheetBtns" id="purchaseDeleteRow" style="display:none;"><button class="btn danger" id="btnPurchaseDelete">この記録を削除</button></div>
   </div>
 </div></div>
 
@@ -263,14 +347,9 @@
   <div class="shead"><b id="indTitle">整備</b><button data-close>閉じる</button></div>
   <div class="sheetScroll">
     <div id="indInfo"></div>
-    <div id="indExFields">
-      <div class="field"><label>銘柄（製品名）</label><input id="indBrand" type="text" placeholder="任意" autocomplete="off" /></div>
-      <div class="field"><label>金額（円）</label><input id="indCost" type="number" inputmode="numeric" min="0" placeholder="任意" /></div>
-    </div>
     <div class="field" id="indShakenField" style="display:none;"><label>車検満了日（年月日）</label><input id="indShakenDate" type="date" /></div>
     <div class="sheetBtns" id="indResetRow"><button class="btn primary" id="btnIndReset">交換した</button></div>
     <div class="sheetBtns" id="indShakenRow" style="display:none;"><button class="btn primary" id="btnIndShakenSave">設定する</button></div>
-    <div class="recNote on" id="indNote"></div>
   </div>
 </div></div>
 

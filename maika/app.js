@@ -32,9 +32,9 @@ var CIRC=301.6, JP={latMin:31,latMax:45.6,lngMin:129,lngMax:146};
 var S={
   settings:{carName:"NCロードスター",odometer:0,odoSet:false,gpsAdd:true,heroKicker:"ROADSTER",heroModel:"NC3",heroBadge:"RS",heroYear:"2013",specChips:"後期 NC3,RS,ホワイト,黒幌",accent:"mono",bg:"car",hero:"car",theme:"dark",mapTheme:"dark",snapUrl:"",intervals:{},indicatorBase:{},shakenDate:""},
   customBg:null, customHero:null,
-  maint:[], drives:[],
-  tab:"home", drawerOpen:false, sheetOpen:null,
-  editingMaint:null, editingDrive:null, drivePhotoDraft:undefined, maintSnap:"", indicatorTarget:null,
+  maint:[], drives:[], purchases:[],
+  tab:"home", settingsPage:null, drawerOpen:false, sheetOpen:null,
+  editingMaint:null, editingDrive:null, editingPurchase:null, distPeriod:"day", distAnchorDate:"", distAnchorMonth:"", drivePhotoDraft:undefined, maintSnap:"", indicatorTarget:null, maintFromIndicator:false,
   rec:{active:false,id:null,watchId:null,startedAt:0,elapsedBase:0,timer:null,sections:[],distance:0,points:0,forceNew:true,lastSave:0,wakeLock:null,lastPosAt:0}
 };
 function $(id){return document.getElementById(id);}
@@ -42,6 +42,7 @@ function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2
 function fmtInt(n){return Math.round(n).toLocaleString("ja-JP");}
 function fmtKm(m){return (m/1000).toFixed(2)+" km";}
 function fmtDur(ms){var s=Math.floor(ms/1000),h=Math.floor(s/3600),m=Math.floor(s%3600/60),ss=s%60;function p(x){return (x<10?"0":"")+x;}return p(h)+":"+p(m)+":"+p(ss);}
+function fmtDurMin(ms){var m=Math.floor(ms/60000);if(m<60)return m+"分";return Math.floor(m/60)+"時間"+(m%60)+"分";}
 function fmtDate(ts){var d=new Date(ts);return d.getFullYear()+"/"+(d.getMonth()+1)+"/"+d.getDate();}
 function fmtDateTime(ts){var d=new Date(ts);function p(x){return (x<10?"0":"")+x;}return fmtDate(ts)+" "+p(d.getHours())+":"+p(d.getMinutes());}
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
@@ -54,8 +55,13 @@ function idb(){
   if(dbPromise)return dbPromise;
   dbPromise=new Promise(function(res,rej){
     if(!("indexedDB" in window)){rej(new Error("no idb"));return;}
-    var rq=indexedDB.open("maikaguan-li",1);
-    rq.onupgradeneeded=function(){var d=rq.result;d.createObjectStore("kv",{keyPath:"k"});d.createObjectStore("maint",{keyPath:"id"});d.createObjectStore("drives",{keyPath:"id"});};
+    var rq=indexedDB.open("maikaguan-li",2);
+    rq.onupgradeneeded=function(){var d=rq.result;
+      if(!d.objectStoreNames.contains("kv"))d.createObjectStore("kv",{keyPath:"k"});
+      if(!d.objectStoreNames.contains("maint"))d.createObjectStore("maint",{keyPath:"id"});
+      if(!d.objectStoreNames.contains("drives"))d.createObjectStore("drives",{keyPath:"id"});
+      if(!d.objectStoreNames.contains("purchases"))d.createObjectStore("purchases",{keyPath:"id"});
+    };
     rq.onsuccess=function(){res(rq.result);};
     rq.onerror=function(){rej(rq.error);};
   });
@@ -80,6 +86,7 @@ var memKV={};
 function accentHex(){return (ACCENTS[S.settings.accent]||ACCENTS.mono).hex;}
 function themeSrc(which){
   var v=which==="bg"?S.settings.bg:S.settings.hero;
+  if(v==="plain")return "";
   if(v==="customBg"&&S.customBg)return S.customBg;
   if(v==="customHero"&&S.customHero)return S.customHero;
   for(var i=0;i<THEMES.length;i++)if(THEMES[i].id===v)return THEMES[i].src;
@@ -98,8 +105,20 @@ function applyTheme(){
   var tcm=document.querySelector('meta[name="theme-color"]');
   if(tcm)tcm.setAttribute("content",th==="light"?"#eceef1":"#0b0d16");
   document.documentElement.style.setProperty("--accent",accentHex());
-  $("bg").style.backgroundImage="url('"+themeSrc("bg")+"')";
-  $("heroImg").src=themeSrc("hero");
+  /* 無地: 背景とヒーローは完全に独立。背景で無地を選んでもヒーローはヒーロー側の選択のまま、
+     ヒーローが無地になるのはヒーロー側で無地を選んだときだけ（逆も同様）。
+     色は CSS 変数 --plain-bg / --plain-hero でテーマ連動 */
+  var bgPlain=S.settings.bg==="plain";
+  var heroPlain=S.settings.hero==="plain";
+  var bgEl=$("bg");
+  bgEl.classList.toggle("plain",bgPlain);
+  if(bgPlain)bgEl.style.backgroundImage="none";
+  else bgEl.style.backgroundImage="url('"+themeSrc("bg")+"')";
+  var shadeEl=$("bgShade"); if(shadeEl)shadeEl.classList.toggle("plain",bgPlain);
+  var hpEl=document.querySelector(".heroPhoto"); if(hpEl)hpEl.classList.toggle("plain",heroPlain);
+  var hiEl=$("heroImg");
+  if(heroPlain){hiEl.removeAttribute("src");}
+  else hiEl.src=themeSrc("hero");
   $("heroCarName").textContent=S.settings.carName||"";
   var hk=String(S.settings.heroKicker||"");
   $("heroKicker").textContent=hk; $("heroKicker").style.display=hk?"":"none";
@@ -110,8 +129,6 @@ function applyTheme(){
   var specs=String(S.settings.specChips||"").split(/[,、]/).map(function(s){return s.trim();}).filter(Boolean);
   $("specChips").textContent=specs.join(" / ");
   $("specChips").style.display=specs.length?"":"none";
-  var ga=!!S.settings.gpsAdd;
-  [$("tglGpsAdd"),$("tglGpsAddDrawer")].forEach(function(t){if(t){t.classList.toggle("on",ga);t.setAttribute("aria-checked",String(ga));}});
   $("mapBox").classList.toggle("dark",S.settings.mapTheme==="dark");
   var tseg=$("themeSeg");
   if(tseg){var tch=tseg.children; for(var ti=0;ti<tch.length;ti++)tch[ti].classList.toggle("sel",tch[ti].getAttribute("data-th")===th);}
@@ -129,6 +146,10 @@ function buildThumbGrid(gridId,kind){
     b.addEventListener("click",function(){S.settings[kind]=t.id;saveSettings();applyTheme();drawFallbackMap();});
     g.appendChild(b);
   });
+  var bp=document.createElement("button"); bp.setAttribute("data-v","plain"); bp.setAttribute("aria-label","無地");
+  bp.innerHTML='<span class="plainThumb" aria-hidden="true"></span><span class="cap">無地</span>';
+  bp.addEventListener("click",function(){S.settings[kind]="plain";saveSettings();applyTheme();drawFallbackMap();});
+  g.appendChild(bp);
   var customVal=kind==="bg"?"customBg":"customHero", customData=kind==="bg"?S.customBg:S.customHero;
   if(customData){
     var b2=document.createElement("button"); b2.setAttribute("data-v",customVal);
@@ -207,13 +228,41 @@ function readImageFile(file,cb){
 }
 
 /* ================= tabs / drawer / sheets ================= */
+var SETTINGS_PAGES={general:"設定",vehicle:"車両・整備",exchange:"交換履歴",record:"記録・データ",guide:"使い方"};
+function openSettingsPage(page){
+  if(!SETTINGS_PAGES[page])return;
+  S.settingsPage=page;
+  document.documentElement.classList.add("settings-open");
+  closeDrawer();
+  ["home","maint","drive"].forEach(function(t){$("view-"+t).classList.remove("on");});
+  var sv=$("view-settings"); if(sv){sv.classList.add("on"); sv.scrollTop=0;}
+  Object.keys(SETTINGS_PAGES).forEach(function(k){
+    var el=$("spage-"+k); if(el)el.classList.toggle("on",k===page);
+  });
+  var tt=$("settingsPageTitle"); if(tt)tt.textContent=SETTINGS_PAGES[page];
+  if(page==="exchange")renderExchangeList();
+  updateFab();
+}
+function closeSettingsPage(){
+  S.settingsPage=null;
+  document.documentElement.classList.remove("settings-open");
+  var sv=$("view-settings"); if(sv)sv.classList.remove("on");
+}
+/* 「＋」（購入を記録）ボタンは、購入履歴が常時表示される履歴タブでは常に出す。
+   他タブ・設定ページ表示中は出さない */
+function updateFab(){
+  var f=$("fabAdd"); if(!f)return;
+  f.classList.toggle("on",S.tab==="maint"&&!S.settingsPage);
+}
 function switchTab(name){
   S.tab=name;
+  closeSettingsPage();
   ["home","maint","drive"].forEach(function(t){$("view-"+t).classList.toggle("on",t===name);});
   var btns=document.querySelectorAll(".tabbtn");
   for(var i=0;i<btns.length;i++)btns[i].setAttribute("aria-selected",String(btns[i].getAttribute("data-tab")===name));
-  $("fabAdd").classList.toggle("on",name==="maint");
+  updateFab();
   moveTabInd(false);
+  if(name==="maint"){renderMaintList(); renderDistChart();}
   if(name==="drive"){setTimeout(function(){resizeFallback();initLeafMap();drawFallbackMap();drawLeafAll();},60);}
 }
 /* ===== カーナビ移植: 滑るピル＋シャボン玉（指追従・バネ揺れ・拡大鏡アイコン・長押し） ===== */
@@ -475,7 +524,7 @@ function animateDrawerTo(open,fromTx){
   }
   drawerAnim={raf:requestAnimationFrame(frame)};
 }
-function openDrawer(){if(S.sheetOpen)return;animateDrawerTo(true);}
+function openDrawer(){if(S.sheetOpen||S.settingsPage)return;animateDrawerTo(true);}
 function closeDrawer(){animateDrawerTo(false);}
 function openSheet(id){
   S.sheetOpen=id; var w=$(id); w.classList.add("on");
@@ -487,7 +536,7 @@ function closeSheet(){
 }
 function anySheetOpen(){return !!S.sheetOpen;}
 /* 整備フォームの未保存チェック: 開いた時点の値と比べ、変わっていたら確認ダイアログを出す */
-function maintFormStr(){return [$("mType").value,$("mInterval").value,$("mDate").value,$("mOdo").value,$("mCost").value,$("mMemo").value].join("|");}
+function maintFormStr(){return [$("mType").value,$("mInterval").value,$("mDate").value,$("mOdo").value,$("mBrand").value,$("mCost").value,$("mMemo").value].join("|");}
 function maintDirty(){return maintFormStr()!==S.maintSnap;}
 function requestCloseSheet(){
   if(S.sheetOpen==="sheetMaint"&&maintDirty()){$("confirmWrap").classList.add("on");return;}
@@ -579,7 +628,7 @@ var drawerDrag=null;
    直前に書いた CSS 変数のせいで毎フレーム強制レイアウトが走り、初動と追従の両方が遅れる */
 var _dwCache=0;
 window.addEventListener("resize",function(){_dwCache=0;});
-function drawerW(){if(_dwCache)return _dwCache;var d=$("drawer");var w=d?d.offsetWidth:0;w=w||Math.min(320,Math.round(window.innerWidth*0.86));_dwCache=w;return w;}
+function drawerW(){if(_dwCache)return _dwCache;var d=$("drawer");var w=d?d.offsetWidth:0;w=w||Math.min(264,Math.round(window.innerWidth*0.72));_dwCache=w;return w;}
 /* 初動対策: 候補ができた touchstart の時点でドロワーを描画状態にし、レイアウトを済ませておく。
    閉じている間ドロワーは display:none で、従来はドラッグ活性化の最初のフレームで
    初回レイアウト＋ぼかし描画まで一気に走って、それが「動き出しの遅れ」になっていた。
@@ -628,6 +677,9 @@ document.addEventListener("touchstart",function(e){
   tsX=t.clientX; tsY=t.clientY; tsT=Date.now(); tsOnMap=!!e.target.closest("#mapBox"); tsOnTab=!!e.target.closest("#tabbar");
   drawerDrag=null;
   if(anySheetOpen())return;
+  /* 設定ページ表示中はドロワー開閉の候補を一切作らない: 左端からの右ドラッグでも
+     サイドバーは出さず、touchend 側の設定ページを閉じる右スワイプ判定に渡す */
+  if(S.settingsPage)return;
   if(S.drawerOpen){
     /* 開いている間は開始位置を問わない: ドロワー内の入力欄・トグル・ボタンの上でも、タブバーの上でも、
        右にずれて見えているメイン画面（スクリム越しのカードやボタン）の上でも、メニューボタン上でも
@@ -684,9 +736,16 @@ document.addEventListener("touchend",function(e){
   var t=e.changedTouches[0]; if(!t)return;
   var dx=t.clientX-tsX, dy=t.clientY-tsY;
   if(tsOnTab)return;
-  if(Math.abs(dy)>70||Date.now()-tsT>600)return;
   if(anySheetOpen())return;
   if(S.drawerOpen)return;
+  if(S.settingsPage){
+    /* 設定ページ表示中: 右スワイプ（左端からのドラッグ含む）でサイドバーを開かず、
+       設定ページを閉じて元のタブ表示に戻る。縦スクロールや左スワイプでは閉じないよう、
+       右向きで横成分が主のときだけ判定する。ゆっくりしたドラッグでも効くよう時間制限は設けない */
+    if(dx>=56&&Math.abs(dy)<=Math.abs(dx)*0.75)switchTab(S.tab||"home");
+    return;
+  }
+  if(Math.abs(dy)>70||Date.now()-tsT>600)return;
   if(tsOnMap||Math.abs(dx)<64)return;
   var order=["home","maint","drive"], i=order.indexOf(S.tab);
   if(dx<0&&i<2)switchTab(order[i+1]);
@@ -769,6 +828,7 @@ function renderHome(){
   $("statDrives").textContent=S.drives.length;
   $("statMaint").textContent=S.maint.length;
   $("cntMaint").textContent=S.maint.length+"件";
+  var cntP=$("cntPurchases"); if(cntP)cntP.textContent=S.purchases.length+"件";
   $("cntDrives").textContent=S.drives.length+"件";
   var rb=$("recentBox"); rb.innerHTML="";
   var items=[];
@@ -783,17 +843,179 @@ function renderHome(){
     b.addEventListener("click",function(){if(it.k==="m")openMaintSheet(it.r);else openDriveSheet(it.r);});
     rb.appendChild(b);
   });
+  renderDistChart();
 }
 function renderMaintList(){
-  var box=$("maintList"); box.innerHTML="";
+  /* 一覧は「購入履歴」ひとつに統一する。交換も購入の一種として扱い、
+     購入記録（＋からの自由入力）と交換記録を時系列で混ぜて並べる。
+     交換記録の行は購入としての項目（品名=整備項目名・銘柄・費用・日付）で出し、
+     実施時の走行距離など整備寄りの項目は行には出さない（保存データはそのまま残す） */
+  updateFab();
+  var box=$("purchaseList"); if(!box)return; box.innerHTML="";
+  var items=[];
+  S.maint.forEach(function(r){items.push({k:"m",r:r,ts:r.ts});});
+  S.purchases.forEach(function(r){items.push({k:"p",r:r,ts:r.ts});});
+  items.sort(function(a,b){return b.ts-a.ts;});
+  if(!items.length){box.innerHTML='<div class="empty">購入履歴がありません</div>';return;}
+  items.forEach(function(it){
+    var r=it.r, b=document.createElement("button"); b.className="rowItem";
+    if(it.k==="m"){
+      b.innerHTML='<div class="grow"><div class="t1">'+esc(r.type)+'</div><div class="t2">'+fmtDate(r.ts)+(r.brand?" ・ "+esc(r.brand):"")+(r.memo?" ・ "+esc(r.memo):"")+"</div></div>"+(r.cost?'<span class="amt">¥'+fmtInt(r.cost)+"</span>":"");
+      b.addEventListener("click",function(){openMaintSheet(r);});
+    }else{
+      b.innerHTML='<div class="grow"><div class="t1">'+esc(r.name)+'<span class="buyTag">購入</span></div><div class="t2">'+fmtDate(r.ts)+(r.memo?" ・ "+esc(r.memo):"")+"</div></div>"+(r.cost?'<span class="amt">¥'+fmtInt(r.cost)+"</span>":"");
+      b.addEventListener("click",function(){openPurchaseSheet(r);});
+    }
+    box.appendChild(b);
+  });
+  renderExchangeList();
+}
+/* ================= 交換履歴（サイドバーの専用ページ） =================
+   交換記録だけを、整備としての項目（項目名・日付・実施時の走行距離・銘柄・費用・メモ）で
+   一覧表示する。新規登録の導線は置かず（登録はインジケーター経由）、
+   既存レコードはタップで従来どおり編集・削除できる */
+function renderExchangeList(){
+  var box=$("exchangeList"); if(!box)return; box.innerHTML="";
   var list=S.maint.slice().sort(function(a,b){return b.ts-a.ts;});
-  if(!list.length){box.innerHTML='<div class="empty">整備記録がありません</div>';return;}
+  if(!list.length){box.innerHTML='<div class="empty">交換履歴がありません</div>';return;}
   list.forEach(function(r){
     var b=document.createElement("button"); b.className="rowItem";
     b.innerHTML='<div class="grow"><div class="t1">'+esc(r.type)+'</div><div class="t2">'+fmtDate(r.ts)+" ・ "+fmtInt(r.odo)+" km"+(r.brand?" ・ "+esc(r.brand):"")+(r.memo?" ・ "+esc(r.memo):"")+"</div></div>"+(r.cost?'<span class="amt">¥'+fmtInt(r.cost)+"</span>":"");
     b.addEventListener("click",function(){openMaintSheet(r);});
     box.appendChild(b);
   });
+}
+/* ================= 走行距離グラフ（履歴タブ上部） =================
+   保存済みの走行記録（S.drives）を startedAt の日付で 日／週／月／年 に集計し、棒グラフにする。
+   集計から外すのは「いま記録中」の1件だけ。アプリが途中で閉じられて未完了のまま
+   残った走行も、保存済みの距離はその日の分として集計に入れる */
+function fmtKmVal(v){var r=Math.round(v*10)/10;return (r%1===0)?String(Math.round(r)):String(r);}
+function pad2(n){return (n<10?"0":"")+n;}
+function localDateStr(d){return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate());}
+function localMonthStr(d){return d.getFullYear()+"-"+pad2(d.getMonth()+1);}
+function parseAnchorDate(){
+  if(!S.distAnchorDate)return null;
+  var d=new Date(S.distAnchorDate+"T00:00:00");
+  return isNaN(d.getTime())?null:d;
+}
+function parseAnchorMonth(){
+  if(!S.distAnchorMonth)return null;
+  var m=/^(\d{4})-(\d{2})$/.exec(S.distAnchorMonth);
+  if(!m)return null;
+  return {y:parseInt(m[1],10),mo:parseInt(m[2],10)-1};
+}
+function buildDistMonthOptions(){
+  var sel=$("distMonthSelect"); if(!sel)return;
+  var now=new Date(), curTotal=now.getFullYear()*12+now.getMonth();
+  var earliestTotal=curTotal;
+  S.drives.forEach(function(d){var dt=new Date(d.startedAt); if(!isNaN(dt.getTime())){var t=dt.getFullYear()*12+dt.getMonth(); if(t<earliestTotal)earliestTotal=t;}});
+  var startTotal=Math.min(curTotal-35,earliestTotal);
+  var want=S.distAnchorMonth||localMonthStr(now);
+  sel.innerHTML="";
+  var found=false;
+  for(var t=curTotal;t>=startTotal;t--){
+    var y=Math.floor(t/12), mo=t%12, val=y+"-"+pad2(mo+1);
+    var o=document.createElement("option"); o.value=val; o.textContent=y+"年"+(mo+1)+"月";
+    if(val===want)found=true;
+    sel.appendChild(o);
+  }
+  if(!found){
+    var parts=want.split("-"), o2=document.createElement("option");
+    o2.value=want; o2.textContent=parts[0]+"年"+parseInt(parts[1],10)+"月";
+    sel.insertBefore(o2,sel.firstChild);
+  }
+  sel.value=want;
+}
+function distBuckets(period){
+  var drives=S.drives.filter(function(d){return (d.distance||0)>0&&!(d.status==="recording"&&S.rec.active&&d.id===S.rec.id);});
+  function sumRange(a,b){var s=0;drives.forEach(function(d){if(d.startedAt>=a&&d.startedAt<b)s+=(d.distance||0);});return s/1000;}
+  var out=[],today=new Date(); today.setHours(0,0,0,0);
+  var t0=today.getTime(), DAY=86400000, i, a;
+  if(period==="week"){
+    var mon=t0-((today.getDay()+6)%7)*DAY; /* 週は月曜始まり */
+    for(i=7;i>=0;i--){a=mon-i*7*DAY;var dw=new Date(a);out.push({label:(dw.getMonth()+1)+"/"+dw.getDate(),km:sumRange(a,a+7*DAY),cur:i===0});}
+  }else if(period==="month"){
+    /* 基準月（ドロップダウンで選択、未選択時は今月）を含む直近12か月 */
+    var am=parseAnchorMonth(), by=am?am.y:today.getFullYear(), bm=am?am.mo:today.getMonth();
+    for(i=11;i>=0;i--){var m0=new Date(by,bm-i,1),m1=new Date(by,bm-i+1,1);out.push({label:(m0.getMonth()+1)+"月",km:sumRange(m0.getTime(),m1.getTime()),cur:i===0});}
+  }else if(period==="year"){
+    var y0=today.getFullYear(), earliest=y0;
+    drives.forEach(function(d){var y=new Date(d.startedAt).getFullYear(); if(y<earliest)earliest=y;});
+    var from=Math.min(y0-4,earliest);
+    for(var y=from;y<=y0;y++){out.push({label:String(y),km:sumRange(new Date(y,0,1).getTime(),new Date(y+1,0,1).getTime()),cur:y===y0});}
+  }else{ /* day: 基準日（カレンダーで選択、未選択時は今日）を含む直近14日 */
+    var ad=parseAnchorDate(), base=ad?ad.getTime():t0;
+    for(i=13;i>=0;i--){a=base-i*DAY;var dd=new Date(a);out.push({label:String(dd.getDate()),km:sumRange(a,a+DAY),cur:i===0});}
+  }
+  return out;
+}
+function renderDistChart(){
+  var box=$("distChart"); if(!box)return;
+  var seg=$("distSeg");
+  if(seg){var bs=seg.querySelectorAll("button");for(var bi=0;bi<bs.length;bi++)bs[bi].classList.toggle("sel",bs[bi].getAttribute("data-p")===S.distPeriod);}
+  /* 基準選択UI: 日=カレンダー、月=ドロップダウン。週・年では出さない */
+  var pickRow=$("distPickRow"), dIn=$("distDateInput"), mSel=$("distMonthSelect"), pLab=$("distPickLabel"), rBtn=$("distResetBtn");
+  var isDay=S.distPeriod==="day", isMonth=S.distPeriod==="month";
+  if(pickRow)pickRow.style.display=(isDay||isMonth)?"flex":"none";
+  if(dIn)dIn.style.display=isDay?"":"none";
+  if(mSel)mSel.style.display=isMonth?"":"none";
+  if(pLab)pLab.textContent=isMonth?"基準月":"基準日";
+  var nowD=new Date();
+  if(isDay&&dIn){dIn.value=S.distAnchorDate||localDateStr(nowD); dIn.max=localDateStr(nowD);}
+  if(isMonth)buildDistMonthOptions();
+  if(rBtn){
+    var custom=false;
+    if(isDay)custom=!!S.distAnchorDate&&S.distAnchorDate!==localDateStr(nowD);
+    if(isMonth)custom=!!S.distAnchorMonth&&S.distAnchorMonth!==localMonthStr(nowD);
+    rBtn.style.display=custom?"":"none";
+  }
+  var data=distBuckets(S.distPeriod);
+  var max=0,total=0;
+  data.forEach(function(d){if(d.km>max)max=d.km;total+=d.km;});
+  var W=320,H=148,padT=16,padB=18,ch=H-padT-padB,n=data.length,slot=W/n,bw=Math.max(6,Math.min(26,slot*0.56));
+  var svg='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="走行距離グラフ">';
+  data.forEach(function(d,i){
+    var h=max>0?(d.km/max)*ch:0;
+    if(d.km>0&&h<2)h=2;
+    var x=(i+0.5)*slot-bw/2, y=padT+ch-h;
+    svg+='<rect class="chBar'+(d.cur?"":" past")+'" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+h.toFixed(1)+'" rx="3"/>';
+    if(d.km>0)svg+='<text class="chVal" x="'+((i+0.5)*slot).toFixed(1)+'" y="'+(y-4).toFixed(1)+'">'+fmtKmVal(d.km)+"</text>";
+    svg+='<text class="chLab" x="'+((i+0.5)*slot).toFixed(1)+'" y="'+(H-4)+'">'+esc(d.label)+"</text>";
+  });
+  svg+='<line class="chBase" x1="0" y1="'+(padT+ch)+'" x2="'+W+'" y2="'+(padT+ch)+'"/></svg>';
+  box.innerHTML=svg;
+  var tot=$("distTotal");
+  if(tot){
+    if(total<=0)tot.textContent="この期間の走行記録はありません";
+    else{
+      var per={day:"直近14日",week:"直近8週",month:"直近12か月",year:"表示期間"}[S.distPeriod]||"";
+      if(S.distPeriod==="day"&&S.distAnchorDate){var ad2=parseAnchorDate(); if(ad2)per=fmtDate(ad2.getTime())+"までの14日";}
+      if(S.distPeriod==="month"&&S.distAnchorMonth){var am2=parseAnchorMonth(); if(am2)per=am2.y+"年"+(am2.mo+1)+"月までの12か月";}
+      tot.textContent=per+"の合計 "+fmtKmVal(total)+" km";
+    }
+  }
+}
+/* ================= 購入記録（履歴タブの＋から登録） =================
+   ドロップダウンではなく、買ったものを自分で書く自由入力。
+   インジケーターの「交換した」とは役割を分け、購入の登録ではインジケーターをリセットしない */
+function openPurchaseSheet(rec){
+  S.editingPurchase=rec?rec.id:null;
+  $("purchaseSheetTitle").textContent=rec?"購入を編集":"購入を記録";
+  $("pName").value=rec?rec.name:"";
+  $("pDate").value=new Date(rec?rec.ts:Date.now()).toISOString().slice(0,10);
+  $("pCost").value=rec?(rec.cost||""):"";
+  $("pMemo").value=rec?(rec.memo||""):"";
+  $("purchaseDeleteRow").style.display=rec?"flex":"none";
+  openSheet("sheetPurchase");
+}
+function savePurchase(){
+  var name=$("pName").value.trim();
+  if(!name){toast("買ったものを入力してください");return;}
+  var dv=$("pDate").value, ts=dv?new Date(dv+"T12:00:00").getTime():Date.now();
+  var rec={id:S.editingPurchase||uid(),name:name,ts:ts,cost:parseInt($("pCost").value,10)||0,memo:$("pMemo").value.trim()};
+  var ix=S.purchases.findIndex(function(r){return r.id===rec.id;});
+  if(ix>=0)S.purchases[ix]=rec; else S.purchases.push(rec);
+  putRec("purchases",rec); closeSheet(); renderMaintList(); renderHome(); toast("保存しました");
 }
 function fillMaintTypes(sel){
   var s=$("mType"); s.innerHTML="";
@@ -811,7 +1033,9 @@ function updateMaintBaseNote(){
   var note=$("mBaseNote"); if(!note)return;
   var t=$("mType").value;
   var ivField=$("mInterval").closest(".field");
-  if(ivField)ivField.style.display=(t==="車検")?"none":"";
+  if(ivField)ivField.style.display=(S.maintFromIndicator||t==="車検")?"none":"";
+  /* インジケーターの「交換した」から開いた登録シートには説明文を出さない */
+  if(S.maintFromIndicator){note.classList.remove("on");note.textContent="";return;}
   var has=S.maint.some(function(r){var tp=r.type==="タイヤローテーション"?"タイヤ":r.type;return tp===t;});
   if(!S.editingMaint&&!has){
     note.textContent="「"+t+"」の整備履歴はまだありません。これは履歴への記録で、ホームのインジケーターには影響しません。";
@@ -820,17 +1044,21 @@ function updateMaintBaseNote(){
     note.classList.remove("on");
   }
 }
-function openMaintSheet(rec,presetType){
+function openMaintSheet(rec,presetType,opts){
   S.editingMaint=rec?rec.id:null;
-  $("maintSheetTitle").textContent=rec?"整備を編集":"整備を記録";
+  S.maintFromIndicator=!!(opts&&opts.fromIndicator);
+  $("maintSheetTitle").textContent=S.maintFromIndicator?"交換を記録":(rec?"整備を編集":"整備を記録");
+  $("btnMaintSave").textContent=S.maintFromIndicator?"登録":"保存";
   fillMaintTypes(rec?rec.type:(presetType||"エンジンオイル"));
+  /* インジケーターから開いたときは項目をタップしたインジケーターに固定する */
+  $("mType").disabled=S.maintFromIndicator;
   if(rec){
     $("mInterval").value=rec.interval||5000;
     $("mDate").value=new Date(rec.ts).toISOString().slice(0,10);
-    $("mOdo").value=rec.odo; $("mCost").value=rec.cost||""; $("mMemo").value=rec.memo||"";
+    $("mOdo").value=rec.odo; $("mBrand").value=rec.brand||""; $("mCost").value=rec.cost||""; $("mMemo").value=rec.memo||"";
   }else{
     $("mDate").value=new Date().toISOString().slice(0,10);
-    $("mOdo").value=S.settings.odometer||0; $("mCost").value=""; $("mMemo").value="";
+    $("mOdo").value=S.settings.odometer||0; $("mBrand").value=""; $("mCost").value=""; $("mMemo").value="";
   }
   $("maintDeleteRow").style.display=rec?"flex":"none";
   updateMaintBaseNote();
@@ -843,22 +1071,30 @@ function saveMaint(){
   if(isNaN(odo)){toast("走行距離を入力してください");return;}
   var dv=$("mDate").value, ts=dv?new Date(dv+"T12:00:00").getTime():Date.now();
   var rec={id:S.editingMaint||uid(),type:type,interval:interval,odo:odo,ts:ts,
-    cost:parseInt($("mCost").value,10)||0,memo:$("mMemo").value.trim()};
-  /* 「交換した」経由で付いた銘柄は、履歴フォームに欄が無いので編集時も保持する */
-  var prevRec=S.maint.find(function(r){return r.id===rec.id;});
-  if(prevRec&&prevRec.brand)rec.brand=prevRec.brand;
-  /* 整備履歴はホームのインジケーターとは無関係: ここでは履歴レコードだけを保存し、
-     インジケーターの基準（indicatorBase）や間隔設定には触れない */
+    cost:parseInt($("mCost").value,10)||0,memo:$("mMemo").value.trim(),brand:$("mBrand").value.trim()};
+  var fromInd=S.maintFromIndicator;
   var ix=S.maint.findIndex(function(r){return r.id===rec.id;});
   if(ix>=0)S.maint[ix]=rec; else S.maint.push(rec);
-  putRec("maint",rec); closeSheet(); renderHome(); renderMaintList(); toast("保存しました");
+  putRec("maint",rec);
+  /* インジケーターの「交換した」から開いた登録のときだけ、登録した日付・走行距離を
+     その項目の基準にしてゲージを更新する（過去の日付で登録してもその内容で反映される）。
+     履歴側の通常の追加・編集ではインジケーターには触れない */
+  if(fromInd){
+    if(!S.settings.indicatorBase)S.settings.indicatorBase={};
+    S.settings.indicatorBase[type]={odo:odo,ts:ts};
+    saveSettings();
+  }
+  S.maintFromIndicator=false;
+  $("mType").disabled=false;
+  closeSheet(); renderHome(); renderMaintList(); toast(fromInd?"登録しました":"保存しました");
 }
 
 /* ================= インジケーター（ホーム専用・基準は履歴と独立） =================
-   タップでシートを開く。通常項目は「交換した」で基準＝今日＋現在のオドメーターにリセットし、
-   その際に銘柄・金額（任意）とあわせて整備履歴へ1件だけ追加する。
+   タップでシートを開く（状態表示と「交換した」ボタンのみで、入力欄は置かない）。
+   通常項目は「交換した」で登録シートが開き、そこで入力して「登録」すると
+   交換履歴へ1件追加され、登録した日付・走行距離が基準になってゲージが更新される。
    車検は年月日（満了日）を設定し、残り日数を表示する（履歴には追加しない）。
-   履歴側の追加・編集・削除ではインジケーターは変わらない。 */
+   履歴側の通常の追加・編集・削除ではインジケーターは変わらない。 */
 function openIndicatorSheet(it){
   S.indicatorTarget=it.type;
   $("indTitle").textContent=it.type;
@@ -876,13 +1112,8 @@ function openIndicatorSheet(it){
   }
   $("indInfo").innerHTML=html;
   $("indResetRow").style.display=it.dateBased?"none":"flex";
-  $("indExFields").style.display=it.dateBased?"none":"block";
-  if(!it.dateBased){$("indBrand").value=""; $("indCost").value="";}
   $("indShakenField").style.display=it.dateBased?"block":"none";
   $("indShakenRow").style.display=it.dateBased?"flex":"none";
-  $("indNote").textContent=it.dateBased
-    ?"車検満了日（年月日）を設定すると、その日までの残り日数を表示します。"
-    :"銘柄・金額は任意です。「交換した」を押すと、今日の日付と現在のオドメーター値が基準になりゲージが0に戻るとともに、整備履歴にも1件追加されます。";
   openSheet("sheetIndicator");
 }
 
@@ -921,11 +1152,14 @@ function haversine(a,b){
 }
 function recElapsed(){return S.rec.elapsedBase+(S.rec.active?Date.now()-S.rec.startedAt:0);}
 function updateRecUI(){
-  $("recTime").textContent=fmtDur(recElapsed());
+  $("recTime").textContent=S.rec.active?fmtDurMin(recElapsed()):fmtDur(recElapsed());
   $("recDist").textContent=fmtKm(S.rec.distance);
   $("recPts").textContent=S.rec.points;
   $("recDot").classList.toggle("on",S.rec.active);
-  $("recState").textContent=S.rec.active?"記録中":"待機中";
+  $("recState").textContent="記録中";
+  /* 待機中は状態行も数値行も一切出さない（00:00:00 等のプレースホルダ含む）。記録開始で表示する */
+  $("recTop").style.display=S.rec.active?"flex":"none";
+  $("recNums").style.display=S.rec.active?"flex":"none";
   $("recBtnsIdle").style.display=S.rec.active?"none":"flex";
   $("recBtnsRun").style.display=S.rec.active?"flex":"none";
   $("recNote").classList.toggle("on",S.rec.active);
@@ -941,10 +1175,18 @@ function persistRec(finished){
 function onPos(pos){
   var R=S.rec; if(!R.active)return;
   var p={lat:pos.coords.latitude,lng:pos.coords.longitude,t:pos.timestamp||Date.now(),acc:pos.coords.accuracy==null?999:pos.coords.accuracy};
-  if(p.acc>50)return;
+  if(p.acc>100)return;
   R.lastPosAt=p.t;
   var secs=R.sections, cur=secs[secs.length-1];
   if(!cur||R.forceNew||(cur.length&&p.t-cur[cur.length-1].t>20000)){
+    /* 区間が切れたとき（画面ロックやバックグラウンドで測位が止まった間）は、
+       前の区間の最終地点から新しい地点までの直線距離を加算する。
+       これをしないと、止まっていた間に走った距離がまるごと記録から抜け落ちる。
+       15分以内の途切れで、平均速度が走行としてあり得る範囲のときだけ加算する */
+    if(cur&&cur.length){
+      var prev=cur[cur.length-1], gd=haversine(prev,p), gdt=(p.t-prev.t)/1000;
+      if(gdt>0&&gdt<=900&&gd/gdt<=55)R.distance+=gd;
+    }
     cur=[]; secs.push(cur); R.forceNew=false;
   }else if(cur.length){
     var last=cur[cur.length-1], d=haversine(last,p), dt=(p.t-last.t)/1000;
@@ -986,12 +1228,12 @@ function stopRec(save){
   R.active=false; R.watchId=null;
   if(save){
     persistRec(true).then(function(){
-      if(S.settings.gpsAdd){
-        S.settings.odometer=Math.round((S.settings.odometer||0)+dist/1000);
-        if(dist>0)S.settings.odoSet=true;
-        saveSettings();
-        var so=$("setOdo"); if(so)so.value=S.settings.odometer;
-      }
+      /* GPS加算は常時オン固定（トグルは廃止）。保存済みの設定値に関わらず常に加算する */
+      S.settings.gpsAdd=true;
+      S.settings.odometer=Math.round((S.settings.odometer||0)+dist/1000);
+      if(dist>0)S.settings.odoSet=true;
+      saveSettings();
+      var so=$("setOdo"); if(so)so.value=S.settings.odometer;
       renderHome(); renderDriveList(); drawFallbackMap(); drawLeafAll(); toast("保存しました");
     });
   }else{
@@ -1033,19 +1275,28 @@ function drawFallbackMap(){
   ctx.strokeStyle=dark?"rgba(255,255,255,.06)":"rgba(20,30,40,.06)"; ctx.lineWidth=1;
   for(var gx=0;gx<w;gx+=w/8){ctx.beginPath();ctx.moveTo(gx,0);ctx.lineTo(gx,h);ctx.stroke();}
   for(var gy=0;gy<h;gy+=h/8){ctx.beginPath();ctx.moveTo(0,gy);ctx.lineTo(w,gy);ctx.stroke();}
-  ctx.strokeStyle=accentHex(); ctx.lineWidth=Math.max(2,(window.devicePixelRatio||1)*1.6);
+  /* フォールバック地図は日本全国表示＝最も縮小した状態に相当するため、
+     縮小側の下限より太めに描く。芯線はテーマ連動（ダーク=白／ライト=黒系）で、
+     縁取りは逆色の細い下地に留めて目立たせすぎない。出発点・終端・曲がり角の
+     マークは付けず、線だけを描く */
+  var dpr=window.devicePixelRatio||1;
+  var coreCol=dark?"#ffffff":"#14151c";
+  var casingCol=dark?"#000000":"#ffffff";
   ctx.lineJoin="round"; ctx.lineCap="round";
-  allSections().forEach(function(s){
+  var secsFb=allSections();
+  ctx.strokeStyle=casingCol; ctx.lineWidth=dpr*6.4; ctx.globalAlpha=.38;
+  secsFb.forEach(function(s){
     ctx.beginPath();
     s.forEach(function(p,i){var q=proj(p.lat,p.lng,w,h); if(i===0)ctx.moveTo(q.x,q.y); else ctx.lineTo(q.x,q.y);});
     ctx.stroke();
   });
-  var secs=allSections();
-  if(secs.length){
-    var last=secs[secs.length-1], lp=last[last.length-1], q=proj(lp.lat,lp.lng,w,h);
-    ctx.fillStyle=accentHex(); ctx.beginPath(); ctx.arc(q.x,q.y,Math.max(4,(window.devicePixelRatio||1)*3.4),0,7); ctx.fill();
-    ctx.fillStyle=dark?"#fff":"#141416"; ctx.beginPath(); ctx.arc(q.x,q.y,Math.max(1.8,(window.devicePixelRatio||1)*1.4),0,7); ctx.fill();
-  }
+  ctx.strokeStyle=coreCol; ctx.lineWidth=dpr*5; ctx.globalAlpha=1;
+  secsFb.forEach(function(s){
+    ctx.beginPath();
+    s.forEach(function(p,i){var q=proj(p.lat,p.lng,w,h); if(i===0)ctx.moveTo(q.x,q.y); else ctx.lineTo(q.x,q.y);});
+    ctx.stroke();
+  });
+  ctx.globalAlpha=1;
   $("mapChip").textContent=anySnapped()?"軌跡プレビュー（吸着済み）":"軌跡プレビュー（日本全国）";
 }
 function drawLive(){ if(leafMap){drawLeafLive();} else {drawFallbackMap();} }
@@ -1056,6 +1307,44 @@ function drawLive(){ if(leafMap){drawLeafLive();} else {drawFallbackMap();} }
    Esri が落ちたら地理院淡色＋.tilefx-invert へフォールバック（カーナビと同じ） */
 var leafMap=null, leafBase=null, leafPolys=[], leafLive=null, leafFitted=false;
 function leafDark(){return S.settings.mapTheme==="dark";}
+/* ---------- 軌跡線の太さ（ズーム連動） ----------
+   固定ピクセル幅にはしない。拡大するほど画面上では細く、縮小するほど太くなるよう
+   ズームから太さを決め、拡大時に線が街を埋めないようにする。
+   ただし縮小側で細くなりすぎて消えないよう下限を、拡大側で太くなりすぎないよう
+   上限を設けてクランプする（例: 履歴 z5≒8.2px / z10≒6.4px / z15≒4.0px / z18≒3.2px）。
+   ライブ線は履歴より少しだけ太くする。芯線の色はテーマ連動（ダーク=白／
+   ライト=黒系）。縁取りは芯線と同化しないよう逆色（ダーク=黒／ライト=白）の
+   細い下地に留め、薄くして目立たせすぎない。出発点・終端・曲がり角のマークは
+   付けず、線だけを描く */
+function trackCoreWeight(z,live){
+  var w=11.2-0.48*z+(live?0.7:0);
+  var min=live?3.6:3.2, max=live?9.0:8.2;
+  return Math.max(min,Math.min(max,w));
+}
+function trackCasingWeight(z,live){return trackCoreWeight(z,live)+1.4;}
+function trackCoreColor(){return leafDark()?"#ffffff":"#14151c";}
+function trackCasingColor(){return leafDark()?"#000000":"#ffffff";}
+function makeTrackLine(path,live){
+  var z=leafMap?leafMap.getZoom():13;
+  var casing=L.polyline(path,{color:trackCasingColor(),weight:trackCasingWeight(z,live),opacity:.38,lineJoin:"round",lineCap:"round"}).addTo(leafMap);
+  var core=L.polyline(path,{color:trackCoreColor(),weight:trackCoreWeight(z,live),opacity:1,lineJoin:"round",lineCap:"round"}).addTo(leafMap);
+  return {casing:casing,core:core,live:!!live};
+}
+function removeTrackEntry(e){
+  if(!e)return;
+  [e.casing,e.core].forEach(function(p){if(p)try{leafMap.removeLayer(p);}catch(err){}});
+}
+function refreshTrackWeights(){
+  if(!leafMap)return;
+  var z=leafMap.getZoom();
+  leafPolys.concat(leafLive||[]).forEach(function(e){
+    if(!e)return;
+    try{
+      e.casing.setStyle({weight:trackCasingWeight(z,e.live),color:trackCasingColor(),opacity:.38});
+      e.core.setStyle({weight:trackCoreWeight(z,e.live),color:trackCoreColor()});
+    }catch(err){}
+  });
+}
 function attachLeafBase(){
   if(!leafMap||!window.L)return;
   try{leafMap.attributionControl.setPrefix(false);}catch(e){}
@@ -1096,8 +1385,10 @@ function initLeafMap(){
   if(leafMap){ setTimeout(function(){try{leafMap.invalidateSize();}catch(e){} drawLeafAll();},40); return true; }
   var el=$("leafMap"); if(!el)return false;
   el.style.display="block"; $("fallbackMap").style.display="none";
-  leafMap=L.map("leafMap",{zoomControl:true,doubleClickZoom:false}).setView([36.8,138.2],5);
+  leafMap=L.map("leafMap",{zoomControl:false,doubleClickZoom:false}).setView([36.8,138.2],5);
   leafMap.options.maxZoom=18; leafMap.options.minZoom=4;
+  /* ズームが変わるたびに軌跡線の太さをその拡大率に合わせて付け替える */
+  leafMap.on("zoomend",refreshTrackWeights);
   attachLeafBase();
   $("mapChip").textContent="日本全国";
   drawLeafAll();
@@ -1106,14 +1397,14 @@ function initLeafMap(){
 function drawLeafAll(){
   if(!leafMap)return;
   ensureSnaps();
-  leafPolys.forEach(function(p){try{leafMap.removeLayer(p);}catch(e){}}); leafPolys=[];
+  leafPolys.forEach(removeTrackEntry); leafPolys=[];
   var pts=[];
   S.drives.forEach(function(d){
     displaySections(d).forEach(function(s){
       if(s.length<2)return;
       var path=s.map(function(p){return [p.lat,p.lng];});
       path.forEach(function(pt){pts.push(pt);});
-      leafPolys.push(L.polyline(path,{color:accentHex(),weight:4,opacity:.9}).addTo(leafMap));
+      leafPolys.push(makeTrackLine(path,false));
     });
   });
   $("mapChip").textContent=anySnapped()?"軌跡（吸着済み）":"日本全国";
@@ -1122,12 +1413,12 @@ function drawLeafAll(){
 }
 function drawLeafLive(){
   if(!leafMap)return;
-  if(leafLive){leafLive.forEach(function(p){try{leafMap.removeLayer(p);}catch(e){}}); leafLive=null;}
+  if(leafLive){leafLive.forEach(removeTrackEntry); leafLive=null;}
   if(!S.rec.active)return;
   leafLive=[];
   S.rec.sections.forEach(function(s){
     if(s.length<2)return;
-    leafLive.push(L.polyline(s.map(function(p){return [p.lat,p.lng];}),{color:accentHex(),weight:5,opacity:1}).addTo(leafMap));
+    leafLive.push(makeTrackLine(s.map(function(p){return [p.lat,p.lng];}),true));
   });
   var secs=S.rec.sections,last=secs[secs.length-1];
   if(last&&last.length){var lp=last[last.length-1]; try{leafMap.panTo([lp.lat,lp.lng]);}catch(e){}}
@@ -1235,8 +1526,12 @@ function initCollapsibleSettings(){
 
 /* ================= wiring ================= */
 function wire(){
-  initCollapsibleSettings();
   initTabBar();
+  document.querySelectorAll(".dNavBtn[data-spage]").forEach(function(b){
+    b.addEventListener("click",function(){openSettingsPage(b.getAttribute("data-spage"));});
+  });
+  var backBtn=$("btnSettingsBack");
+  if(backBtn)backBtn.addEventListener("click",function(){switchTab(S.tab||"home");});
   $("scrim").addEventListener("click",closeDrawer);
   $("menuBtn").addEventListener("click",function(){
     if(window.__ddEnd&&Date.now()-window.__ddEnd<450)return;
@@ -1250,7 +1545,28 @@ function wire(){
   $("cfSave").addEventListener("click",function(){$("confirmWrap").classList.remove("on");saveMaint();});
   $("cfDiscard").addEventListener("click",function(){$("confirmWrap").classList.remove("on");closeSheet();});
   $("cfCancel").addEventListener("click",function(){$("confirmWrap").classList.remove("on");});
-  $("fabAdd").addEventListener("click",function(){openMaintSheet(null);});
+  $("fabAdd").addEventListener("click",function(){openPurchaseSheet(null);});
+  $("btnPurchaseSave").addEventListener("click",savePurchase);
+  $("btnPurchaseDelete").addEventListener("click",function(){
+    if(!S.editingPurchase)return;
+    delRec("purchases",S.editingPurchase);
+    S.purchases=S.purchases.filter(function(r){return r.id!==S.editingPurchase;});
+    closeSheet(); renderMaintList(); renderHome(); toast("削除しました");
+  });
+  var dseg=$("distSeg");
+  if(dseg)dseg.querySelectorAll("button").forEach(function(b){
+    b.addEventListener("click",function(){S.distPeriod=b.getAttribute("data-p");renderDistChart();});
+  });
+  var dDateIn=$("distDateInput");
+  if(dDateIn)dDateIn.addEventListener("change",function(){S.distAnchorDate=this.value||"";renderDistChart();});
+  var dMonthSel=$("distMonthSelect");
+  if(dMonthSel)dMonthSel.addEventListener("change",function(){S.distAnchorMonth=this.value||"";renderDistChart();});
+  var dReset=$("distResetBtn");
+  if(dReset)dReset.addEventListener("click",function(){
+    if(S.distPeriod==="day")S.distAnchorDate="";
+    if(S.distPeriod==="month")S.distAnchorMonth="";
+    renderDistChart();
+  });
   $("btnGaugeAdd").addEventListener("click",function(){openMaintSheet(null);});
   $("btnOdoSave").addEventListener("click",function(){
     var v=parseInt($("odoInput").value,10); if(isNaN(v)||v<0){toast("数値を入力してください");return;}
@@ -1267,28 +1583,17 @@ function wire(){
   });
   $("btnIndReset").addEventListener("click",function(){
     var t=S.indicatorTarget; if(!t)return;
-    if(!S.settings.indicatorBase)S.settings.indicatorBase={};
-    var now=Date.now(), odo=S.settings.odometer||0;
-    S.settings.indicatorBase[t]={odo:odo,ts:now};
-    /* 「交換した」確定時のみ、整備履歴へ1件追加する（項目名・日付・走行距離・銘柄・金額）。
-       履歴側の操作でインジケーターが変わることはない（連動はこの一方向だけ） */
-    var rec={id:uid(),type:t,interval:intervalFor(t),odo:odo,ts:now,
-      cost:parseInt($("indCost").value,10)||0,memo:"",brand:$("indBrand").value.trim()};
-    S.maint.push(rec); putRec("maint",rec);
-    saveSettings(); closeSheet(); renderHome(); renderMaintList(); toast(t+" をリセットし、整備履歴に追加しました");
+    /* 「交換した」を押したら、その画面のまま登録シートを開く（項目はタップしたインジケーターで固定）。
+       インジケーターシートは即座に畳み、登録シート側の「登録」で履歴反映とゲージ更新を行う */
+    var w=$("sheetIndicator");
+    if(w){w.classList.remove("show"); w.classList.remove("on");}
+    if(S.sheetOpen==="sheetIndicator")S.sheetOpen=null;
+    openMaintSheet(null,t,{fromIndicator:true});
   });
   $("btnIndShakenSave").addEventListener("click",function(){
     var v=$("indShakenDate").value; if(!v){toast("年月日を選択してください");return;}
     S.settings.shakenDate=v; saveSettings(); closeSheet(); renderHome(); toast("車検の日付を設定しました");
   });
-  function bindGpsToggle(el){
-    if(!el)return;
-    el.addEventListener("click",function(){
-      S.settings.gpsAdd=!S.settings.gpsAdd; saveSettings(); applyTheme();
-      toast(S.settings.gpsAdd?"GPS加算をオンにしました":"GPS加算をオフにしました");
-    });
-  }
-  bindGpsToggle($("tglGpsAdd")); bindGpsToggle($("tglGpsAddDrawer"));
   $("mType").addEventListener("change",function(){
     $("mInterval").value=currentInterval($("mType").value);
     updateMaintBaseNote();
@@ -1329,7 +1634,7 @@ function wire(){
   });
   $("themeSeg").querySelectorAll("button").forEach(function(b){
     b.addEventListener("click",function(){
-      S.settings.theme=b.getAttribute("data-th"); saveSettings(); applyTheme(); refreshLeafBase(); drawFallbackMap();
+      S.settings.theme=b.getAttribute("data-th"); saveSettings(); applyTheme(); refreshLeafBase(); refreshTrackWeights(); drawFallbackMap();
     });
   });
   $("setSnapUrl").addEventListener("change",function(){
@@ -1360,8 +1665,8 @@ function wire(){
   });
   $("btnWipe").addEventListener("click",function(){
     if(this.getAttribute("data-arm")){ 
-      clearStore("maint");clearStore("drives");kvSet("settings",null);kvSet("customBg",null);kvSet("customHero",null);
-      S.maint=[];S.drives=[];S.customBg=null;S.customHero=null;
+      clearStore("maint");clearStore("drives");clearStore("purchases");kvSet("settings",null);kvSet("customBg",null);kvSet("customHero",null);
+      S.maint=[];S.drives=[];S.purchases=[];S.customBg=null;S.customHero=null;
       S.settings={carName:"NCロードスター",odometer:0,odoSet:false,gpsAdd:true,heroKicker:"ROADSTER",heroModel:"NC3",heroBadge:"RS",heroYear:"2013",specChips:"後期 NC3,RS,ホワイト,黒幌",accent:"mono",bg:"car",hero:"car",theme:"dark",mapTheme:"dark",snapUrl:"",intervals:{},indicatorBase:{},shakenDate:""};
       buildSettingsUI();applyTheme();renderHome();renderMaintList();renderDriveList();drawFallbackMap();
       this.removeAttribute("data-arm");this.textContent="すべてのデータを削除";toast("削除しました");
@@ -1387,17 +1692,17 @@ function wire(){
    帯がレイアウトビューポートの外にあり原理的に効かなかったため撤去した */
 function init(){
   wire();
-  Promise.all([kvGet("settings"),kvGet("customBg"),kvGet("customHero"),allRecs("maint"),allRecs("drives")]).then(function(r){
+  Promise.all([kvGet("settings"),kvGet("customBg"),kvGet("customHero"),allRecs("maint"),allRecs("drives"),allRecs("purchases")]).then(function(r){
     if(r[0])S.settings=Object.assign(S.settings,r[0]);
     delete S.settings.apiKey; /* 旧Google APIキーは使わない */
     if(!S.settings.intervals||typeof S.settings.intervals!=="object")S.settings.intervals={};
     if(!S.settings.indicatorBase||typeof S.settings.indicatorBase!=="object")S.settings.indicatorBase={};
     if(typeof S.settings.shakenDate!=="string")S.settings.shakenDate="";
     if(S.settings.theme!=="light"&&S.settings.theme!=="dark")S.settings.theme="dark";
-    if(S.settings.gpsAdd===undefined)S.settings.gpsAdd=true;
+    S.settings.gpsAdd=true; /* GPS加算は常時オン固定。旧設定でオフになっていても常に加算する */
     if(r[0]&&r[0].odoSet===undefined&&S.settings.odometer>0)S.settings.odoSet=true;
     S.customBg=r[1]||null; S.customHero=r[2]||null;
-    S.maint=r[3]||[]; S.drives=r[4]||[];
+    S.maint=r[3]||[]; S.drives=r[4]||[]; S.purchases=r[5]||[];
     S.maint.forEach(function(rec){ if(rec.type==="タイヤローテーション"){rec.type="タイヤ"; putRec("maint",rec);} });
     buildSettingsUI(); applyTheme();
     renderHome(); renderMaintList(); renderDriveList(); updateRecUI();

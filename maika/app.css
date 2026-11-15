@@ -9,7 +9,10 @@
   --danger:#ff5a4e;
   --scrim:rgba(0,0,0,.42);
   --sheet:rgba(52,54,80,.16);
-  --drawer:rgba(20,22,36,.30);
+  /* ダーク時のドロワー地色は真っ黒。設定ページの背景もこの色に揃える */
+  --drawer:#000000;
+  --plain-bg:#0c0e15;
+  --plain-hero:#181b28;
   --push:0px;
   --cr:52px;
   --crr:0px; /* 現在の角丸半径: 開き具合に比例して --push と同じフレームで更新される */
@@ -54,6 +57,12 @@ img{display:block; max-width:100%;}
    コンテンツ側は .view の padding や各要素の env(safe-area-inset-top) でステータスバーから逃がす */
 #bg{position:fixed; left:0; right:0; top:0; height:100lvh; z-index:0; background:#07080f center/cover no-repeat; transition:opacity .4s,transform .28s cubic-bezier(.32,.72,.24,1),border-top-left-radius .28s cubic-bezier(.32,.72,.24,1),border-bottom-left-radius .28s cubic-bezier(.32,.72,.24,1); transform:translateX(var(--push)); border-top-left-radius:var(--crr); border-bottom-left-radius:var(--crr);}
 #bgShade{position:fixed; left:0; right:0; top:0; height:100lvh; z-index:1; background:linear-gradient(180deg,rgba(4,5,10,.34),rgba(4,5,10,.55)); pointer-events:none; transition:transform .28s cubic-bezier(.32,.72,.24,1),border-top-left-radius .28s cubic-bezier(.32,.72,.24,1),border-bottom-left-radius .28s cubic-bezier(.32,.72,.24,1); transform:translateX(var(--push)); border-top-left-radius:var(--crr); border-bottom-left-radius:var(--crr);}
+/* 無地: 画像なしの単色。色はテーマ連動の変数で切り替え、陰影グラデーションも重ねない */
+#bg.plain{background-image:none !important; background-color:var(--plain-bg);}
+#bgShade.plain{background:none !important;}
+.heroPhoto.plain{background:var(--plain-hero);}
+.heroPhoto.plain img,.heroPhoto.plain .veil{display:none;}
+.plainThumb{position:absolute; inset:0; display:block; background:var(--plain-hero);}
 
 /* ---------- layout ---------- */
 #app{position:fixed; inset:0; height:100lvh; z-index:2; display:flex; flex-direction:column; transition:transform .28s cubic-bezier(.32,.72,.24,1),border-top-left-radius .28s cubic-bezier(.32,.72,.24,1),border-bottom-left-radius .28s cubic-bezier(.32,.72,.24,1); transform:translateX(var(--push)); border-top-left-radius:var(--crr); border-bottom-left-radius:var(--crr);}
@@ -64,7 +73,7 @@ html.dopen #app{overflow:hidden;}
 /* ドロワーのドラッグ中はメイン画面・背景・タブバーの遷移を止めて指に追従させる */
 html.ddrag #app,html.ddrag #bg,html.ddrag #bgShade,html.ddrag #tabbar,html.ddrag .fab,html.ddrag #menuBtn{transition:none !important;}
 #views{flex:1; position:relative; overflow:hidden;}
-.view{position:fixed; inset:0; height:100lvh; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; padding:calc(28px + env(safe-area-inset-top)) 12px calc(80px + env(safe-area-inset-bottom)); display:none; -webkit-overflow-scrolling:touch; scrollbar-width:none; -ms-overflow-style:none;}
+.view{position:fixed; inset:0; height:100lvh; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; padding:calc(68px + env(safe-area-inset-top)) 12px calc(80px + env(safe-area-inset-bottom)); display:none; -webkit-overflow-scrolling:touch; scrollbar-width:none; -ms-overflow-style:none;}
 .view::-webkit-scrollbar{display:none; width:0; height:0;}
 .view.on{display:block;}
 /* 縦スクロールは許可し、自然な縦レイアウトにする。横方向のはみ出しは全ビューで出さない */
@@ -109,8 +118,8 @@ html.ddrag #app,html.ddrag #bg,html.ddrag #bgShade,html.ddrag #tabbar,html.ddrag
 .odoInputRow input:focus{border-color:rgba(255,255,255,.45);}
 .odoUpdateBtn{flex:none; width:118px; border-radius:999px; background:var(--ink); color:var(--onink); font-size:14.5px; font-weight:800; line-height:1.35; padding:8px 10px; box-shadow:0 6px 18px rgba(0,0,0,.30);}
 .odoUpdateBtn:active{opacity:.82;}
-.gpsAddRow{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:10px; padding:10px 13px; border-radius:16px; border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.05);}
-.gpsAddRow span{font-size:13.5px; font-weight:800; line-height:1.4;}
+.guideText{font-size:13.5px; color:var(--ink2); line-height:1.75; margin-top:6px;}
+.guideText b{color:var(--ink);}
 .odoFoldHead{display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; margin-top:10px; padding:10px 13px; border-radius:16px; border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.05); font-size:13.5px; font-weight:800; text-align:left;}
 .odoFoldHead svg{width:18px; height:18px; flex:none; color:var(--ink2); transition:transform .28s cubic-bezier(.32,.72,.24,1);}
 .odoFoldHead.open svg{transform:rotate(180deg);}
@@ -152,6 +161,48 @@ html.ddrag #app,html.ddrag #bg,html.ddrag #bgShade,html.ddrag #tabbar,html.ddrag
 .thumb{width:46px; height:46px; border-radius:12px; object-fit:cover; flex:none; background:rgba(128,128,128,.2);}
 .empty{padding:26px 16px; text-align:center; color:var(--ink2); font-size:13.5px;}
 .listCard{padding:0; overflow:hidden;}
+
+/* ---------- history: distance chart + purchase list ---------- */
+.distCard{padding:16px;}
+.distCard .seg{margin-top:12px;}
+#distChart{margin-top:14px;}
+#distChart svg{display:block; width:100%; height:auto;}
+.chBar{fill:var(--accent);}
+.chBar.past{opacity:.42;}
+.chBase{stroke:var(--hair); stroke-width:1;}
+.chVal{font-size:9.5px; fill:var(--ink2); text-anchor:middle; font-variant-numeric:tabular-nums;}
+.chLab{font-size:9.5px; fill:var(--ink2); text-anchor:middle;}
+.distTotal{margin-top:10px; font-size:12.5px; color:var(--ink2); text-align:right; font-variant-numeric:tabular-nums;}
+.buyTag{display:inline-block; font-size:10.5px; font-weight:700; color:var(--ink2); border:1px solid var(--hair); border-radius:999px; padding:1px 7px; margin-left:7px; vertical-align:2px;}
+/* 履歴タブのセグメント（グラフ期間／交換・購入切替）: 薄く見えないよう輪郭とコントラストを強める。
+   ダークでは濃い地＋明るい枠に白ピル（濃色文字）、ライトでは白地＋濃い枠に黒ピル（白文字）で、
+   どちらのテーマでも選択中／未選択がはっきり判別できるようにする */
+#distSeg{background:rgba(10,12,20,.55); border:1px solid rgba(255,255,255,.42); padding:4px; box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 2px 10px rgba(0,0,0,.24); -webkit-backdrop-filter:blur(10px) saturate(1.25); backdrop-filter:blur(10px) saturate(1.25);}
+#distSeg button{color:rgba(244,244,247,.88); font-weight:700; min-height:40px; border:1px solid transparent;}
+#distSeg button.sel{background:#f4f4f7; color:#14151c; border-color:rgba(255,255,255,.92); box-shadow:0 2px 8px rgba(0,0,0,.38); font-weight:800;}
+#distSeg button:active{background:rgba(255,255,255,.30); color:#fff;}
+#distSeg button.sel:active{background:#ffffff; color:#14151c;}
+@media (hover:hover) and (pointer:fine){
+  #distSeg button:not(.sel):hover{background:rgba(255,255,255,.20); color:#fff;}
+}
+html[data-theme="light"] #distSeg{background:rgba(255,255,255,.78); border-color:rgba(23,24,34,.32); box-shadow:inset 0 1px 0 rgba(255,255,255,.65),0 2px 10px rgba(31,36,52,.14);}
+html[data-theme="light"] #distSeg button{color:rgba(26,27,33,.82);}
+html[data-theme="light"] #distSeg button.sel{background:#1a1b21; color:#fff; border-color:#1a1b21; box-shadow:0 2px 8px rgba(31,36,52,.30);}
+html[data-theme="light"] #distSeg button:active{background:rgba(23,24,34,.16); color:#1a1b21;}
+html[data-theme="light"] #distSeg button.sel:active{background:#000; color:#fff;}
+@media (hover:hover) and (pointer:fine){
+  html[data-theme="light"] #distSeg button:not(.sel):hover{background:rgba(23,24,34,.12); color:#1a1b21;}
+}
+/* グラフの基準選択（日=カレンダー／月=ドロップダウン）: iOS風の入力面 */
+.distPick{display:flex; align-items:center; gap:8px; margin-top:10px;}
+.distPickLabel{font-size:12.5px; font-weight:700; color:var(--ink2); flex:none;}
+.distPick input[type="date"],.distPick select{flex:1; min-width:0; min-height:42px; border-radius:12px; border:1px solid var(--stroke); background:var(--field); padding:8px 12px; font-size:15px; color:var(--ink); outline:none; font-variant-numeric:tabular-nums;}
+.distPick input[type="date"]{-webkit-appearance:none; appearance:none; text-align:left;}
+.distPick input[type="date"]::-webkit-date-and-time-value{text-align:left; margin:0;}
+.distPick input[type="date"]::-webkit-calendar-picker-indicator{margin-left:auto; flex:none;}
+.distPick input[type="date"]:focus,.distPick select:focus{border-color:var(--accent);}
+.distResetBtn{flex:none; min-height:42px; padding:0 14px; border-radius:999px; border:1px solid var(--stroke); background:var(--glass); font-size:13px; font-weight:700; color:var(--ink); -webkit-backdrop-filter:blur(6px) saturate(1.2); backdrop-filter:blur(6px) saturate(1.2);}
+.distResetBtn:active{opacity:.75;}
 
 /* ---------- drive / map ---------- */
 .mapBox{position:relative; height:44dvh; min-height:280px; border-radius:22px; overflow:hidden; border:1px solid var(--stroke); box-shadow:0 10px 30px rgba(0,0,0,.16); background:#e8ebee;}
@@ -205,7 +256,7 @@ html.ddrag #app,html.ddrag #bg,html.ddrag #bgShade,html.ddrag #tabbar,html.ddrag
   bottom:max(10px, calc(env(safe-area-inset-bottom) - 12px)); z-index:40;
   width:min(640px,calc(100vw - 24px));
   display:flex; gap:4px; padding:6px; border-radius:32px;
-  background:rgba(10,10,12,.34);
+  background:rgba(10,10,12,.44);
   -webkit-backdrop-filter:blur(10px) saturate(1.15);
   backdrop-filter:blur(10px) saturate(1.15);
   backdrop-filter:url(#tabGlass) blur(1.2px) saturate(1.1);
@@ -267,16 +318,17 @@ html.lens-ok .tab-ind.bubble .tab-ind-in::after{box-shadow:inset 0 0 5px rgba(12
   position:fixed; left:12px; top:calc(10px + env(safe-area-inset-top)); z-index:55;
   width:50px; height:50px; min-height:50px; border-radius:50%;
   display:flex; align-items:center; justify-content:center; color:#fff;
-  /* すりガラスは弱く: ぼかしと地の色をさらに下げ、後ろのヒーロー文字（NC3）が透けて見えるようにする。
-     輪郭は枠線と影で保ち、アイコンには落影を付けて判別できる状態を維持する */
-  background:rgba(30,30,38,.09);
-  -webkit-backdrop-filter:blur(2.5px) saturate(1.15) brightness(1.03); backdrop-filter:blur(2.5px) saturate(1.15) brightness(1.03);
-  border:1px solid rgba(255,255,255,.30);
-  box-shadow:0 6px 14px rgba(0,0,0,.14), inset 0 1px 0 rgba(255,255,255,.10);
-  transition:transform .28s cubic-bezier(.32,.72,.24,1); transform:translateX(var(--push));
+  /* すりガラスは他の面（.glass）と同程度に統一: 地色は --glass、ぼかし 10px */
+  background:var(--glass);
+  -webkit-backdrop-filter:blur(10px) saturate(1.25) brightness(1.02); backdrop-filter:blur(10px) saturate(1.25) brightness(1.02);
+  border:1px solid var(--stroke);
+  box-shadow:0 10px 26px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.10), inset 0 0 12px rgba(255,255,255,.02);
+  transition:transform .28s cubic-bezier(.32,.72,.24,1),opacity .2s ease,visibility .2s; transform:translateX(var(--push));
 }
 #menuBtn svg{width:25px; height:25px; filter:drop-shadow(0 1px 3px rgba(0,0,0,.5));}
 #menuBtn:active{transform:translateX(var(--push)) scale(.93);}
+/* 設定ページ表示中はサイドバーを開く丸ボタンを出さない（開閉は戻るボタン／右スワイプで行う） */
+html.settings-open #menuBtn{opacity:0; visibility:hidden; pointer-events:none;}
 
 /* ---------- drawer ---------- */
 #scrim{position:fixed; inset:0; height:100lvh; z-index:50; background:var(--scrim); opacity:0; pointer-events:none; transition:opacity .25s; touch-action:none;}
@@ -286,7 +338,7 @@ html.lens-ok .tab-ind.bubble .tab-ind-in::after{box-shadow:inset 0 0 5px rgba(12
 /* プッシュ式ドロワー: 画面の左端から上下いっぱいに余白なく配置し、開くとメイン画面が右へずれる。
    右端の上下には逆角丸（凹カーブ）のフィレットを付け、メイン画面左端の凸カーブ（半径 --cr）と隙間なく噛み合わせる */
 #drawer{
-  position:fixed; top:0; left:0; bottom:0; height:100lvh; z-index:51; width:min(320px,86vw);
+  position:fixed; top:0; left:0; bottom:0; height:100lvh; z-index:51; width:min(264px,72vw);
   background:var(--drawer); -webkit-backdrop-filter:blur(12px) saturate(1.25) brightness(1.02); backdrop-filter:blur(12px) saturate(1.25) brightness(1.02);
   transform:translateX(calc(-100% - 60px));
   transition:transform .28s cubic-bezier(.32,.72,.24,1);
@@ -306,9 +358,9 @@ html.lens-ok .tab-ind.bubble .tab-ind-in::after{box-shadow:inset 0 0 5px rgba(12
   mask-image:radial-gradient(circle var(--crr) at 100% 0%, transparent calc(var(--crr) - 1px), #000 calc(var(--crr) + 1px));}
 #drawer.render{display:flex;}
 #drawer.on{transform:translateX(0);}
-#drawer .dhead{display:flex; align-items:center; justify-content:space-between; padding:calc(14px + env(safe-area-inset-top)) 16px 8px;}
+#drawer .dhead{display:flex; align-items:center; justify-content:space-between; padding:calc(14px + env(safe-area-inset-top)) 14px 8px;}
 #drawer .dhead b{font-size:16px;}
-#drawer .dbody{flex:1; overflow-y:auto; overflow-x:hidden; padding:4px 16px calc(20px + env(safe-area-inset-bottom)); overscroll-behavior:contain; scrollbar-width:none; -ms-overflow-style:none; touch-action:pan-y;}
+#drawer .dbody{flex:1; overflow-y:auto; overflow-x:hidden; padding:4px 12px calc(20px + env(safe-area-inset-bottom)); overscroll-behavior:contain; scrollbar-width:none; -ms-overflow-style:none; touch-action:pan-y;}
 #drawer .dbody::-webkit-scrollbar{display:none; width:0; height:0;}
 .dsec{margin-top:18px;}
 .dsecHead{display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%; min-height:44px; padding:4px 2px; font-size:13.5px; font-weight:700; color:var(--ink); text-align:left; border-radius:10px;}
@@ -327,9 +379,15 @@ html.lens-ok .tab-ind.bubble .tab-ind-in::after{box-shadow:inset 0 0 5px rgba(12
 .thumbGrid button.sel{border-color:var(--accent);}
 .thumbGrid button .cap{position:absolute; left:0; right:0; bottom:0; font-size:9.5px; color:#fff; background:linear-gradient(transparent,rgba(0,0,0,.55)); padding:8px 4px 3px; text-align:center;}
 .upBtn{width:100%; min-height:44px; border-radius:12px; border:1px dashed rgba(128,128,128,.55); font-size:13px; font-weight:600; color:var(--ink2); margin-top:8px;}
-.seg{display:flex; background:rgba(128,128,128,.18); border-radius:11px; padding:3px;}
-.seg button{flex:1; min-height:38px; border-radius:8px; font-size:13.5px; font-weight:600; color:var(--ink2);}
+.seg{display:flex; background:rgba(128,128,128,.18); border-radius:999px; padding:3px;}
+.seg button{flex:1; min-height:38px; border-radius:999px; font-size:13.5px; font-weight:600; color:var(--ink2);}
 .seg button.sel{background:var(--glass); color:var(--ink); box-shadow:0 1px 5px rgba(0,0,0,.14);}
+/* ダーク時（属性なし含む）: ドロワーは真っ黒 #000 なので、テーマ切替ピルは輪郭を明るい枠で示し、
+   選択中は明色で塗って濃色文字に反転させ、未選択の文字も持ち上げて判別できるコントラストにする。
+   ライト時は上の既定のまま（この節は :not([data-theme="light"]) でダーク側だけに効く） */
+html:not([data-theme="light"]) #themeSeg{background:rgba(255,255,255,.13); border:1px solid rgba(255,255,255,.30);}
+html:not([data-theme="light"]) #themeSeg button{color:rgba(244,244,247,.80);}
+html:not([data-theme="light"]) #themeSeg button.sel{background:rgba(244,244,247,.94); color:#14151c; box-shadow:0 1px 6px rgba(0,0,0,.55);}
 .swatches{display:flex; gap:10px; flex-wrap:wrap;}
 .swatch{width:40px; height:40px; border-radius:50%; border:2px solid transparent; position:relative; flex:none;}
 .swatch.sel{border-color:var(--ink);}
@@ -355,6 +413,46 @@ html.lens-ok .tab-ind.bubble .tab-ind-in::after{box-shadow:inset 0 0 5px rgba(12
 .tgl::after{content:""; position:absolute; top:2px; left:2px; width:26px; height:26px; border-radius:50%; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,.25); transition:left .15s;}
 .tgl.on{background:var(--accent);}
 .tgl.on::after{left:22px;}
+
+/* ---------- drawer: クイック項目＋カテゴリボタン一覧 ---------- */
+.dQuick{margin-top:2px; padding:8px 10px 6px; border:0; border-radius:16px; background:transparent;}
+html[data-theme="light"] .dQuick{background:transparent;}
+.dQuickLabel{font-size:13.5px; font-weight:700; margin-bottom:8px;}
+.dQuick .recNote{margin-top:8px;}
+.dNav{display:flex; flex-direction:column; gap:2px; margin-top:10px;}
+.dNavBtn{display:flex; align-items:center; gap:10px; width:100%; min-height:60px; padding:11px 10px; border-radius:14px; border:0; background:transparent; text-align:left; transition:background .15s ease;}
+html[data-theme="light"] .dNavBtn{background:transparent;}
+/* ホバーは本物のホバーができるデバイス（マウス等）だけに効かせる。タッチでは :hover が
+   タップ後に残ってハイライトが張り付くため、タップ時は下の :active（押している間だけ）で示す */
+@media (hover:hover) and (pointer:fine){
+  .dNavBtn:hover{background:rgba(255,255,255,.05);}
+  html[data-theme="light"] .dNavBtn:hover{background:rgba(23,24,34,.05);}
+}
+.dNavBtn:active{background:rgba(255,255,255,.13);}
+html[data-theme="light"] .dNavBtn:active{background:rgba(23,24,34,.11);}
+@media (prefers-reduced-motion: reduce){ .dNavBtn{transition:none;} }
+.dNavBtn .grow{flex:1; min-width:0;}
+.dNavBtn .t1{display:block; font-size:17.5px; font-weight:800; line-height:1.3;}
+.dNavBtn .dIco{width:24px; height:24px; flex:none; display:flex; align-items:center; justify-content:center; color:var(--ink2);}
+.dNavBtn .dIco svg{width:23px; height:23px;}
+
+/* ---------- 設定ページ（メイン画面に出る。背景はドロワーと同じ地色） ---------- */
+#view-settings{background:var(--drawer); -webkit-backdrop-filter:blur(12px) saturate(1.25) brightness(1.02); backdrop-filter:blur(12px) saturate(1.25) brightness(1.02);}
+.settingsHead{display:flex; align-items:center; gap:12px;}
+/* 戻るボタン: 左上のサイドバーを開く丸ボタン（#menuBtn）と同一のすりガラス仕様・同一サイズ。
+   地色・枠・影・ぼかしは #menuBtn と揃え、テーマ変数（--glass / --stroke）でダーク／ライトに連動する */
+.settingsBack{display:inline-flex; align-items:center; justify-content:center; width:50px; height:50px; min-height:50px; padding:0; border-radius:50%; flex:none;
+  background:var(--glass); border:1px solid var(--stroke); color:#fff;
+  box-shadow:0 10px 26px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.10), inset 0 0 12px rgba(255,255,255,.02);
+  -webkit-backdrop-filter:blur(10px) saturate(1.25) brightness(1.02); backdrop-filter:blur(10px) saturate(1.25) brightness(1.02);}
+.settingsBack svg{width:25px; height:25px; filter:drop-shadow(0 1px 3px rgba(0,0,0,.5));}
+.settingsBack:active{transform:scale(.93);}
+.settingsTitle{font-size:19px; font-weight:800; letter-spacing:.01em; min-width:0;}
+.settingsPage{display:none; flex-direction:column; gap:10px;}
+.settingsPage.on{display:flex;}
+.ssec{padding:16px;}
+.ssec h3{font-size:14.5px; font-weight:800; margin:0 0 4px;}
+.ssec .field:first-of-type{margin-top:8px;}
 
 /* ---------- sheets ---------- */
 .sheetWrap{position:fixed; inset:0; height:100lvh; z-index:60; display:none;}
@@ -415,7 +513,7 @@ html.lens-ok .tab-ind.bubble .tab-ind-in::after{box-shadow:inset 0 0 5px rgba(12
 }
 #toast.on{opacity:1; transform:translate(-50%,0);}
 .hiddenFile{display:none;}
-@media (min-width:760px){ .view{padding-top:calc(38px + env(safe-area-inset-top));} }
+@media (min-width:760px){ .view{padding-top:calc(68px + env(safe-area-inset-top));} }
 
 /* ---------- ライトテーマ（html[data-theme="light"]） ----------
    既定（data-theme="dark"／属性なし）は従来のダークの見た目そのまま。
@@ -433,27 +531,41 @@ html[data-theme="light"]{
   --scrim:rgba(24,26,36,.30);
   --sheet:rgba(250,250,252,.62);
   --drawer:rgba(248,248,250,.60);
+  --plain-bg:#e9ebef;
+  --plain-hero:#d9dee6;
   color-scheme:light;
 }
 html[data-theme="light"],html[data-theme="light"] body{background:#e9ebef;}
 html[data-theme="light"] #bg{background-color:#dfe3e9; filter:brightness(1.28) saturate(1.05);}
+html[data-theme="light"] #bg.plain{background-color:var(--plain-bg); filter:none;}
+html[data-theme="light"] #menuBtn{color:var(--ink);}
+html[data-theme="light"] #menuBtn svg{filter:drop-shadow(0 1px 2px rgba(255,255,255,.35));}
+/* 戻るボタンも #menuBtn と同じくライト時はシェブロンを濃色にし、影も明側に合わせる */
+html[data-theme="light"] .settingsBack{color:var(--ink);}
+html[data-theme="light"] .settingsBack svg{filter:drop-shadow(0 1px 2px rgba(255,255,255,.35));}
+html[data-theme="light"] .heroPhoto.plain .heroKicker{color:rgba(26,27,33,.72); text-shadow:none;}
+html[data-theme="light"] .heroPhoto.plain .heroModel{color:#1a1b21; text-shadow:none;}
 html[data-theme="light"] #bgShade{background:linear-gradient(180deg,rgba(250,251,252,.14),rgba(250,251,252,.30));}
 html[data-theme="light"] .glass{box-shadow:0 10px 26px rgba(31,36,52,.10), inset 0 1px 0 rgba(255,255,255,.55), inset 0 0 12px rgba(255,255,255,.22);}
 html[data-theme="light"] .odoInputRow input{border-color:rgba(23,24,34,.20); background:rgba(255,255,255,.42);}
 html[data-theme="light"] .odoInputRow input::placeholder{color:rgba(26,27,33,.36);}
 html[data-theme="light"] .odoInputRow input:focus{border-color:rgba(23,24,34,.45);}
-html[data-theme="light"] .gpsAddRow,html[data-theme="light"] .odoFoldHead{border-color:rgba(23,24,34,.13); background:rgba(255,255,255,.34);}
+html[data-theme="light"] .odoFoldHead{border-color:rgba(23,24,34,.13); background:rgba(255,255,255,.34);}
 html[data-theme="light"] .gaugeAddBtn{background:rgba(255,255,255,.38);}
 html[data-theme="light"] .gaugeCell:active{background:rgba(23,24,34,.05);}
 html[data-theme="light"] .dsecHead:active{background:rgba(23,24,34,.05);}
 html[data-theme="light"] .fab{background:#f7f7f9; color:#1a1b21; border-color:rgba(23,24,34,.14); box-shadow:0 12px 26px rgba(31,36,52,.18);}
-html[data-theme="light"] #tabbar{background:rgba(246,246,249,.26); border-color:rgba(255,255,255,.42);
+html[data-theme="light"] #tabbar{background:rgba(246,246,249,.36); border-color:rgba(255,255,255,.42);
   -webkit-backdrop-filter:blur(10px) saturate(1.25) brightness(1.01);
   backdrop-filter:blur(10px) saturate(1.25) brightness(1.01);
   backdrop-filter:url(#tabGlass) blur(1.2px) saturate(1.2) brightness(1.01);
   box-shadow:0 12px 30px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.20), inset 0 0 8px rgba(255,255,255,.03);}
 html[data-theme="light"] #tabbar::before{background:linear-gradient(180deg,rgba(255,255,255,.13) 0%,rgba(255,255,255,.05) 48%,rgba(255,255,255,.02) 100%);}
 html[data-theme="light"] .tab-ind{background:rgba(120,120,128,.22);}
+/* ライト時も移動中（シャボン玉）は選択ピルの地色を消す: 上の html[data-theme] 付き指定が
+   ベースの .tab-ind.bubble{transparent} より詳細度で勝ち、地色がバブルの下に漏れていたため、
+   同等以上の詳細度でバブル時の透明を明示する（ダーク側は従来通りで変更なし） */
+html[data-theme="light"] .tab-ind.bubble{background:transparent; background-color:transparent;}
 html[data-theme="light"] .tab-ind.bubble .tab-ind-in{background:rgba(120,120,128,.06); border-color:rgba(60,60,67,.18);
   box-shadow:inset 0 0 0 1px rgba(255,255,255,.08),inset 0 0 6px rgba(120,120,128,.07);}
 html[data-theme="light"] .tabbtn.lens-in{color:var(--ink);}
