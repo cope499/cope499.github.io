@@ -279,7 +279,16 @@ html.lens-ok .tab-ind.bubble .tab-ind-in::after{box-shadow:inset 0 0 5px rgba(12
 #drawer .dbody{flex:1; overflow-y:auto; overflow-x:hidden; padding:4px 16px calc(20px + env(safe-area-inset-bottom)); overscroll-behavior:contain; scrollbar-width:none; -ms-overflow-style:none;}
 #drawer .dbody::-webkit-scrollbar{display:none; width:0; height:0;}
 .dsec{margin-top:18px;}
-.dsec > h3{font-size:12px; color:var(--ink2); margin:0 0 9px; font-weight:700;}
+.dsecHead{display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%; min-height:44px; padding:4px 2px; font-size:13.5px; font-weight:700; color:var(--ink); text-align:left; border-radius:10px;}
+.dsecHead:active{background:rgba(255,255,255,.06);}
+.dsecHead svg{width:18px; height:18px; flex:none; color:var(--ink2); transition:transform .28s cubic-bezier(.32,.72,.24,1);}
+.dsec.collapsed .dsecHead svg{transform:rotate(-90deg);}
+.dsecBody{display:grid; grid-template-rows:1fr; opacity:1; transition:grid-template-rows .3s cubic-bezier(.32,.72,.24,1),opacity .22s ease;}
+.dsecBody > .dsecInner{overflow:hidden; min-height:0; min-width:0;}
+.dsec.collapsed .dsecBody{grid-template-rows:0fr; opacity:0;}
+@media (prefers-reduced-motion: reduce){
+  .dsecBody,.dsecHead svg{transition:none;}
+}
 .thumbGrid{display:grid; grid-template-columns:repeat(3,1fr); gap:8px;}
 .thumbGrid button{position:relative; border-radius:12px; overflow:hidden; aspect-ratio:4/3; min-height:44px; border:2px solid transparent; padding:0;}
 .thumbGrid button img{width:100%; height:100%; object-fit:cover;}
@@ -1612,8 +1621,41 @@ function ensureSnaps(){
   });
 }
 
+/* ================= 設定セクションの折りたたみ =================
+   各 .dsec の見出しをタップで開閉できるアコーディオンに変換する。
+   初期状態は「車両」だけ開き、他は閉じる（開閉はセッション内のみ保持）。 */
+function initCollapsibleSettings(){
+  document.querySelectorAll("#drawer .dsec").forEach(function(sec,idx){
+    var h=sec.querySelector(":scope > h3");
+    if(!h)return;
+    var title=h.textContent;
+    var head=document.createElement("button");
+    head.type="button"; head.className="dsecHead";
+    var open=idx===0;
+    head.setAttribute("aria-expanded",String(open));
+    head.innerHTML='<span></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+    head.querySelector("span").textContent=title;
+    var body=document.createElement("div"); body.className="dsecBody";
+    var inner=document.createElement("div"); inner.className="dsecInner";
+    var nodes=[];
+    for(var i=0;i<sec.childNodes.length;i++){ if(sec.childNodes[i]!==h)nodes.push(sec.childNodes[i]); }
+    sec.replaceChild(head,h);
+    nodes.forEach(function(n){inner.appendChild(n);});
+    body.appendChild(inner); sec.appendChild(body);
+    function apply(){
+      sec.classList.toggle("collapsed",!open);
+      head.setAttribute("aria-expanded",String(open));
+      body.setAttribute("aria-hidden",String(!open));
+      try{ inner.inert=!open; }catch(e){}
+    }
+    head.addEventListener("click",function(){ open=!open; apply(); });
+    apply();
+  });
+}
+
 /* ================= wiring ================= */
 function wire(){
+  initCollapsibleSettings();
   initTabBar();
   $("edgeHandle").addEventListener("click",openDrawer);
   $("scrim").addEventListener("click",closeDrawer);
