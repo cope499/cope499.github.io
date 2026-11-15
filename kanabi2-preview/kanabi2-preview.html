@@ -25448,6 +25448,119 @@ function icHeadlineText(cand, plan){
 /* ICレールのピルは画面リサイズ時にも位置を合わせ直す（参照は renderPvIcPanel が差し替える） */
 var pvIcRailsRef = null, pvIcResizeHooked = false;
 var pvIcOpen = false; /* ICパネルの詳細（レール等）を開いているか。再描画をまたいで保持 */
+/* ============ 一般形のIC候補列挙（単純なA→B専用） ============
+   乗るIC・降りるICの選定は、採用ルートの形状や回廊に依存させない
+   （ユーザーの普遍原則）。出発地A・目的地Bの地理だけから列挙する：
+   - 乗り口：Aから直線25km以内にある「乗れる」ICすべて
+   - 降り口：Bから直線25km以内にある「降れる」ICすべて
+     （localIcPairs の候補生成半径16kmはペア生成用で、選定用には
+     狭い：清瀬→板橋本町は直線で約18kmあり取りこぼす。半径は
+     あくまで計算範囲の上限で、実際の取捨は遠回り判定と方向
+     判定が担う）
+   各候補は、反対側の現在の選択をアンカーとして、ICネットワーク
+   上の経路が存在し、進行方向の乗降可否（icPathDirectionOk）を
+   満たし、第1段階の概算（一般道＝直線×2を22km/h、高速＝86km/h）
+   で推奨ペアと比べて桁違いの遠回りにならないものだけを残す。
+   安くなるペア（高速区間が推奨より短い）は遠回り判定から免除
+   する（ユーザーの既定ルール） */
+function reachNetDist(nodes, srcId){
+  var dist = {}, seen = {};
+  dist[srcId] = 0;
+  while(true){
+    var cur = null, best = Infinity;
+    for(var id in dist){
+      if(!seen[id] && dist[id] < best){ best = dist[id]; cur = id; }
+    }
+    if(cur === null) break;
+    seen[cur] = true;
+    var adj = nodes[cur] ? nodes[cur].adj : null;
+    if(!adj) continue;
+    for(var nb in adj){
+      var nd = best + adj[nb];
+      if(dist[nb] == null || nd < dist[nb]) dist[nb] = nd;
+    }
+  }
+  return dist;
+}
+function reachIcRefs(cand, plan, side){
+  var geom = cand && cand.route && cand.route.geomPts;
+  if(!geom || geom.length < 2 || !plan) return [];
+  var A = geom[0], B = geom[geom.length - 1];
+  var sel = cand.icSel || { e: plan.defEntry, x: plan.defExit };
+  var anchorRoad = side === "e" ? plan.exitRoad : plan.entryRoad;
+  var anchorIdx = side === "e" ? sel.x : sel.e;
+  var baseRoad = side === "e" ? plan.entryRoad : plan.exitRoad;
+  var baseIdx = side === "e" ? plan.defEntry : plan.defExit;
+  var anchorIc = anchorRoad.ics[anchorIdx];
+  if(!anchorIc || anchorIc[1] == null) return [];
+  var nodes = null;
+  try{ nodes = icNetBuild(); }catch(e){ nodes = null; }
+  if(!nodes) return [];
+  var anchorId = IC_ROADS.indexOf(anchorRoad) + ":" + anchorIdx;
+  if(!nodes[anchorId]) return [];
+  var dist = reachNetDist(nodes, anchorId);
+  function gatePt(road, ic){ return (typeof icGateOf === "function" && icGateOf(road, ic)) || [ic[1], ic[2]]; }
+  function surfKm(fromPt, road, ic){
+    var g = gatePt(road, ic);
+    return haversine(fromPt[0], fromPt[1], g[0], g[1]) / 1000 * 2;
+  }
+  var nearPt = side === "e" ? A : B;
+  var farPt = side === "e" ? B : A;
+  var anchorSurfKm = surfKm(farPt, anchorRoad, anchorIc);
+  function estimate(ri, road, idx){
+    var ic = road.ics[idx];
+    var netKm = dist[ri + ":" + idx];
+    if(netKm == null) return null;
+    var sKm = surfKm(nearPt, road, ic);
+    return { km: sKm + netKm + anchorSurfKm,
+             min: sKm / 22 * 60 + netKm / 86 * 60 + anchorSurfKm / 22 * 60,
+             netKm: netKm };
+  }
+  var baseEst = estimate(IC_ROADS.indexOf(baseRoad), baseRoad, baseIdx);
+  var out = [];
+  IC_ROADS.forEach(function(road, ri){
+    road.ics.forEach(function(ic, ii){
+      if(ic[1] == null) return;
+      if(!icUsable(road, ii, side === "e" ? "entry" : "exit", null)) return;
+      if(haversine(nearPt[0], nearPt[1], ic[1], ic[2]) / 1000 > 25) return;
+      var est = estimate(ri, road, ii);
+      if(!est) return;
+      if(baseEst){
+        var cheaper = est.netKm <= baseEst.netKm - 1;
+        if(!cheaper &&
+           est.km > baseEst.km + Math.max(8, baseEst.km * 0.30) &&
+           est.min > baseEst.min + Math.max(10, baseEst.min * 0.30)) return;
+      }
+      out.push({ seg: -1, idx: ii, road: road, name: ic[0], _estMin: est.min, _id: ri + ":" + ii });
+    });
+  });
+  /* 方向判定：ネットワーク経路の両端の乗降可否が進行方向と合う
+     候補だけを残す（遠回り判定とは分離する。材料不足は通す） */
+  var kept = [];
+  out.forEach(function(r){
+    var okDir = true;
+    try{
+      var pn = icNetPathNodes(nodes, side === "e" ? r._id : anchorId, side === "e" ? anchorId : r._id);
+      if(pn && pn.nodes && !icPathDirectionOk(pn.nodes)) okDir = false;
+    }catch(e){ okDir = true; }
+    if(okDir) kept.push(r);
+  });
+  kept.sort(function(a, b){ return a._estMin - b._estMin; });
+  return kept.slice(0, 24).map(function(r){
+    return { seg: -1, idx: r.idx, road: r.road, name: r.name };
+  });
+}
+function mergeIcRefs(base, extra){
+  if(!extra || !extra.length) return base;
+  var out = base ? base.slice() : [];
+  var seen = {};
+  out.forEach(function(r){ seen[IC_ROADS.indexOf(r.road) + ":" + r.idx] = 1; });
+  extra.forEach(function(r){
+    var k = IC_ROADS.indexOf(r.road) + ":" + r.idx;
+    if(!seen[k]){ seen[k] = 1; out.push(r); }
+  });
+  return out;
+}
 /* 候補画面：有料候補を選んだときだけ、IC名ラベルのレールで
    乗り口／降り口の付け替え（料金比較）を出す */
 function renderPvIcPanel(){
@@ -25546,9 +25659,8 @@ function renderPvIcPanel(){
      ペアで実ペアプランを作り直して候補へ差し替え、パネルごと描き
      直す。料金の再計算は pairPlanAdopt の反映処理（_pairFareDone）
      に委ね、ピン・帯・再最適化は描き直し後の通常経路に乗せる。
-     実形状が新しいペアの区間を実際に高速で走っていない場合は
-     付け替えない（pairPlanAdopt の v170 検証と同じ物差し：
-     両端の射影1.5km以内＋区間の高速カバレッジ4割以上） */
+     旧形状が新しいペアを通っているかは問わない（回廊外のICは
+     定義上通っていない）。検証は再最適化の実リクエストが担う */
   function commitIcRef(side, ref){
     if(!ref) return;
     var sideRoad = side === "e" ? plan.entryRoad : plan.exitRoad;
@@ -25560,22 +25672,13 @@ function renderPvIcPanel(){
     cand.localIcPair = { entry: eName, exit: xName, hwKm: hwKm };
     var np = null;
     try{ np = localPairPlan(cand); }catch(e){ np = null; }
+    /* ユーザーの明示選択は、旧形状がそのペアを通っているかでは
+       拒否しない。一般形の列挙で出した回廊外のICは定義上、旧形状
+       を通っていないため、カバレッジで弾くと選定そのものが成立
+       しなくなる。正しさの検証は、付け替え後に走る再最適化の
+       実リクエスト（区間A/B/Cの取得と形状検証）が担う。ここでは
+       ICネットワーク上でペアが構築できることだけを条件にする */
     var ok = !!np;
-    if(ok && cand.route && cand.route.geomPts && cand.route.geomPts.length >= 8){
-      try{
-        var g = cand.route.geomPts;
-        var eIc = np.entryRoad.ics[np.defEntry], xIc = np.exitRoad.ics[np.defExit];
-        if(!eIc || eIc[1] == null || !xIc || xIc[1] == null) ok = false;
-        else {
-          var pe = projOnGeom(g, [eIc[1], eIc[2]]), px = projOnGeom(g, [xIc[1], xIc[2]]);
-          if(!pe || !px || pe.d > 1500 || px.d > 1500) ok = false;
-          else {
-            var cov = tollSpanCoverage(g, pe.chain, px.chain);
-            if(cov != null && cov < 0.4) ok = false;
-          }
-        }
-      }catch(e){ ok = false; }
-    }
     if(!ok){ cand.localIcPair = keepPair; renderPvIcPanel(); return; }
     cand.icPlan = np;
     cand.icSel = { e: np.defEntry, x: np.defExit };
@@ -25723,6 +25826,11 @@ function renderPvIcPanel(){
   try{ xRefs = (typeof plan.corridorExits === "function") ? plan.corridorExits() : null; }catch(e){ xRefs = null; }
   if(eRefs && !eRefs.length) eRefs = null;
   if(xRefs && !xRefs.length) xRefs = null;
+  /* 一般形の列挙（出発地・目的地の地理から全網）を回廊列挙へ
+     合流させる。回廊に属さない乗り口・降り口（推奨ルートが通ら
+     ない並行路線のICなど）はこちらからだけ出る */
+  try{ eRefs = mergeIcRefs(eRefs, reachIcRefs(cand, plan, "e")); }catch(e){}
+  try{ xRefs = mergeIcRefs(xRefs, reachIcRefs(cand, plan, "x")); }catch(e){}
   var eMulti = !!(eRefs && eRefs.some(function(r){ return r.road !== plan.entryRoad; }));
   var xMulti = !!(xRefs && xRefs.some(function(r){ return r.road !== plan.exitRoad; }));
   detail.appendChild(icRail(eMulti ? "乗るIC" : "乗るIC（" + plan.entryRoad.road + "）", plan.entryRoad, plan.entries, eDir, plan.defEntry, "e", verE, eRefs));
