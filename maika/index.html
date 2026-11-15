@@ -1,0 +1,1139 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<meta name="theme-color" content="#141416" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="マイカー管理" />
+<meta name="application-name" content="マイカー管理" />
+<link rel="manifest" href="assets/manifest.webmanifest" />
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
+<link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png" />
+<link rel="icon" href="data:," />
+<title>マイカー管理</title>
+<style>
+:root{
+  --accent:#9aa0a6;
+  --ink:#17181a; --ink2:rgba(23,24,26,.62); --ink3:rgba(23,24,26,.42);
+  --glass:rgba(255,255,255,.55); --glass2:rgba(255,255,255,.38);
+  --stroke:rgba(255,255,255,.65); --hair:rgba(20,20,22,.10);
+  --field:rgba(255,255,255,.65);
+  --danger:#d92d20;
+  --scrim:rgba(10,10,12,.38);
+  --sheet:rgba(244,244,246,.82);
+  --drawer:rgba(238,238,240,.78);
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --ink:#f2f2f4; --ink2:rgba(242,242,244,.66); --ink3:rgba(242,242,244,.44);
+    --glass:rgba(24,24,28,.52); --glass2:rgba(24,24,28,.36);
+    --stroke:rgba(255,255,255,.16); --hair:rgba(255,255,255,.12);
+    --field:rgba(255,255,255,.10);
+    --scrim:rgba(0,0,0,.5);
+    --sheet:rgba(26,26,30,.86);
+    --drawer:rgba(22,22,26,.82);
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+html{overscroll-behavior:none; height:100%;}
+body{
+  margin:0; height:100%; overflow:hidden;
+  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
+  color:var(--ink);
+  -webkit-user-select:none; user-select:none;
+  -webkit-touch-callout:none;
+  touch-action:pan-y;
+}
+input,textarea,select{ -webkit-user-select:text; user-select:text; font:inherit; color:inherit;}
+button{font:inherit; color:inherit; background:none; border:0; padding:0; cursor:pointer; min-height:36px;}
+img{display:block; max-width:100%;}
+
+/* ---------- background ---------- */
+#bg{position:fixed; inset:0; z-index:0; background:#0c0c0e center/cover no-repeat; transition:opacity .4s;}
+#bgShade{position:fixed; inset:0; z-index:1; background:linear-gradient(180deg,rgba(0,0,0,.10),rgba(0,0,0,.28)); pointer-events:none;}
+@media (prefers-color-scheme:light){ #bgShade{background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.22));} }
+
+/* ---------- layout ---------- */
+#app{position:relative; z-index:2; height:100dvh; display:flex; flex-direction:column;}
+#views{flex:1; position:relative; overflow:hidden;}
+.view{position:absolute; inset:0; overflow-y:auto; overscroll-behavior:contain; padding:14px 14px 136px; display:none; -webkit-overflow-scrolling:touch;}
+.view.on{display:block;}
+.wrap{max-width:640px; margin:0 auto; display:flex; flex-direction:column; gap:12px;}
+
+.glass{
+  background:var(--glass);
+  -webkit-backdrop-filter:blur(22px) saturate(1.5); backdrop-filter:blur(22px) saturate(1.5);
+  border:1px solid var(--stroke); border-radius:22px;
+  box-shadow:0 10px 30px rgba(0,0,0,.14);
+}
+.pad{padding:16px;}
+
+/* ---------- hero ---------- */
+.hero{position:relative; overflow:hidden; border-radius:24px; min-height:168px; border:1px solid var(--stroke); box-shadow:0 12px 32px rgba(0,0,0,.22);}
+.hero img{position:absolute; inset:0; width:100%; height:100%; object-fit:cover;}
+.hero .veil{position:absolute; inset:0; background:linear-gradient(180deg,rgba(0,0,0,.02) 40%,rgba(0,0,0,.62));}
+.hero .hbody{position:absolute; left:0; right:0; bottom:0; padding:16px; color:#fff;}
+.hero .carname{font-size:15px; font-weight:600; letter-spacing:.02em; opacity:.92;}
+.hero .odo{display:flex; align-items:baseline; gap:6px; margin-top:2px;}
+.hero .odo b{font-size:40px; font-weight:800; letter-spacing:-.01em; font-variant-numeric:tabular-nums; line-height:1;}
+.hero .odo span{font-size:14px; opacity:.85;}
+.hero .hrow{display:flex; gap:8px; margin-top:12px;}
+.chipbtn{min-height:38px; padding:0 14px; border-radius:999px; background:rgba(255,255,255,.18); -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,.35); color:#fff; font-size:13px; font-weight:600; display:inline-flex; align-items:center; gap:6px;}
+.chipbtn:active{background:rgba(255,255,255,.34);}
+
+/* ---------- gauge ---------- */
+.gaugeBox{display:flex; flex-direction:column; align-items:center; padding:18px 16px 14px;}
+.gaugeTitle{font-size:13px; color:var(--ink2); font-weight:600;}
+.gaugeName{font-size:17px; font-weight:700; margin-top:2px;}
+.gaugeWrap{position:relative; width:164px; height:164px; margin-top:8px;}
+.gaugeWrap svg{transform:rotate(-90deg); width:164px; height:164px;}
+.gaugeC{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;}
+.gaugeC b{font-size:24px; font-weight:800; font-variant-numeric:tabular-nums; letter-spacing:-.01em;}
+.gaugeC span{font-size:11px; color:var(--ink2); margin-top:2px;}
+.gaugeRemain{margin-top:10px; font-size:15px; font-weight:700;}
+.gaugeRemain.over{color:var(--danger);}
+.miniList{width:100%; margin-top:12px; border-top:1px solid var(--hair);}
+.miniRow{display:flex; align-items:center; gap:10px; padding:7px 2px; border-bottom:1px solid var(--hair); width:100%; text-align:left; min-height:40px;}
+.miniRow:last-child{border-bottom:0;}
+.miniRow .nm{font-size:13px; font-weight:600; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.miniRow .bar{width:62px; height:5px; border-radius:99px; background:rgba(128,128,128,.28); overflow:hidden; flex:none;}
+.miniRow .bar i{display:block; height:100%; border-radius:99px; background:var(--accent);}
+.miniRow .bar i.over{background:var(--danger);}
+.miniRow .rm{font-size:11.5px; color:var(--ink2); font-variant-numeric:tabular-nums; width:82px; text-align:right; flex:none;}
+.miniRow .rm.over{color:var(--danger); font-weight:700;}
+
+/* ---------- stats / rows ---------- */
+.stats{display:flex; padding:14px 6px;}
+.stat{flex:1; text-align:center;}
+.stat b{display:block; font-size:19px; font-weight:800; font-variant-numeric:tabular-nums;}
+.stat span{font-size:11px; color:var(--ink2);}
+.secTitle{font-size:13px; font-weight:700; color:var(--ink); margin:2px 2px 0; display:flex; align-items:center; justify-content:space-between;}
+.secTitle button{font-size:13px; color:var(--ink2); min-height:36px; padding:0 6px; font-weight:600;}
+.rowItem{display:flex; align-items:center; gap:12px; width:100%; text-align:left; padding:13px 14px; min-height:56px;}
+.rowItem + .rowItem{border-top:1px solid var(--hair);}
+.rowItem .grow{flex:1; min-width:0;}
+.rowItem .t1{font-size:14.5px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.rowItem .t2{font-size:12px; color:var(--ink2); margin-top:1px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.rowItem .amt{font-size:13px; font-weight:700; font-variant-numeric:tabular-nums; flex:none;}
+.thumb{width:46px; height:46px; border-radius:12px; object-fit:cover; flex:none; background:rgba(128,128,128,.2);}
+.empty{padding:26px 16px; text-align:center; color:var(--ink2); font-size:13.5px;}
+.listCard{padding:0; overflow:hidden;}
+
+/* ---------- drive / map ---------- */
+.mapBox{position:relative; height:44dvh; min-height:280px; border-radius:22px; overflow:hidden; border:1px solid var(--stroke); box-shadow:0 10px 30px rgba(0,0,0,.16); background:#dfe3e6;}
+.mapBox.dark{background:#0a1628;}
+#gmap{position:absolute; inset:0; display:none;}
+#fallbackMap{position:absolute; inset:0; width:100%; height:100%;}
+.mapChip{position:absolute; left:10px; top:10px; z-index:3; font-size:11.5px; font-weight:600; padding:7px 11px; border-radius:999px; background:var(--glass); -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px); border:1px solid var(--stroke); color:var(--ink);}
+.recPanel{padding:16px;}
+.recTop{display:flex; align-items:center; gap:10px;}
+.recDot{width:11px; height:11px; border-radius:50%; background:rgba(128,128,128,.55); flex:none;}
+.recDot.on{background:var(--accent); animation:pulse 1.3s ease-in-out infinite;}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 45%,transparent);}55%{box-shadow:0 0 0 9px transparent;}}
+.recState{font-size:14px; font-weight:700;}
+.wakeChip{margin-left:auto; font-size:11px; color:var(--ink2); border:1px solid var(--hair); padding:5px 9px; border-radius:999px; display:none;}
+.wakeChip.on{display:block;}
+.recNums{display:flex; gap:8px; margin-top:12px;}
+.recNum{flex:1;}
+.recNum b{display:block; font-size:26px; font-weight:800; font-variant-numeric:tabular-nums; line-height:1.1;}
+.recNum span{font-size:11px; color:var(--ink2);}
+.recBtns{display:flex; gap:8px; margin-top:14px;}
+.btn{flex:1; min-height:48px; border-radius:14px; font-size:15px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; gap:7px; border:1px solid var(--hair); background:var(--glass2); -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px);}
+.btn:active{opacity:.75;}
+.btn.primary{background:var(--ink); color:var(--bgInverse,#fff); border-color:transparent;}
+@media (prefers-color-scheme:dark){ .btn.primary{color:#141416;} }
+.btn.accentBtn{background:var(--accent); color:#fff; border-color:transparent;}
+.btn.danger{color:var(--danger);}
+.btn.small{flex:none; padding:0 16px; min-height:42px; font-size:13.5px;}
+.recNote{font-size:11.5px; color:var(--ink2); margin-top:10px; display:none;}
+.recNote.on{display:block;}
+
+/* ---------- tab bar ---------- */
+#tabbar{
+  position:fixed; left:50%; transform:translateX(-50%);
+  bottom:calc(12px + env(safe-area-inset-bottom)); z-index:40;
+  width:min(430px,calc(100vw - 28px)); height:64px; border-radius:22px;
+  background:rgba(20,20,22,.82); -webkit-backdrop-filter:blur(24px) saturate(1.4); backdrop-filter:blur(24px) saturate(1.4);
+  border:1px solid rgba(255,255,255,.14); box-shadow:0 14px 34px rgba(0,0,0,.35);
+  display:flex; padding:6px;
+}
+.tabbtn{flex:1; position:relative; display:flex; align-items:center; justify-content:center; border-radius:16px; min-height:52px;}
+.tabbtn .pill{position:absolute; inset:0; border-radius:16px; background:transparent; transition:background .12s;}
+.tabbtn.pressing .pill{background:rgba(255,255,255,.20);}
+.tabbtn .tin{position:relative; display:flex; flex-direction:column; align-items:center; gap:2px; color:rgba(255,255,255,.48);}
+.tabbtn.sel .tin{color:#fff;}
+.tabbtn .tin svg{width:22px; height:22px;}
+.tabbtn .tin span{font-size:10.5px; font-weight:600;}
+.tabbtn .dot{position:absolute; bottom:5px; left:50%; transform:translateX(-50%); width:4px; height:4px; border-radius:50%; background:var(--accent); opacity:0;}
+.tabbtn.sel .dot{opacity:1;}
+.fab{
+  position:fixed; right:16px; bottom:calc(90px + env(safe-area-inset-bottom)); z-index:39;
+  width:54px; height:54px; border-radius:50%; background:#141416; color:#fff;
+  border:1px solid rgba(255,255,255,.18); box-shadow:0 12px 26px rgba(0,0,0,.32);
+  display:none; align-items:center; justify-content:center;
+}
+.fab.on{display:flex;}
+.fab svg{width:24px; height:24px;}
+.fab:active{transform:scale(.94);}
+
+/* ---------- drawer ---------- */
+#edgeHandle{position:fixed; left:0; top:50%; transform:translateY(-50%); width:16px; height:92px; z-index:45; display:flex; align-items:center;}
+#edgeHandle i{display:block; width:4px; height:56px; border-radius:99px; background:rgba(128,128,128,.55); margin-left:3px;}
+#scrim{position:fixed; inset:0; z-index:50; background:var(--scrim); opacity:0; pointer-events:none; transition:opacity .25s;}
+#scrim.on{opacity:1; pointer-events:auto;}
+#drawer{
+  position:fixed; top:0; left:0; bottom:0; z-index:51; width:min(320px,86vw);
+  background:var(--drawer); -webkit-backdrop-filter:blur(28px) saturate(1.5); backdrop-filter:blur(28px) saturate(1.5);
+  border-right:1px solid var(--stroke); transform:translateX(-105%);
+  transition:transform .28s cubic-bezier(.32,.72,.24,1);
+  display:none; flex-direction:column;
+}
+#drawer.render{display:flex;}
+#drawer.on{transform:translateX(0);}
+#drawer .dhead{display:flex; align-items:center; justify-content:space-between; padding:calc(14px + env(safe-area-inset-top)) 16px 8px;}
+#drawer .dhead b{font-size:16px;}
+#drawer .dbody{flex:1; overflow-y:auto; padding:4px 16px calc(20px + env(safe-area-inset-bottom)); overscroll-behavior:contain;}
+.dsec{margin-top:18px;}
+.dsec > h3{font-size:12px; color:var(--ink2); margin:0 0 9px; font-weight:700;}
+.thumbGrid{display:grid; grid-template-columns:repeat(3,1fr); gap:8px;}
+.thumbGrid button{position:relative; border-radius:12px; overflow:hidden; aspect-ratio:4/3; min-height:44px; border:2px solid transparent; padding:0;}
+.thumbGrid button img{width:100%; height:100%; object-fit:cover;}
+.thumbGrid button.sel{border-color:var(--accent);}
+.thumbGrid button .cap{position:absolute; left:0; right:0; bottom:0; font-size:9.5px; color:#fff; background:linear-gradient(transparent,rgba(0,0,0,.55)); padding:8px 4px 3px; text-align:center;}
+.upBtn{width:100%; min-height:44px; border-radius:12px; border:1px dashed rgba(128,128,128,.55); font-size:13px; font-weight:600; color:var(--ink2); margin-top:8px;}
+.seg{display:flex; background:rgba(128,128,128,.18); border-radius:11px; padding:3px;}
+.seg button{flex:1; min-height:38px; border-radius:8px; font-size:13.5px; font-weight:600; color:var(--ink2);}
+.seg button.sel{background:var(--glass); color:var(--ink); box-shadow:0 1px 5px rgba(0,0,0,.14);}
+.swatches{display:flex; gap:10px; flex-wrap:wrap;}
+.swatch{width:40px; height:40px; border-radius:50%; border:2px solid transparent; position:relative; flex:none;}
+.swatch.sel{border-color:var(--ink);}
+.swatch i{position:absolute; inset:3px; border-radius:50%; display:block;}
+.field{margin-top:10px;}
+.field label{display:block; font-size:12px; color:var(--ink2); font-weight:600; margin-bottom:5px;}
+.field input,.field select,.field textarea{
+  width:100%; min-height:46px; border-radius:12px; border:1px solid var(--hair);
+  background:var(--field); padding:10px 12px; font-size:15px; outline:none;
+}
+.field textarea{min-height:74px; resize:vertical;}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent);}
+.toggleRow{display:flex; align-items:center; justify-content:space-between; min-height:44px;}
+.toggleRow span{font-size:14px; font-weight:600;}
+.tgl{width:50px; height:30px; border-radius:99px; background:rgba(128,128,128,.35); position:relative; flex:none; min-height:30px; transition:background .15s;}
+.tgl::after{content:""; position:absolute; top:2px; left:2px; width:26px; height:26px; border-radius:50%; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,.25); transition:left .15s;}
+.tgl.on{background:var(--accent);}
+.tgl.on::after{left:22px;}
+
+/* ---------- sheets ---------- */
+.sheetWrap{position:fixed; inset:0; z-index:60; display:none;}
+.sheetWrap.on{display:block;}
+.sheetWrap .bk{position:absolute; inset:0; background:var(--scrim); opacity:0; transition:opacity .25s;}
+.sheetWrap.show .bk{opacity:1;}
+.sheet{
+  position:absolute; left:0; right:0; bottom:0; max-height:88dvh; display:flex; flex-direction:column;
+  background:var(--sheet); -webkit-backdrop-filter:blur(30px) saturate(1.5); backdrop-filter:blur(30px) saturate(1.5);
+  border-radius:24px 24px 0 0; border-top:1px solid var(--stroke);
+  transform:translateY(102%); transition:transform .3s cubic-bezier(.32,.72,.24,1);
+}
+.sheetWrap.show .sheet{transform:translateY(0);}
+.sheet .grab{width:38px; height:5px; border-radius:99px; background:rgba(128,128,128,.5); margin:9px auto 2px; flex:none;}
+.sheet .shead{display:flex; align-items:center; justify-content:space-between; padding:8px 16px 4px;}
+.sheet .shead b{font-size:16.5px;}
+.sheet .shead button{font-size:14px; color:var(--ink2); font-weight:600; padding:0 8px;}
+.sheetScroll{overflow-y:auto; padding:6px 16px calc(18px + env(safe-area-inset-bottom)); overscroll-behavior:contain;}
+.sheetBtns{display:flex; gap:8px; margin-top:16px;}
+.photoBox{margin-top:10px;}
+.photoBox img{width:100%; max-height:220px; object-fit:cover; border-radius:14px;}
+.kvRow{display:flex; justify-content:space-between; padding:9px 0; border-bottom:1px solid var(--hair); font-size:14px;}
+.kvRow span{color:var(--ink2);}
+.kvRow b{font-variant-numeric:tabular-nums;}
+
+/* ---------- dialog / toast ---------- */
+#dialogWrap{position:fixed; inset:0; z-index:70; display:none; align-items:center; justify-content:center; padding:22px; background:var(--scrim);}
+#dialogWrap.on{display:flex;}
+#dialog{width:100%; max-width:340px; padding:20px; text-align:center;}
+#dialog h2{font-size:16.5px; margin:0 0 6px;}
+#dialog p{font-size:13px; color:var(--ink2); margin:0 0 16px; line-height:1.55;}
+#toast{
+  position:fixed; left:50%; transform:translate(-50%,16px); bottom:calc(92px + env(safe-area-inset-bottom)); z-index:80;
+  background:rgba(20,20,22,.88); color:#fff; font-size:13px; font-weight:600; padding:11px 16px; border-radius:999px;
+  opacity:0; pointer-events:none; transition:all .25s; max-width:calc(100vw - 40px); text-align:center;
+}
+#toast.on{opacity:1; transform:translate(-50%,0);}
+.hiddenFile{display:none;}
+@media (min-width:760px){ .view{padding-top:22px;} }
+</style>
+</head>
+<body>
+<div id="bg"></div>
+<div id="bgShade"></div>
+
+<div id="app">
+  <div id="views">
+    <!-- HOME -->
+    <section class="view on" id="view-home">
+      <div class="wrap">
+        <div class="hero">
+          <img id="heroImg" src="assets/bg-car.jpg" alt="車両写真" />
+          <div class="veil"></div>
+          <div class="hbody">
+            <div class="carname" id="heroCarName">マイカー</div>
+            <div class="odo"><b id="odoVal">0</b><span>km</span></div>
+            <div class="hrow">
+              <button class="chipbtn" id="btnOdoEdit">オドメーター編集</button>
+              <button class="chipbtn" id="btnQuickMaint">整備を追加</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="glass gaugeBox">
+          <div class="gaugeTitle">次回整備まで</div>
+          <div class="gaugeName" id="gaugeName">—</div>
+          <div class="gaugeWrap">
+            <svg width="212" height="212" viewBox="0 0 212 212">
+              <circle cx="106" cy="106" r="88" fill="none" stroke="rgba(128,128,128,.25)" stroke-width="13"/>
+              <circle id="gaugeArc" cx="106" cy="106" r="88" fill="none" stroke="var(--accent)" stroke-width="13" stroke-linecap="round" stroke-dasharray="552.9" stroke-dashoffset="552.9"/>
+            </svg>
+            <div class="gaugeC"><b id="gaugeCenter">0/5000km</b><span id="gaugeSub">経過 / 間隔</span></div>
+          </div>
+          <div class="gaugeRemain" id="gaugeRemain">—</div>
+          <div class="miniList" id="miniList"></div>
+        </div>
+
+        <div class="glass stats">
+          <div class="stat"><b id="statDriveKm">0 km</b><span>走行記録 合計</span></div>
+          <div class="stat"><b id="statDrives">0</b><span>走行</span></div>
+          <div class="stat"><b id="statMaint">0</b><span>整備</span></div>
+        </div>
+
+        <div>
+          <div class="secTitle">最近</div>
+          <div class="glass listCard" id="recentBox" style="margin-top:8px;"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- MAINTENANCE -->
+    <section class="view" id="view-maint">
+      <div class="wrap">
+        <div class="glass listCard" id="maintList"></div>
+      </div>
+    </section>
+
+    <!-- DRIVE -->
+    <section class="view" id="view-drive">
+      <div class="wrap">
+        <div class="mapBox" id="mapBox">
+          <canvas id="fallbackMap"></canvas>
+          <div id="gmap"></div>
+          <div class="mapChip" id="mapChip">軌跡プレビュー</div>
+        </div>
+        <div class="glass recPanel">
+          <div class="recTop">
+            <span class="recDot" id="recDot"></span>
+            <span class="recState" id="recState">待機中</span>
+            <span class="wakeChip" id="wakeChip">スリープ防止中</span>
+          </div>
+          <div class="recNums">
+            <div class="recNum"><b id="recTime">00:00:00</b><span>経過時間</span></div>
+            <div class="recNum"><b id="recDist">0.00 km</b><span>GPS距離</span></div>
+            <div class="recNum"><b id="recPts">0</b><span>地点</span></div>
+          </div>
+          <div class="recBtns" id="recBtnsIdle">
+            <button class="btn accentBtn" id="btnRecStart">記録開始</button>
+          </div>
+          <div class="recBtns" id="recBtnsRun" style="display:none;">
+            <button class="btn primary" id="btnRecStop">終了して保存</button>
+            <button class="btn danger" id="btnRecDiscard" style="flex:.6;">破棄</button>
+          </div>
+          <div class="recNote" id="recNote">記録中はこの画面を開いたままにしてください。</div>
+        </div>
+        <div>
+          <div class="secTitle">走行履歴</div>
+          <div class="glass listCard" id="driveList" style="margin-top:8px;"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<button class="fab" id="fabAdd" aria-label="整備を追加">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+</button>
+
+<div id="edgeHandle"><i></i></div>
+<div id="scrim"></div>
+<aside id="drawer" aria-label="設定">
+  <div class="dhead"><b>設定</b><button id="btnDrawerClose" style="font-size:14px;color:var(--ink2);font-weight:600;padding:0 6px;">閉じる</button></div>
+  <div class="dbody">
+    <div class="dsec" style="margin-top:6px;">
+      <h3>車両</h3>
+      <div class="field"><label>車名</label><input id="setCarName" type="text" placeholder="マイカー" /></div>
+      <div class="field"><label>オドメーター（km）</label><input id="setOdo" type="number" inputmode="numeric" min="0" /></div>
+    </div>
+    <div class="dsec">
+      <h3>背景</h3>
+      <div class="thumbGrid" id="bgGrid"></div>
+      <button class="upBtn" id="btnBgUpload">画像をアップロード</button>
+    </div>
+    <div class="dsec">
+      <h3>ヒーロー画像</h3>
+      <div class="thumbGrid" id="heroGrid"></div>
+      <button class="upBtn" id="btnHeroUpload">画像をアップロード</button>
+    </div>
+    <div class="dsec">
+      <h3>地図テーマ</h3>
+      <div class="seg" id="mapThemeSeg">
+        <button data-mt="light">白</button><button data-mt="dark">黒</button>
+      </div>
+    </div>
+    <div class="dsec">
+      <h3>インジケーター色</h3>
+      <div class="swatches" id="accentSwatches"></div>
+    </div>
+    <div class="dsec">
+      <h3>Google Maps</h3>
+      <div class="field"><label>APIキー</label><input id="setApiKey" type="password" autocomplete="off" placeholder="未入力" /></div>
+      <div class="recBtns" style="margin-top:10px;"><button class="btn small" id="btnApiSave" style="flex:1;">保存して地図を読み込む</button></div>
+    </div>
+    <div class="dsec">
+      <h3>データ</h3>
+      <div class="kvRow"><span>整備記録</span><b id="cntMaint">0件</b></div>
+      <div class="kvRow"><span>走行記録</span><b id="cntDrives">0件</b></div>
+      <div class="recBtns"><button class="btn danger" id="btnWipe">すべてのデータを削除</button></div>
+    </div>
+  </div>
+</aside>
+
+<nav id="tabbar">
+  <button class="tabbtn sel" data-tab="home"><span class="pill"></span><span class="tin"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5"/></svg><span>ホーム</span></span><span class="dot"></span></button>
+  <button class="tabbtn" data-tab="maint"><span class="pill"></span><span class="tin"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4.5 4.5 0 0 0-6 6L3 18l3 3 5.7-5.7a4.5 4.5 0 0 0 6-6L14 13l-3-3 3.7-3.7z"/></svg><span>整備履歴</span></span><span class="dot"></span></button>
+  <button class="tabbtn" data-tab="drive"><span class="pill"></span><span class="tin"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-5.6-7-11a7 7 0 1 1 14 0c0 5.4-7 11-7 11z"/><circle cx="12" cy="10" r="2.6"/></svg><span>走行</span></span><span class="dot"></span></button>
+</nav>
+
+<!-- odometer sheet -->
+<div class="sheetWrap" id="sheetOdo"><div class="bk"></div><div class="sheet">
+  <div class="grab"></div>
+  <div class="shead"><b>オドメーター</b><button data-close>閉じる</button></div>
+  <div class="sheetScroll">
+    <div class="field"><label>現在の走行距離（km）</label><input id="odoInput" type="number" inputmode="numeric" min="0" /></div>
+    <div class="recNote on">走行を保存すると、GPS距離が自動で加算されます。</div>
+    <div class="sheetBtns"><button class="btn primary" id="btnOdoSave">保存</button></div>
+  </div>
+</div></div>
+
+<!-- maintenance sheet -->
+<div class="sheetWrap" id="sheetMaint"><div class="bk"></div><div class="sheet">
+  <div class="grab"></div>
+  <div class="shead"><b id="maintSheetTitle">整備を記録</b><button data-close>閉じる</button></div>
+  <div class="sheetScroll">
+    <div class="field"><label>項目</label><select id="mType"></select></div>
+    <div class="field"><label>交換間隔（km）</label><input id="mInterval" type="number" inputmode="numeric" min="0" /></div>
+    <div class="field"><label>実施日</label><input id="mDate" type="date" /></div>
+    <div class="field"><label>実施時の走行距離（km）</label><input id="mOdo" type="number" inputmode="numeric" min="0" /></div>
+    <div class="field"><label>費用（円）</label><input id="mCost" type="number" inputmode="numeric" min="0" placeholder="任意" /></div>
+    <div class="field"><label>メモ</label><textarea id="mMemo" placeholder="任意"></textarea></div>
+    <div class="sheetBtns"><button class="btn primary" id="btnMaintSave">保存</button></div>
+    <div class="sheetBtns" id="maintDeleteRow" style="display:none;"><button class="btn danger" id="btnMaintDelete">この記録を削除</button></div>
+  </div>
+</div></div>
+
+<!-- drive detail sheet -->
+<div class="sheetWrap" id="sheetDrive"><div class="bk"></div><div class="sheet">
+  <div class="grab"></div>
+  <div class="shead"><b>走行の詳細</b><button data-close>閉じる</button></div>
+  <div class="sheetScroll">
+    <div class="kvRow"><span>日時</span><b id="dDate">—</b></div>
+    <div class="kvRow"><span>GPS距離</span><b id="dDist">—</b></div>
+    <div class="kvRow"><span>時間</span><b id="dDur">—</b></div>
+    <div class="kvRow"><span>区間</span><b id="dSecs">—</b></div>
+    <div class="photoBox" id="dPhotoBox"></div>
+    <button class="upBtn" id="btnDrivePhoto">写真を追加</button>
+    <div class="field"><label>メモ</label><textarea id="dMemo" placeholder="任意"></textarea></div>
+    <div class="sheetBtns"><button class="btn primary" id="btnDriveSave">保存</button></div>
+    <div class="sheetBtns"><button class="btn danger" id="btnDriveDelete">この走行を削除</button></div>
+  </div>
+</div></div>
+
+<div id="dialogWrap"><div id="dialog" class="glass">
+  <h2 id="dlgTitle">未完了の走行</h2>
+  <p id="dlgText"></p>
+  <div class="recBtns" style="margin-top:0;">
+    <button class="btn primary" id="dlgSave">保存する</button>
+    <button class="btn danger" id="dlgDiscard" style="flex:.7;">破棄する</button>
+  </div>
+</div></div>
+
+<div id="toast"></div>
+<input type="file" id="fileBg" class="hiddenFile" accept="image/*" />
+<input type="file" id="fileHero" class="hiddenFile" accept="image/*" />
+<input type="file" id="fileDrivePhoto" class="hiddenFile" accept="image/*" />
+
+<script>
+"use strict";
+/* ================= constants ================= */
+var THEMES=[
+  {id:"car",name:"車両",src:"assets/bg-car.jpg"},
+  {id:"space",name:"宇宙",src:"assets/bg-space.jpg"},
+  {id:"mountain",name:"山道",src:"assets/bg-mountain.jpg"},
+  {id:"coast",name:"海岸",src:"assets/bg-coast.jpg"},
+  {id:"city",name:"夜景",src:"assets/bg-city.jpg"}
+];
+var ACCENTS={
+  mono:{name:"モノクロ",hex:"#9aa0a6"},
+  blue:{name:"青",hex:"#3b82f6"},
+  cyan:{name:"シアン",hex:"#06b6d4"},
+  green:{name:"緑",hex:"#22c55e"},
+  orange:{name:"オレンジ",hex:"#f97316"},
+  red:{name:"赤",hex:"#ef4444"}
+};
+var MAINT_TYPES=[
+  {name:"エンジンオイル",interval:5000},
+  {name:"オイルフィルター",interval:10000},
+  {name:"タイヤローテーション",interval:10000},
+  {name:"ワイパー",interval:10000},
+  {name:"エアフィルター",interval:20000},
+  {name:"スパークプラグ",interval:20000},
+  {name:"ブレーキフルード",interval:20000},
+  {name:"バッテリー",interval:40000},
+  {name:"クーラント",interval:40000},
+  {name:"タイヤ交換",interval:40000},
+  {name:"車検",interval:40000},
+  {name:"その他",interval:5000}
+];
+var CIRC=552.9, JP={latMin:31,latMax:45.6,lngMin:129,lngMax:146};
+
+/* ================= state ================= */
+var S={
+  settings:{carName:"マイカー",odometer:0,accent:"mono",bg:"car",hero:"car",mapTheme:"light",apiKey:""},
+  customBg:null, customHero:null,
+  maint:[], drives:[],
+  tab:"home", drawerOpen:false, sheetOpen:null,
+  editingMaint:null, editingDrive:null, drivePhotoDraft:undefined,
+  rec:{active:false,id:null,watchId:null,startedAt:0,elapsedBase:0,timer:null,sections:[],distance:0,points:0,forceNew:true,lastSave:0,wakeLock:null,lastPosAt:0}
+};
+function $(id){return document.getElementById(id);}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,8);}
+function fmtInt(n){return Math.round(n).toLocaleString("ja-JP");}
+function fmtKm(m){return (m/1000).toFixed(2)+" km";}
+function fmtDur(ms){var s=Math.floor(ms/1000),h=Math.floor(s/3600),m=Math.floor(s%3600/60),ss=s%60;function p(x){return (x<10?"0":"")+x;}return p(h)+":"+p(m)+":"+p(ss);}
+function fmtDate(ts){var d=new Date(ts);return d.getFullYear()+"/"+(d.getMonth()+1)+"/"+d.getDate();}
+function fmtDateTime(ts){var d=new Date(ts);function p(x){return (x<10?"0":"")+x;}return fmtDate(ts)+" "+p(d.getHours())+":"+p(d.getMinutes());}
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
+var toastTimer=null;
+function toast(msg){var t=$("toast");t.textContent=msg;t.classList.add("on");clearTimeout(toastTimer);toastTimer=setTimeout(function(){t.classList.remove("on");},2200);}
+
+/* ================= IndexedDB ================= */
+var dbPromise=null;
+function idb(){
+  if(dbPromise)return dbPromise;
+  dbPromise=new Promise(function(res,rej){
+    if(!("indexedDB" in window)){rej(new Error("no idb"));return;}
+    var rq=indexedDB.open("maikaguan-li",1);
+    rq.onupgradeneeded=function(){var d=rq.result;d.createObjectStore("kv",{keyPath:"k"});d.createObjectStore("maint",{keyPath:"id"});d.createObjectStore("drives",{keyPath:"id"});};
+    rq.onsuccess=function(){res(rq.result);};
+    rq.onerror=function(){rej(rq.error);};
+  });
+  return dbPromise;
+}
+function idbTx(store,mode,fn){
+  return idb().then(function(db){return new Promise(function(res,rej){
+    var tx=db.transaction(store,mode),st=tx.objectStore(store),out;
+    var r=fn(st); if(r){r.onsuccess=function(){out=r.result;};}
+    tx.oncomplete=function(){res(out);}; tx.onerror=function(){rej(tx.error);};
+  });});
+}
+function kvGet(k){return idbTx("kv","readonly",function(st){return st.get(k);}).then(function(r){return r?r.v:undefined;}).catch(function(){return memKV[k];});}
+function kvSet(k,v){memKV[k]=v;return idbTx("kv","readwrite",function(st){return st.put({k:k,v:v});}).catch(function(){});}
+function putRec(store,rec){return idbTx(store,"readwrite",function(st){return st.put(rec);}).catch(function(){});}
+function delRec(store,id){return idbTx(store,"readwrite",function(st){return st.delete(id);}).catch(function(){});}
+function allRecs(store){return idbTx(store,"readonly",function(st){return st.getAll();}).catch(function(){return [];});}
+function clearStore(store){return idbTx(store,"readwrite",function(st){return st.clear();}).catch(function(){});}
+var memKV={};
+
+/* ================= settings / theme ================= */
+function accentHex(){return (ACCENTS[S.settings.accent]||ACCENTS.mono).hex;}
+function themeSrc(which){
+  var v=which==="bg"?S.settings.bg:S.settings.hero;
+  if(v==="customBg"&&S.customBg)return S.customBg;
+  if(v==="customHero"&&S.customHero)return S.customHero;
+  for(var i=0;i<THEMES.length;i++)if(THEMES[i].id===v)return THEMES[i].src;
+  return "assets/bg-car.jpg";
+}
+function applyTheme(){
+  document.documentElement.style.setProperty("--accent",accentHex());
+  $("bg").style.backgroundImage="url('"+themeSrc("bg")+"')";
+  $("heroImg").src=themeSrc("hero");
+  $("heroCarName").textContent=S.settings.carName||"マイカー";
+  $("mapBox").classList.toggle("dark",S.settings.mapTheme==="dark");
+  var seg=$("mapThemeSeg").children;
+  for(var i=0;i<seg.length;i++)seg[i].classList.toggle("sel",seg[i].getAttribute("data-mt")===S.settings.mapTheme);
+  var sw=$("accentSwatches").children;
+  for(var j=0;j<sw.length;j++)sw[j].classList.toggle("sel",sw[j].getAttribute("data-ac")===S.settings.accent);
+  markThumbSel("bgGrid",S.settings.bg); markThumbSel("heroGrid",S.settings.hero);
+}
+function markThumbSel(gridId,val){var g=$(gridId);if(!g)return;var b=g.children;for(var i=0;i<b.length;i++)b[i].classList.toggle("sel",b[i].getAttribute("data-v")===val);}
+function saveSettings(){return kvSet("settings",S.settings);}
+function buildThumbGrid(gridId,kind){
+  var g=$(gridId); g.innerHTML="";
+  THEMES.forEach(function(t){
+    var b=document.createElement("button"); b.setAttribute("data-v",t.id);
+    b.innerHTML='<img src="'+t.src+'" alt="'+esc(t.name)+'"><span class="cap">'+esc(t.name)+"</span>";
+    b.addEventListener("click",function(){S.settings[kind]=t.id;saveSettings();applyTheme();drawFallbackMap();});
+    g.appendChild(b);
+  });
+  var customVal=kind==="bg"?"customBg":"customHero", customData=kind==="bg"?S.customBg:S.customHero;
+  if(customData){
+    var b2=document.createElement("button"); b2.setAttribute("data-v",customVal);
+    b2.innerHTML='<img src="'+customData+'" alt="アップロード画像"><span class="cap">カスタム</span>';
+    b2.addEventListener("click",function(){S.settings[kind]=customVal;saveSettings();applyTheme();drawFallbackMap();});
+    g.appendChild(b2);
+  }
+}
+function buildSettingsUI(){
+  buildThumbGrid("bgGrid","bg"); buildThumbGrid("heroGrid","hero");
+  var sw=$("accentSwatches"); sw.innerHTML="";
+  Object.keys(ACCENTS).forEach(function(k){
+    var b=document.createElement("button"); b.className="swatch"; b.setAttribute("data-ac",k); b.setAttribute("aria-label",ACCENTS[k].name);
+    b.innerHTML='<i style="background:'+ACCENTS[k].hex+'"></i>';
+    b.addEventListener("click",function(){S.settings.accent=k;saveSettings();applyTheme();drawFallbackMap();drawGmapAll();});
+    sw.appendChild(b);
+  });
+  $("setCarName").value=S.settings.carName||"";
+  $("setOdo").value=S.settings.odometer||0;
+  $("setApiKey").value=S.settings.apiKey||"";
+}
+function readImageFile(file,cb){
+  var img=new Image(), url=URL.createObjectURL(file);
+  img.onload=function(){
+    var max=1280, w=img.naturalWidth, h=img.naturalHeight, sc=Math.min(1,max/Math.max(w,h));
+    var c=document.createElement("canvas"); c.width=Math.round(w*sc); c.height=Math.round(h*sc);
+    c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+    URL.revokeObjectURL(url); cb(c.toDataURL("image/jpeg",0.82));
+  };
+  img.onerror=function(){URL.revokeObjectURL(url);toast("画像を読み込めませんでした");};
+  img.src=url;
+}
+
+/* ================= tabs / drawer / sheets ================= */
+function switchTab(name){
+  S.tab=name;
+  ["home","maint","drive"].forEach(function(t){$("view-"+t).classList.toggle("on",t===name);});
+  var btns=document.querySelectorAll(".tabbtn");
+  for(var i=0;i<btns.length;i++)btns[i].classList.toggle("sel",btns[i].getAttribute("data-tab")===name);
+  $("fabAdd").classList.toggle("on",name==="maint");
+  if(name==="drive"){setTimeout(function(){resizeFallback();drawFallbackMap();if(window.__gmapReady)drawGmapAll();},60);}
+}
+function openDrawer(){if(S.sheetOpen)return;S.drawerOpen=true;var d=$("drawer");d.classList.add("render");$("scrim").classList.add("on");requestAnimationFrame(function(){requestAnimationFrame(function(){d.classList.add("on");});});}
+function closeDrawer(){S.drawerOpen=false;var d=$("drawer");d.classList.remove("on");$("scrim").classList.remove("on");setTimeout(function(){if(!S.drawerOpen)d.classList.remove("render");},300);}
+function openSheet(id){
+  S.sheetOpen=id; var w=$(id); w.classList.add("on");
+  requestAnimationFrame(function(){requestAnimationFrame(function(){w.classList.add("show");});});
+}
+function closeSheet(){
+  if(!S.sheetOpen)return; var w=$(S.sheetOpen); S.sheetOpen=null;
+  w.classList.remove("show"); setTimeout(function(){w.classList.remove("on");},300);
+}
+function anySheetOpen(){return !!S.sheetOpen;}
+
+/* pull-to-refresh / pinch guards */
+document.addEventListener("gesturestart",function(e){e.preventDefault();});
+document.addEventListener("touchmove",function(e){
+  if(e.touches.length>1){e.preventDefault();return;}
+  if(anySheetOpen() && !e.target.closest(".sheetScroll") && !e.target.closest(".sheet"))e.preventDefault();
+},{passive:false});
+document.addEventListener("contextmenu",function(e){if(!e.target.closest("input,textarea,select"))e.preventDefault();});
+
+/* edge swipe: drawer + tab swipe */
+var tsX=0,tsY=0,tsT=0,tsEdge=false,tsOnMap=false;
+document.addEventListener("touchstart",function(e){
+  if(e.touches.length!==1)return; var t=e.touches[0];
+  tsX=t.clientX; tsY=t.clientY; tsT=Date.now(); tsEdge=tsX<22; tsOnMap=!!e.target.closest("#mapBox");
+},{passive:true});
+document.addEventListener("touchend",function(e){
+  var t=e.changedTouches[0]; if(!t)return;
+  var dx=t.clientX-tsX, dy=t.clientY-tsY;
+  if(Math.abs(dy)>70||Date.now()-tsT>600)return;
+  if(anySheetOpen())return;
+  if(S.drawerOpen){ if(dx<-60)closeDrawer(); return; }
+  if(tsEdge&&dx>55){openDrawer();return;}
+  if(tsOnMap||Math.abs(dx)<64)return;
+  var order=["home","maint","drive"], i=order.indexOf(S.tab);
+  if(dx<0&&i<2)switchTab(order[i+1]);
+  if(dx>0&&i>0)switchTab(order[i-1]);
+},{passive:true});
+</script>
+
+<script>
+"use strict";
+/* ================= maintenance logic ================= */
+function lastMaintOf(name){
+  var best=null;
+  S.maint.forEach(function(r){if(r.type===name&&(!best||r.odo>best.odo))best=r;});
+  return best;
+}
+function maintStatus(){
+  var byType={};
+  S.maint.forEach(function(r){
+    if(!byType[r.type]||r.odo>byType[r.type].odo)byType[r.type]=r;
+  });
+  MAINT_TYPES.forEach(function(t){
+    if(!byType[t.name])byType[t.name]={type:t.name,interval:t.interval,odo:null,date:null};
+  });
+  Object.keys(byType).forEach(function(k){
+    if(!byType[k].interval){var d=MAINT_TYPES.filter(function(t){return t.name===k;})[0];byType[k].interval=d?d.interval:5000;}
+  });
+  return Object.keys(byType).map(function(k){
+    var r=byType[k], interval=r.interval||5000;
+    var elapsed=r.odo==null?0:Math.max(0,S.settings.odometer-r.odo);
+    return {type:k,interval:interval,lastOdo:r.odo,lastDate:r.date,elapsed:elapsed,remain:interval-elapsed,ratio:interval?elapsed/interval:0,has:!!r&&r.odo!=null};
+  }).sort(function(a,b){return b.ratio-a.ratio;});
+}
+function renderHome(){
+  $("odoVal").textContent=fmtInt(S.settings.odometer);
+  $("heroCarName").textContent=S.settings.carName||"マイカー";
+  var st=maintStatus(), top=st[0];
+  if(top){
+    $("gaugeName").textContent=top.type;
+    $("gaugeCenter").textContent=fmtInt(top.elapsed)+"/"+fmtInt(top.interval)+"km";
+    var pct=Math.min(1,top.ratio);
+    $("gaugeArc").style.strokeDashoffset=String(CIRC*(1-pct));
+    $("gaugeArc").style.stroke=top.ratio>=1?"var(--danger)":"var(--accent)";
+    var gr=$("gaugeRemain");
+    if(top.remain>0){gr.textContent="あと "+fmtInt(top.remain)+" km";gr.classList.remove("over");}
+    else if(top.remain===0){gr.textContent="交換時期です";gr.classList.add("over");}
+    else{gr.textContent=fmtInt(-top.remain)+" km 超過";gr.classList.add("over");}
+  }
+  var ml=$("miniList"); ml.innerHTML="";
+  st.slice(0,4).forEach(function(it){
+    var b=document.createElement("button"); b.className="miniRow";
+    var rm=it.remain>=0?"あと "+fmtInt(it.remain)+" km":fmtInt(-it.remain)+" km 超過";
+    b.innerHTML='<span class="nm">'+esc(it.type)+'</span><span class="bar"><i class="'+(it.ratio>=1?"over":"")+'" style="width:'+Math.min(100,it.ratio*100)+'%"></i></span><span class="rm'+(it.ratio>=1?" over":"")+'">'+rm+"</span>";
+    b.addEventListener("click",function(){openMaintSheet(null,it.type);});
+    ml.appendChild(b);
+  });
+  var totalKm=S.drives.reduce(function(a,d){return a+(d.distance||0);},0);
+  $("statDriveKm").textContent=(totalKm/1000).toFixed(1)+" km";
+  $("statDrives").textContent=S.drives.length;
+  $("statMaint").textContent=S.maint.length;
+  $("cntMaint").textContent=S.maint.length+"件";
+  $("cntDrives").textContent=S.drives.length+"件";
+  var rb=$("recentBox"); rb.innerHTML="";
+  var items=[];
+  S.maint.slice().sort(function(a,b){return b.ts-a.ts;}).slice(0,2).forEach(function(r){items.push({k:"m",r:r});});
+  S.drives.slice().sort(function(a,b){return b.startedAt-a.startedAt;}).slice(0,2).forEach(function(d){items.push({k:"d",r:d});});
+  items.sort(function(a,b){return (b.k==="m"?b.r.ts:b.r.startedAt)-(a.k==="m"?a.r.ts:a.r.startedAt);});
+  if(!items.length)rb.innerHTML='<div class="empty">記録がありません</div>';
+  items.slice(0,3).forEach(function(it){
+    var b=document.createElement("button"); b.className="rowItem";
+    if(it.k==="m")b.innerHTML='<div class="grow"><div class="t1">'+esc(it.r.type)+'</div><div class="t2">'+fmtDate(it.r.ts)+" ・ "+fmtInt(it.r.odo)+" km</div></div>"+(it.r.cost?'<span class="amt">¥'+fmtInt(it.r.cost)+"</span>":"");
+    else b.innerHTML='<div class="grow"><div class="t1">走行 '+fmtKm(it.r.distance||0)+'</div><div class="t2">'+fmtDateTime(it.r.startedAt)+"</div></div>";
+    b.addEventListener("click",function(){if(it.k==="m")openMaintSheet(it.r);else openDriveSheet(it.r);});
+    rb.appendChild(b);
+  });
+}
+function renderMaintList(){
+  var box=$("maintList"); box.innerHTML="";
+  var list=S.maint.slice().sort(function(a,b){return b.ts-a.ts;});
+  if(!list.length){box.innerHTML='<div class="empty">整備記録がありません</div>';return;}
+  list.forEach(function(r){
+    var b=document.createElement("button"); b.className="rowItem";
+    b.innerHTML='<div class="grow"><div class="t1">'+esc(r.type)+'</div><div class="t2">'+fmtDate(r.ts)+" ・ "+fmtInt(r.odo)+" km"+(r.memo?" ・ "+esc(r.memo):"")+"</div></div>"+(r.cost?'<span class="amt">¥'+fmtInt(r.cost)+"</span>":"");
+    b.addEventListener("click",function(){openMaintSheet(r);});
+    box.appendChild(b);
+  });
+}
+function fillMaintTypes(sel){
+  var s=$("mType"); s.innerHTML="";
+  MAINT_TYPES.forEach(function(t){var o=document.createElement("option");o.value=t.name;o.textContent=t.name;s.appendChild(o);});
+  if(sel)s.value=sel;
+  var d=MAINT_TYPES.filter(function(t){return t.name===s.value;})[0];
+  $("mInterval").value=d?d.interval:5000;
+}
+function openMaintSheet(rec,presetType){
+  S.editingMaint=rec?rec.id:null;
+  $("maintSheetTitle").textContent=rec?"整備を編集":"整備を記録";
+  fillMaintTypes(rec?rec.type:(presetType||"エンジンオイル"));
+  if(rec){
+    $("mInterval").value=rec.interval||5000;
+    $("mDate").value=new Date(rec.ts).toISOString().slice(0,10);
+    $("mOdo").value=rec.odo; $("mCost").value=rec.cost||""; $("mMemo").value=rec.memo||"";
+  }else{
+    $("mDate").value=new Date().toISOString().slice(0,10);
+    $("mOdo").value=S.settings.odometer||0; $("mCost").value=""; $("mMemo").value="";
+  }
+  $("maintDeleteRow").style.display=rec?"flex":"none";
+  openSheet("sheetMaint");
+}
+function saveMaint(){
+  var type=$("mType").value, interval=parseInt($("mInterval").value,10)||5000;
+  var odo=parseInt($("mOdo").value,10);
+  if(isNaN(odo)){toast("走行距離を入力してください");return;}
+  var dv=$("mDate").value, ts=dv?new Date(dv+"T12:00:00").getTime():Date.now();
+  var rec={id:S.editingMaint||uid(),type:type,interval:interval,odo:odo,ts:ts,
+    cost:parseInt($("mCost").value,10)||0,memo:$("mMemo").value.trim()};
+  var ix=S.maint.findIndex(function(r){return r.id===rec.id;});
+  if(ix>=0)S.maint[ix]=rec; else S.maint.push(rec);
+  putRec("maint",rec); closeSheet(); renderHome(); renderMaintList(); toast("保存しました");
+}
+
+/* ================= drives list / detail ================= */
+function renderDriveList(){
+  var box=$("driveList"); box.innerHTML="";
+  var list=S.drives.slice().sort(function(a,b){return b.startedAt-a.startedAt;});
+  if(!list.length){box.innerHTML='<div class="empty">走行記録がありません</div>';return;}
+  list.forEach(function(d){
+    var b=document.createElement("button"); b.className="rowItem";
+    b.innerHTML=(d.photo?'<img class="thumb" src="'+d.photo+'" alt="走行写真">':"")+
+      '<div class="grow"><div class="t1">'+fmtKm(d.distance||0)+'</div><div class="t2">'+fmtDateTime(d.startedAt)+(d.memo?" ・ "+esc(d.memo):"")+"</div></div>"+
+      '<span class="amt">'+fmtDur((d.endedAt||d.startedAt)-d.startedAt)+"</span>";
+    b.addEventListener("click",function(){openDriveSheet(d);});
+    box.appendChild(b);
+  });
+}
+function openDriveSheet(d){
+  S.editingDrive=d.id; S.drivePhotoDraft=undefined;
+  $("dDate").textContent=fmtDateTime(d.startedAt);
+  $("dDist").textContent=fmtKm(d.distance||0);
+  $("dDur").textContent=fmtDur((d.endedAt||d.startedAt)-d.startedAt);
+  $("dSecs").textContent=(d.sections?d.sections.length:0)+" 区間";
+  $("dMemo").value=d.memo||"";
+  $("dPhotoBox").innerHTML=d.photo?'<img src="'+d.photo+'" alt="走行写真">':"";
+  openSheet("sheetDrive");
+}
+function currentDriveRec(){return S.drives.filter(function(d){return d.id===S.editingDrive;})[0];}
+
+/* ================= GPS recording ================= */
+function haversine(a,b){
+  var R=6371000, dLa=(b.lat-a.lat)*Math.PI/180, dLo=(b.lng-a.lng)*Math.PI/180;
+  var la1=a.lat*Math.PI/180, la2=b.lat*Math.PI/180;
+  var h=Math.sin(dLa/2)*Math.sin(dLa/2)+Math.cos(la1)*Math.cos(la2)*Math.sin(dLo/2)*Math.sin(dLo/2);
+  return 2*R*Math.asin(Math.sqrt(h));
+}
+function recElapsed(){return S.rec.elapsedBase+(S.rec.active?Date.now()-S.rec.startedAt:0);}
+function updateRecUI(){
+  $("recTime").textContent=fmtDur(recElapsed());
+  $("recDist").textContent=fmtKm(S.rec.distance);
+  $("recPts").textContent=S.rec.points;
+  $("recDot").classList.toggle("on",S.rec.active);
+  $("recState").textContent=S.rec.active?"記録中":"待機中";
+  $("recBtnsIdle").style.display=S.rec.active?"none":"flex";
+  $("recBtnsRun").style.display=S.rec.active?"flex":"none";
+  $("recNote").classList.toggle("on",S.rec.active);
+}
+function persistRec(finished){
+  var rec={id:S.rec.id,startedAt:S.rec.startedAt0,endedAt:finished?Date.now():null,
+    distance:S.rec.distance,sections:S.rec.sections,status:finished?"done":"recording",memo:"",photo:null};
+  var ix=S.drives.findIndex(function(d){return d.id===rec.id;});
+  if(ix>=0){rec.memo=S.drives[ix].memo||"";rec.photo=S.drives[ix].photo||null;S.drives[ix]=rec;}
+  else S.drives.push(rec);
+  return putRec("drives",rec);
+}
+function onPos(pos){
+  var R=S.rec; if(!R.active)return;
+  var p={lat:pos.coords.latitude,lng:pos.coords.longitude,t:pos.timestamp||Date.now(),acc:pos.coords.accuracy==null?999:pos.coords.accuracy};
+  if(p.acc>50)return;
+  R.lastPosAt=p.t;
+  var secs=R.sections, cur=secs[secs.length-1];
+  if(!cur||R.forceNew||(cur.length&&p.t-cur[cur.length-1].t>20000)){
+    cur=[]; secs.push(cur); R.forceNew=false;
+  }else if(cur.length){
+    var last=cur[cur.length-1], d=haversine(last,p), dt=(p.t-last.t)/1000;
+    if(dt<=0)return;
+    var speed=d/dt;
+    if(speed>55)return;
+    if(d<Math.max(4,p.acc*0.6)&&speed<1.2)return;
+    R.distance+=d;
+  }
+  cur.push(p); R.points++;
+  updateRecUI(); drawLive();
+  if(p.t-R.lastSave>3000){R.lastSave=p.t;persistRec(false);}
+}
+function onPosErr(){ /* 記録は継続し、次の測位を待つ */ }
+function requestWake(){
+  if("wakeLock" in navigator){
+    navigator.wakeLock.request("screen").then(function(wl){
+      S.rec.wakeLock=wl; $("wakeChip").classList.add("on");
+      wl.addEventListener("release",function(){$("wakeChip").classList.remove("on");});
+    }).catch(function(){$("wakeChip").classList.remove("on");});
+  }
+}
+function releaseWake(){if(S.rec.wakeLock){try{S.rec.wakeLock.release();}catch(e){}S.rec.wakeLock=null;}$("wakeChip").classList.remove("on");}
+function startRec(){
+  if(!("geolocation" in navigator)){toast("位置情報が利用できません");return;}
+  var R=S.rec;
+  R.active=true; R.id=uid(); R.startedAt0=Date.now(); R.startedAt=Date.now(); R.elapsedBase=0;
+  R.sections=[]; R.distance=0; R.points=0; R.forceNew=true; R.lastSave=0;
+  persistRec(false);
+  R.watchId=navigator.geolocation.watchPosition(onPos,onPosErr,{enableHighAccuracy:true,maximumAge:1000,timeout:20000});
+  R.timer=setInterval(updateRecUI,500);
+  requestWake(); updateRecUI(); drawLive(); toast("記録を開始しました");
+}
+function stopRec(save){
+  var R=S.rec; if(!R.active)return;
+  if(R.watchId!=null)navigator.geolocation.clearWatch(R.watchId);
+  clearInterval(R.timer); releaseWake();
+  var dist=R.distance, id=R.id;
+  R.active=false; R.watchId=null;
+  if(save){
+    persistRec(true).then(function(){
+      S.settings.odometer=Math.round((S.settings.odometer||0)+dist/1000);
+      saveSettings(); renderHome(); renderDriveList(); drawFallbackMap(); drawGmapAll(); toast("保存しました");
+    });
+  }else{
+    delRec("drives",id);
+    S.drives=S.drives.filter(function(d){return d.id!==id;});
+    renderHome(); renderDriveList(); drawFallbackMap(); drawGmapAll(); toast("破棄しました");
+  }
+  R.sections=[]; R.distance=0; R.points=0; R.elapsedBase=0;
+  updateRecUI(); drawLive();
+}
+document.addEventListener("visibilitychange",function(){
+  if(document.hidden){ if(S.rec.active)S.rec.forceNew=true; }
+  else if(S.rec.active&&!S.rec.wakeLock)requestWake();
+});
+
+/* ================= fallback map (canvas) ================= */
+function proj(lat,lng,w,h){
+  return {x:(lng-JP.lngMin)/(JP.lngMax-JP.lngMin)*w, y:(1-(lat-JP.latMin)/(JP.latMax-JP.latMin))*h};
+}
+function allSections(){
+  var out=[];
+  S.drives.forEach(function(d){(d.sections||[]).forEach(function(s){if(s.length>1)out.push(s);});});
+  if(S.rec.active)S.rec.sections.forEach(function(s){if(s.length>1)out.push(s);});
+  return out;
+}
+function resizeFallback(){
+  var c=$("fallbackMap"); if(!c||$("gmap").style.display==="block")return;
+  var r=c.parentElement.getBoundingClientRect(), dpr=window.devicePixelRatio||1;
+  c.width=Math.max(1,r.width*dpr); c.height=Math.max(1,r.height*dpr);
+}
+function drawFallbackMap(){
+  var c=$("fallbackMap"); if(!c)return;
+  if(window.__gmapReady&&$("gmap").style.display==="block"){drawLiveGmap();return;}
+  resizeFallback();
+  var ctx=c.getContext("2d"), w=c.width, h=c.height;
+  var dark=S.settings.mapTheme==="dark";
+  ctx.fillStyle=dark?"#0a1628":"#e8ebee"; ctx.fillRect(0,0,w,h);
+  ctx.strokeStyle=dark?"rgba(255,255,255,.06)":"rgba(20,30,40,.06)"; ctx.lineWidth=1;
+  for(var gx=0;gx<w;gx+=w/8){ctx.beginPath();ctx.moveTo(gx,0);ctx.lineTo(gx,h);ctx.stroke();}
+  for(var gy=0;gy<h;gy+=h/8){ctx.beginPath();ctx.moveTo(0,gy);ctx.lineTo(w,gy);ctx.stroke();}
+  ctx.strokeStyle=accentHex(); ctx.lineWidth=Math.max(2,(window.devicePixelRatio||1)*1.6);
+  ctx.lineJoin="round"; ctx.lineCap="round";
+  allSections().forEach(function(s){
+    ctx.beginPath();
+    s.forEach(function(p,i){var q=proj(p.lat,p.lng,w,h); if(i===0)ctx.moveTo(q.x,q.y); else ctx.lineTo(q.x,q.y);});
+    ctx.stroke();
+  });
+  var secs=allSections();
+  if(secs.length){
+    var last=secs[secs.length-1], lp=last[last.length-1], q=proj(lp.lat,lp.lng,w,h);
+    ctx.fillStyle=accentHex(); ctx.beginPath(); ctx.arc(q.x,q.y,Math.max(4,(window.devicePixelRatio||1)*3.4),0,7); ctx.fill();
+    ctx.fillStyle=dark?"#fff":"#141416"; ctx.beginPath(); ctx.arc(q.x,q.y,Math.max(1.8,(window.devicePixelRatio||1)*1.4),0,7); ctx.fill();
+  }
+  $("mapChip").textContent=S.settings.apiKey?"地図を読み込み中":"軌跡プレビュー（日本全国）";
+}
+function drawLive(){drawFallbackMap();}
+
+/* ================= Google Maps ================= */
+var gmap=null,gPolys=[],gLive=null,gLoading=false;
+function gmapStylesDark(){
+  return [
+    {elementType:"geometry",stylers:[{color:"#0a1628"}]},
+    {elementType:"labels.text.fill",stylers:[{color:"#8ea6c1"}]},
+    {elementType:"labels.text.stroke",stylers:[{color:"#0a1628"}]},
+    {featureType:"water",elementType:"geometry",stylers:[{color:"#06101f"}]},
+    {featureType:"road",elementType:"geometry",stylers:[{color:"#1b2f4a"}]},
+    {featureType:"road.highway",elementType:"geometry",stylers:[{color:"#274a75"}]},
+    {featureType:"poi",elementType:"geometry",stylers:[{color:"#0e2038"}]},
+    {featureType:"transit",elementType:"geometry",stylers:[{color:"#12263f"}]},
+    {featureType:"administrative",elementType:"geometry.stroke",stylers:[{color:"#2b4a6e"}]}
+  ];
+}
+function initGmap(){
+  if(!window.google||!window.google.maps)return;
+  window.__gmapReady=true;
+  $("gmap").style.display="block"; $("fallbackMap").style.display="none";
+  gmap=new google.maps.Map($("gmap"),{center:{lat:36.8,lng:138.2},zoom:5,disableDefaultUI:true,zoomControl:true,
+    styles:S.settings.mapTheme==="dark"?gmapStylesDark():[]});
+  $("mapChip").textContent="日本全国";
+  drawGmapAll();
+}
+function drawGmapAll(){
+  if(!gmap)return;
+  gPolys.forEach(function(p){p.setMap(null);}); gPolys=[];
+  var bounds=new google.maps.LatLngBounds(), has=false;
+  S.drives.forEach(function(d){
+    (d.sections||[]).forEach(function(s){
+      if(s.length<2)return;
+      var path=s.map(function(p){return {lat:p.lat,lng:p.lng};});
+      path.forEach(function(pt){bounds.extend(pt);has=true;});
+      var pl=new google.maps.Polyline({path:path,strokeColor:accentHex(),strokeWeight:4,strokeOpacity:.9,map:gmap});
+      gPolys.push(pl);
+    });
+  });
+  if(has)gmap.fitBounds(bounds);
+  drawLiveGmap();
+}
+function drawLiveGmap(){
+  if(!gmap)return;
+  if(gLive)gLive.forEach(function(p){p.setMap(null);});
+  gLive=[];
+  if(!S.rec.active)return;
+  S.rec.sections.forEach(function(s){
+    if(s.length<2)return;
+    gLive.push(new google.maps.Polyline({path:s.map(function(p){return {lat:p.lat,lng:p.lng};}),strokeColor:accentHex(),strokeWeight:5,strokeOpacity:1,map:gmap}));
+  });
+  var secs=S.rec.sections,last=secs[secs.length-1];
+  if(last&&last.length){var lp=last[last.length-1];gmap.panTo({lat:lp.lat,lng:lp.lng});}
+}
+function loadGmap(){
+  var key=(S.settings.apiKey||"").trim();
+  if(!key){$("gmap").style.display="none";$("fallbackMap").style.display="block";drawFallbackMap();return;}
+  if(window.__gmapReady){initGmap();return;}
+  if(gLoading)return; gLoading=true;
+  window.__onGmapLoad=function(){gLoading=false;initGmap();};
+  window.gm_authFailure=function(){gLoading=false;window.__gmapReady=false;$("gmap").style.display="none";$("fallbackMap").style.display="block";$("mapChip").textContent="地図を読み込めませんでした";drawFallbackMap();};
+  var sc=document.createElement("script");
+  sc.src="https://maps.googleapis.com/maps/api/js?key="+encodeURIComponent(key)+"&callback=__onGmapLoad&language=ja&region=JP";
+  sc.async=true; sc.defer=true;
+  sc.onerror=function(){gLoading=false;$("mapChip").textContent="地図を読み込めませんでした";};
+  document.head.appendChild(sc);
+  setTimeout(function(){if(!window.__gmapReady)$("mapChip").textContent="軌跡プレビュー（日本全国）";},6000);
+}
+
+/* ================= wiring ================= */
+function wire(){
+  var btns=document.querySelectorAll(".tabbtn");
+  btns.forEach(function(b){
+    b.addEventListener("click",function(){switchTab(b.getAttribute("data-tab"));});
+    b.addEventListener("touchstart",function(){b.classList.add("pressing");},{passive:true});
+    b.addEventListener("touchend",function(){b.classList.remove("pressing");},{passive:true});
+    b.addEventListener("touchcancel",function(){b.classList.remove("pressing");});
+    b.addEventListener("mousedown",function(){b.classList.add("pressing");});
+    b.addEventListener("mouseup",function(){b.classList.remove("pressing");});
+    b.addEventListener("mouseleave",function(){b.classList.remove("pressing");});
+  });
+  $("edgeHandle").addEventListener("click",openDrawer);
+  $("scrim").addEventListener("click",closeDrawer);
+  $("btnDrawerClose").addEventListener("click",closeDrawer);
+  document.querySelectorAll("[data-close]").forEach(function(b){b.addEventListener("click",closeSheet);});
+  document.querySelectorAll(".sheetWrap").forEach(function(w){
+    w.querySelector(".bk").addEventListener("click",closeSheet);
+  });
+  $("fabAdd").addEventListener("click",function(){openMaintSheet(null);});
+  $("btnQuickMaint").addEventListener("click",function(){openMaintSheet(null);});
+  $("btnOdoEdit").addEventListener("click",function(){$("odoInput").value=S.settings.odometer||0;openSheet("sheetOdo");});
+  $("btnOdoSave").addEventListener("click",function(){
+    var v=parseInt($("odoInput").value,10); if(isNaN(v)||v<0){toast("数値を入力してください");return;}
+    S.settings.odometer=v; $("setOdo").value=v; saveSettings(); closeSheet(); renderHome(); toast("保存しました");
+  });
+  $("mType").addEventListener("change",function(){
+    var d=MAINT_TYPES.filter(function(t){return t.name===$("mType").value;})[0];
+    if(d)$("mInterval").value=d.interval;
+  });
+  $("btnMaintSave").addEventListener("click",saveMaint);
+  $("btnMaintDelete").addEventListener("click",function(){
+    if(!S.editingMaint)return;
+    delRec("maint",S.editingMaint);
+    S.maint=S.maint.filter(function(r){return r.id!==S.editingMaint;});
+    closeSheet(); renderHome(); renderMaintList(); toast("削除しました");
+  });
+  $("btnRecStart").addEventListener("click",startRec);
+  $("btnRecStop").addEventListener("click",function(){stopRec(true);});
+  $("btnRecDiscard").addEventListener("click",function(){stopRec(false);});
+  $("btnDriveSave").addEventListener("click",function(){
+    var d=currentDriveRec(); if(!d)return;
+    d.memo=$("dMemo").value.trim();
+    if(S.drivePhotoDraft!==undefined)d.photo=S.drivePhotoDraft;
+    putRec("drives",d); closeSheet(); renderDriveList(); renderHome(); toast("保存しました");
+  });
+  $("btnDriveDelete").addEventListener("click",function(){
+    if(!S.editingDrive)return;
+    delRec("drives",S.editingDrive);
+    S.drives=S.drives.filter(function(d){return d.id!==S.editingDrive;});
+    closeSheet(); renderDriveList(); renderHome(); drawFallbackMap(); drawGmapAll(); toast("削除しました");
+  });
+  $("btnDrivePhoto").addEventListener("click",function(){$("fileDrivePhoto").click();});
+  $("fileDrivePhoto").addEventListener("change",function(){
+    var f=this.files[0]; if(!f)return;
+    readImageFile(f,function(url){S.drivePhotoDraft=url;$("dPhotoBox").innerHTML='<img src="'+url+'" alt="走行写真">';});
+    this.value="";
+  });
+  /* settings */
+  $("setCarName").addEventListener("change",function(){S.settings.carName=this.value.trim()||"マイカー";saveSettings();applyTheme();});
+  $("setOdo").addEventListener("change",function(){var v=parseInt(this.value,10);if(!isNaN(v)&&v>=0){S.settings.odometer=v;saveSettings();renderHome();}});
+  $("mapThemeSeg").querySelectorAll("button").forEach(function(b){
+    b.addEventListener("click",function(){
+      S.settings.mapTheme=b.getAttribute("data-mt"); saveSettings(); applyTheme(); drawFallbackMap();
+      if(window.__gmapReady&&gmap){gmap.setOptions({styles:S.settings.mapTheme==="dark"?gmapStylesDark():[]});}
+    });
+  });
+  $("btnApiSave").addEventListener("click",function(){
+    S.settings.apiKey=$("setApiKey").value.trim(); saveSettings();
+    window.__gmapReady=false; gmap=null; gLoading=false;
+    if(S.settings.apiKey){loadGmap();toast("地図を読み込んでいます");}
+    else{$("gmap").style.display="none";$("fallbackMap").style.display="block";drawFallbackMap();toast("保存しました");}
+  });
+  $("btnBgUpload").addEventListener("click",function(){$("fileBg").click();});
+  $("btnHeroUpload").addEventListener("click",function(){$("fileHero").click();});
+  $("fileBg").addEventListener("change",function(){
+    var f=this.files[0]; if(!f)return;
+    readImageFile(f,function(url){S.customBg=url;kvSet("customBg",url);S.settings.bg="customBg";saveSettings();buildThumbGrid("bgGrid","bg");applyTheme();toast("背景を設定しました");});
+    this.value="";
+  });
+  $("fileHero").addEventListener("change",function(){
+    var f=this.files[0]; if(!f)return;
+    readImageFile(f,function(url){S.customHero=url;kvSet("customHero",url);S.settings.hero="customHero";saveSettings();buildThumbGrid("heroGrid","hero");applyTheme();toast("ヒーロー画像を設定しました");});
+    this.value="";
+  });
+  $("btnWipe").addEventListener("click",function(){
+    if(this.getAttribute("data-arm")){ 
+      clearStore("maint");clearStore("drives");kvSet("settings",null);kvSet("customBg",null);kvSet("customHero",null);
+      S.maint=[];S.drives=[];S.customBg=null;S.customHero=null;
+      S.settings={carName:"マイカー",odometer:0,accent:"mono",bg:"car",hero:"car",mapTheme:"light",apiKey:""};
+      buildSettingsUI();applyTheme();renderHome();renderMaintList();renderDriveList();drawFallbackMap();
+      this.removeAttribute("data-arm");this.textContent="すべてのデータを削除";toast("削除しました");
+    }else{this.setAttribute("data-arm","1");this.textContent="もう一度押すと削除します";
+      var b=this;setTimeout(function(){b.removeAttribute("data-arm");b.textContent="すべてのデータを削除";},3500);}
+  });
+  $("dlgSave").addEventListener("click",function(){
+    var d=window.__pendingRec; if(d){d.status="done";d.endedAt=d.endedAt||Date.now();putRec("drives",d);}
+    $("dialogWrap").classList.remove("on"); window.__pendingRec=null;
+    renderHome(); renderDriveList(); drawFallbackMap(); drawGmapAll();
+  });
+  $("dlgDiscard").addEventListener("click",function(){
+    var d=window.__pendingRec; if(d){delRec("drives",d.id);S.drives=S.drives.filter(function(x){return x.id!==d.id;});}
+    $("dialogWrap").classList.remove("on"); window.__pendingRec=null;
+    renderHome(); renderDriveList(); drawFallbackMap();
+  });
+  window.addEventListener("resize",function(){drawFallbackMap();});
+}
+
+/* ================= init ================= */
+function init(){
+  wire();
+  Promise.all([kvGet("settings"),kvGet("customBg"),kvGet("customHero"),allRecs("maint"),allRecs("drives")]).then(function(r){
+    if(r[0])S.settings=Object.assign(S.settings,r[0]);
+    S.customBg=r[1]||null; S.customHero=r[2]||null;
+    S.maint=r[3]||[]; S.drives=r[4]||[];
+    buildSettingsUI(); applyTheme();
+    renderHome(); renderMaintList(); renderDriveList(); updateRecUI();
+    resizeFallback(); drawFallbackMap(); loadGmap();
+    var pending=S.drives.filter(function(d){return d.status==="recording";})[0];
+    if(pending){
+      window.__pendingRec=pending;
+      $("dlgText").textContent=fmtDateTime(pending.startedAt)+" 開始 ・ "+fmtKm(pending.distance||0)+" の走行が未完了です。";
+      $("dialogWrap").classList.add("on");
+    }
+  });
+}
+document.addEventListener("DOMContentLoaded",init);
+</script>
+</body>
+</html>
