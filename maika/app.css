@@ -12,7 +12,6 @@
   --push:0px;
   --cr:52px;
   --crr:0px; /* 現在の角丸半径: 開き具合に比例して --push と同じフレームで更新される */
-  --topgap:0px; /* ステータスバー裏までの拡張量: standalone 時に JS が実測して入れる（measureTopGap） */
   color-scheme:dark;
 }
 *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; -webkit-touch-callout:none;}
@@ -21,7 +20,7 @@
    スクロールは .view の内側だけで起こす。 */
 html{overscroll-behavior:none; overflow:hidden; height:100%; touch-action:manipulation; background:#07080f;}
 body{
-  margin:0; height:100%; height:100vh; height:100dvh; overflow:hidden; background:#07080f;
+  margin:0; height:100%; height:100vh; height:100dvh; height:100lvh; overflow:hidden; background:#07080f;
   font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
   color:var(--ink);
   -webkit-user-select:none; user-select:none;
@@ -46,15 +45,17 @@ button{font:inherit; color:inherit; background:none; border:0; padding:0; cursor
 img{display:block; max-width:100%;}
 
 /* ---------- background ---------- */
-/* 上端の黒帯対策: レイアウトビューポートはステータスバー下から始まる（viewport-fit=cover を
-   戻すとビューポートが縮んで下端の帯が再発するので戻さない）。背景レイヤーだけを --topgap 分
-   上へ広げてステータスバーの裏まで塗り、下端の位置は従来通り（広げた分だけ高さも増やす）。
-   コンテンツ側の配置は変えないので、要素がステータスバー裏に隠れることはない */
-#bg{position:fixed; left:0; right:0; top:calc(-1 * var(--topgap)); height:calc(100lvh + var(--topgap)); z-index:0; background:#07080f center/cover no-repeat; transition:opacity .4s,transform .28s cubic-bezier(.32,.72,.24,1),border-top-left-radius .28s cubic-bezier(.32,.72,.24,1),border-bottom-left-radius .28s cubic-bezier(.32,.72,.24,1); transform:translateX(var(--push)); border-top-left-radius:var(--crr); border-bottom-left-radius:var(--crr);}
-#bgShade{position:fixed; left:0; right:0; top:calc(-1 * var(--topgap)); height:calc(100lvh + var(--topgap)); z-index:1; background:linear-gradient(180deg,rgba(4,5,10,.34),rgba(4,5,10,.55)); pointer-events:none; transition:transform .28s cubic-bezier(.32,.72,.24,1),border-top-left-radius .28s cubic-bezier(.32,.72,.24,1),border-bottom-left-radius .28s cubic-bezier(.32,.72,.24,1); transform:translateX(var(--push)); border-top-left-radius:var(--crr); border-bottom-left-radius:var(--crr);}
+/* 上端の黒帯対策（カーナビ1と同一の組み合わせ）: viewport-fit=cover + black-translucent で
+   レイアウト原点が画面上端に移り、背景はステータスバーの裏まで画面端いっぱいに塗れる。
+   帯の領域はビューポートの外だったため、内側の要素を上に広げる方式（旧 --topgap）は原理的に
+   効かず撤去した。シェルの高さは bottom 依存ではなく 100lvh（最大ビューポート高）で固定し、
+   万一レイアウトビューポートが縮んでも下端まで届くようにする。
+   コンテンツ側は .view の padding や各要素の env(safe-area-inset-top) でステータスバーから逃がす */
+#bg{position:fixed; left:0; right:0; top:0; height:100lvh; z-index:0; background:#07080f center/cover no-repeat; transition:opacity .4s,transform .28s cubic-bezier(.32,.72,.24,1),border-top-left-radius .28s cubic-bezier(.32,.72,.24,1),border-bottom-left-radius .28s cubic-bezier(.32,.72,.24,1); transform:translateX(var(--push)); border-top-left-radius:var(--crr); border-bottom-left-radius:var(--crr);}
+#bgShade{position:fixed; left:0; right:0; top:0; height:100lvh; z-index:1; background:linear-gradient(180deg,rgba(4,5,10,.34),rgba(4,5,10,.55)); pointer-events:none; transition:transform .28s cubic-bezier(.32,.72,.24,1),border-top-left-radius .28s cubic-bezier(.32,.72,.24,1),border-bottom-left-radius .28s cubic-bezier(.32,.72,.24,1); transform:translateX(var(--push)); border-top-left-radius:var(--crr); border-bottom-left-radius:var(--crr);}
 
 /* ---------- layout ---------- */
-#app{position:fixed; inset:0; z-index:2; display:flex; flex-direction:column; transition:transform .28s cubic-bezier(.32,.72,.24,1),border-top-left-radius .28s cubic-bezier(.32,.72,.24,1),border-bottom-left-radius .28s cubic-bezier(.32,.72,.24,1); transform:translateX(var(--push)); border-top-left-radius:var(--crr); border-bottom-left-radius:var(--crr);}
+#app{position:fixed; inset:0; height:100lvh; z-index:2; display:flex; flex-direction:column; transition:transform .28s cubic-bezier(.32,.72,.24,1),border-top-left-radius .28s cubic-bezier(.32,.72,.24,1),border-bottom-left-radius .28s cubic-bezier(.32,.72,.24,1); transform:translateX(var(--push)); border-top-left-radius:var(--crr); border-bottom-left-radius:var(--crr);}
 /* メイン画面の左上下の角丸（凸）は半径 --crr で常時描く。--crr は開き具合（--push）に比例して
    JS が同じフレームで更新するので、角丸の変化と右へのスライドは必ず同時に始まり同時に進む。
    dopen は角のはみ出しを切り取る overflow の切り替えだけに使う */
@@ -62,7 +63,7 @@ html.dopen #app{overflow:hidden;}
 /* ドロワーのドラッグ中はメイン画面・背景・タブバーの遷移を止めて指に追従させる */
 html.ddrag #app,html.ddrag #bg,html.ddrag #bgShade,html.ddrag #tabbar,html.ddrag .fab,html.ddrag #menuBtn{transition:none !important;}
 #views{flex:1; position:relative; overflow:hidden;}
-.view{position:fixed; inset:0; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; padding:calc(12px + env(safe-area-inset-top)) 12px calc(90px + env(safe-area-inset-bottom)); display:none; -webkit-overflow-scrolling:touch; scrollbar-width:none; -ms-overflow-style:none;}
+.view{position:fixed; inset:0; height:100lvh; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; padding:calc(12px + env(safe-area-inset-top)) 12px calc(90px + env(safe-area-inset-bottom)); display:none; -webkit-overflow-scrolling:touch; scrollbar-width:none; -ms-overflow-style:none;}
 .view::-webkit-scrollbar{display:none; width:0; height:0;}
 .view.on{display:block;}
 /* 縦スクロールは許可し、自然な縦レイアウトにする。横方向のはみ出しは全ビューで出さない */
@@ -290,14 +291,14 @@ html.lens-ok .tab-ind.bubble .tab-ind-in::after{box-shadow:inset 0 0 5px rgba(12
 #menuBtn:active{transform:translateX(var(--push)) scale(.93);}
 
 /* ---------- drawer ---------- */
-#scrim{position:fixed; inset:0; top:calc(-1 * var(--topgap)); z-index:50; background:var(--scrim); opacity:0; pointer-events:none; transition:opacity .25s; touch-action:none;}
+#scrim{position:fixed; inset:0; height:100lvh; z-index:50; background:var(--scrim); opacity:0; pointer-events:none; transition:opacity .25s; touch-action:none;}
 #scrim.dragging{transition:none;}
 #drawer.dragging{transition:none !important;}
 #scrim.on{opacity:1; pointer-events:auto;}
 /* プッシュ式ドロワー: 画面の左端から上下いっぱいに余白なく配置し、開くとメイン画面が右へずれる。
    右端の上下には逆角丸（凹カーブ）のフィレットを付け、メイン画面左端の凸カーブ（半径 --cr）と隙間なく噛み合わせる */
 #drawer{
-  position:fixed; top:calc(-1 * var(--topgap)); left:0; bottom:0; z-index:51; width:min(320px,86vw);
+  position:fixed; top:0; left:0; bottom:0; height:100lvh; z-index:51; width:min(320px,86vw);
   background:var(--drawer); -webkit-backdrop-filter:blur(12px) saturate(1.25) brightness(1.02); backdrop-filter:blur(12px) saturate(1.25) brightness(1.02);
   transform:translateX(calc(-100% - 60px));
   transition:transform .28s cubic-bezier(.32,.72,.24,1);
@@ -317,7 +318,7 @@ html.lens-ok .tab-ind.bubble .tab-ind-in::after{box-shadow:inset 0 0 5px rgba(12
   mask-image:radial-gradient(circle var(--crr) at 100% 0%, transparent calc(var(--crr) - 1px), #000 calc(var(--crr) + 1px));}
 #drawer.render{display:flex;}
 #drawer.on{transform:translateX(0);}
-#drawer .dhead{display:flex; align-items:center; justify-content:space-between; padding:calc(14px + var(--topgap) + env(safe-area-inset-top)) 16px 8px;}
+#drawer .dhead{display:flex; align-items:center; justify-content:space-between; padding:calc(14px + env(safe-area-inset-top)) 16px 8px;}
 #drawer .dhead b{font-size:16px;}
 #drawer .dbody{flex:1; overflow-y:auto; overflow-x:hidden; padding:4px 16px calc(20px + env(safe-area-inset-bottom)); overscroll-behavior:contain; scrollbar-width:none; -ms-overflow-style:none; touch-action:pan-y;}
 #drawer .dbody::-webkit-scrollbar{display:none; width:0; height:0;}
@@ -368,9 +369,9 @@ html.lens-ok .tab-ind.bubble .tab-ind-in::after{box-shadow:inset 0 0 5px rgba(12
 .tgl.on::after{left:22px;}
 
 /* ---------- sheets ---------- */
-.sheetWrap{position:fixed; inset:0; z-index:60; display:none;}
+.sheetWrap{position:fixed; inset:0; height:100lvh; z-index:60; display:none;}
 .sheetWrap.on{display:block;}
-.sheetWrap .bk{position:absolute; inset:0; top:calc(-1 * var(--topgap)); background:var(--scrim); opacity:0; transition:opacity .25s;}
+.sheetWrap .bk{position:absolute; inset:0; background:var(--scrim); opacity:0; transition:opacity .25s;}
 .sheetWrap.show .bk{opacity:1;}
 .sheet{
   position:absolute; left:0; right:0; bottom:0; max-width:100vw; overflow:hidden; max-height:88dvh; display:flex; flex-direction:column;
@@ -387,7 +388,7 @@ html.lens-ok .tab-ind.bubble .tab-ind-in::after{box-shadow:inset 0 0 5px rgba(12
 .sheetScroll{overflow-y:auto; overflow-x:hidden; width:100%; min-width:0; padding:6px 16px calc(18px + env(safe-area-inset-bottom)); overscroll-behavior:contain; scrollbar-width:none; -ms-overflow-style:none;}
 .sheetScroll::-webkit-scrollbar{display:none; width:0; height:0;}
 /* 整備フォーム: 1画面に収めてスクロール自体をなくす（縦に詰めた専用レイアウト＋シートを長く） */
-#sheetMaint .sheet{max-height:97dvh;}
+#sheetMaint .sheet{max-height:calc(97dvh - env(safe-area-inset-top));}
 #sheetMaint .sheetScroll{padding-bottom:calc(12px + env(safe-area-inset-bottom));}
 #sheetMaint .field{margin-top:7px;}
 #sheetMaint .field label{margin-bottom:3px; font-size:11.5px;}

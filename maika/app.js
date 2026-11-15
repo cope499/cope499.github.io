@@ -1375,27 +1375,10 @@ function wire(){
 }
 
 /* ================= init ================= */
-/* 上端の黒帯対策: viewport-fit=cover は付けない（付けるとレイアウトビューポートが縮んで
-   下端の帯が再発する）。代わりに standalone 表示のときだけ「画面の高さ − レイアウト
-   ビューポートの高さ」＝ステータスバー分の帯の高さを実測して --topgap に入れる。
-   CSS 側では背景レイヤー（#bg/#bgShade）とそれに追随する面（ドロワー／スクリム／シート背景）
-   だけが --topgap 分だけ上へ広がり、コンテンツの配置は一切変わらない。
-   ブラウザ表示・横向き・非standalone では 0 のまま＝従来通り */
-function measureTopGap(){
-  var gap=0;
-  try{
-    var ua=window.navigator.userAgent||"";
-    var sa=(window.navigator.standalone===true)||(!!(window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches)&&/iPhone|iPad|iPod/.test(ua));
-    if(sa&&window.innerWidth<window.innerHeight){
-      var g=(window.screen.height||0)-window.innerHeight;
-      if(g>0&&g<160)gap=Math.round(g);
-    }
-  }catch(e){}
-  document.documentElement.style.setProperty("--topgap",gap+"px");
-}
+/* 上端の黒帯対策は head/CSS 側で完結する（viewport-fit=cover + black-translucent、
+   背景は画面端まで、要素は env(safe-area-inset-top) で逃がす）。旧 --topgap 実測方式は
+   帯がレイアウトビューポートの外にあり原理的に効かなかったため撤去した */
 function init(){
-  measureTopGap();
-  window.addEventListener("orientationchange",function(){setTimeout(measureTopGap,350);});
   wire();
   Promise.all([kvGet("settings"),kvGet("customBg"),kvGet("customHero"),allRecs("maint"),allRecs("drives")]).then(function(r){
     if(r[0])S.settings=Object.assign(S.settings,r[0]);
