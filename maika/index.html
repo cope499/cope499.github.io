@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-<meta name="color-scheme" content="dark" />
+<meta name="color-scheme" content="light dark" />
 <meta name="theme-color" content="#0b0d16" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -165,6 +165,13 @@
       <div class="toggleRow" style="margin-top:8px;"><span>GPS走行をオドメーターに加算</span><button class="tgl on" id="tglGpsAddDrawer" role="switch" aria-checked="true" aria-label="GPS走行をオドメーターに加算（設定）"></button></div>
     </div>
     <div class="dsec">
+      <h3>テーマ</h3>
+      <div class="seg" id="themeSeg">
+        <button data-th="light">ライト</button><button data-th="dark">ダーク</button>
+      </div>
+      <div class="recNote on">アプリ全体の配色を切り替えます。走行タブの地図（白／黒）もテーマに連動します。</div>
+    </div>
+    <div class="dsec">
       <h3>交換間隔</h3>
       <div id="intervalList"></div>
     </div>
@@ -177,12 +184,6 @@
       <h3>ヒーロー画像</h3>
       <div class="thumbGrid" id="heroGrid"></div>
       <button class="upBtn" id="btnHeroUpload">画像をアップロード</button>
-    </div>
-    <div class="dsec">
-      <h3>地図テーマ</h3>
-      <div class="seg" id="mapThemeSeg">
-        <button data-mt="light">白</button><button data-mt="dark">黒</button>
-      </div>
     </div>
     <div class="dsec">
       <h3>インジケーター色</h3>

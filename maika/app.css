@@ -1,6 +1,7 @@
 
 :root{
   --accent:#9aa0a6;
+  --onink:#14151c;
   --ink:#f4f4f7; --ink2:rgba(244,244,247,.64); --ink3:rgba(244,244,247,.42);
   --glass:rgba(24,26,40,.20); --glass2:rgba(24,26,40,.14);
   --stroke:rgba(255,255,255,.22); --hair:rgba(255,255,255,.14);
@@ -63,7 +64,7 @@ html.dopen #app{overflow:hidden;}
 /* ドロワーのドラッグ中はメイン画面・背景・タブバーの遷移を止めて指に追従させる */
 html.ddrag #app,html.ddrag #bg,html.ddrag #bgShade,html.ddrag #tabbar,html.ddrag .fab,html.ddrag #menuBtn{transition:none !important;}
 #views{flex:1; position:relative; overflow:hidden;}
-.view{position:fixed; inset:0; height:100lvh; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; padding:calc(12px + env(safe-area-inset-top)) 12px calc(90px + env(safe-area-inset-bottom)); display:none; -webkit-overflow-scrolling:touch; scrollbar-width:none; -ms-overflow-style:none;}
+.view{position:fixed; inset:0; height:100lvh; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; padding:calc(28px + env(safe-area-inset-top)) 12px calc(80px + env(safe-area-inset-bottom)); display:none; -webkit-overflow-scrolling:touch; scrollbar-width:none; -ms-overflow-style:none;}
 .view::-webkit-scrollbar{display:none; width:0; height:0;}
 .view.on{display:block;}
 /* 縦スクロールは許可し、自然な縦レイアウトにする。横方向のはみ出しは全ビューで出さない */
@@ -106,7 +107,7 @@ html.ddrag #app,html.ddrag #bg,html.ddrag #bgShade,html.ddrag #tabbar,html.ddrag
 .odoInputRow input{flex:1; min-width:0; min-height:48px; border-radius:14px; border:1px solid rgba(255,255,255,.20); background:rgba(255,255,255,.08); padding:9px 14px; font-size:16.5px; color:var(--ink); outline:none; font-variant-numeric:tabular-nums;}
 .odoInputRow input::placeholder{color:rgba(244,244,247,.38);}
 .odoInputRow input:focus{border-color:rgba(255,255,255,.45);}
-.odoUpdateBtn{flex:none; width:118px; border-radius:999px; background:#f4f4f7; color:#14151c; font-size:14.5px; font-weight:800; line-height:1.35; padding:8px 10px; box-shadow:0 6px 18px rgba(0,0,0,.30);}
+.odoUpdateBtn{flex:none; width:118px; border-radius:999px; background:var(--ink); color:var(--onink); font-size:14.5px; font-weight:800; line-height:1.35; padding:8px 10px; box-shadow:0 6px 18px rgba(0,0,0,.30);}
 .odoUpdateBtn:active{opacity:.82;}
 .gpsAddRow{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:10px; padding:10px 13px; border-radius:16px; border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.05);}
 .gpsAddRow span{font-size:13.5px; font-weight:800; line-height:1.4;}
@@ -188,7 +189,7 @@ html.ddrag #app,html.ddrag #bg,html.ddrag #bgShade,html.ddrag #tabbar,html.ddrag
 .recBtns{display:flex; gap:8px; margin-top:14px;}
 .btn{flex:1; min-width:0; min-height:48px; border-radius:14px; font-size:15px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; gap:7px; border:1px solid var(--hair); background:var(--glass2); -webkit-backdrop-filter:blur(6px) saturate(1.2); backdrop-filter:blur(6px) saturate(1.2);}
 .btn:active{opacity:.75;}
-.btn.primary{background:var(--ink); color:#14151c; border-color:transparent;}
+.btn.primary{background:var(--ink); color:var(--onink); border-color:transparent;}
 .btn.accentBtn{background:var(--accent); color:#fff; border-color:transparent;}
 .btn.danger{color:var(--danger);}
 .btn.small{flex:none; padding:0 16px; min-height:42px; font-size:13.5px;}
@@ -196,30 +197,24 @@ html.ddrag #app,html.ddrag #bg,html.ddrag #bgShade,html.ddrag #tabbar,html.ddrag
 .recNote.on{display:block;}
 
 /* ---------- tab bar (カーナビ移植: リキッドガラス＋滑るピル＋シャボン玉) ---------- */
+/* タブバーの配色はアプリテーマ（data-theme）で切り替える。ベース＝ダーク、ライトは末尾のライトテーマ節で上書き */
 #tabbar{
   position:fixed; left:50%; transform:translateX(calc(-50% + var(--push)));
   transition:transform .28s cubic-bezier(.32,.72,.24,1);
-  bottom:calc(22px + env(safe-area-inset-bottom)); z-index:40;
+  /* 下端へ寄せる: セーフエリア全量ではなく一部だけ残し、ホームインジケーターと重ならない範囲で下げる */
+  bottom:max(10px, calc(env(safe-area-inset-bottom) - 12px)); z-index:40;
   width:min(640px,calc(100vw - 24px));
   display:flex; gap:4px; padding:6px; border-radius:32px;
-  background:rgba(246,246,249,.26);
-  -webkit-backdrop-filter:blur(10px) saturate(1.25) brightness(1.01);
-  backdrop-filter:blur(10px) saturate(1.25) brightness(1.01);
-  backdrop-filter:url(#tabGlass) blur(1.2px) saturate(1.2) brightness(1.01);
-  border:1px solid rgba(255,255,255,.42);
-  box-shadow:0 12px 30px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.20), inset 0 0 8px rgba(255,255,255,.03);
+  background:rgba(10,10,12,.34);
+  -webkit-backdrop-filter:blur(10px) saturate(1.15);
+  backdrop-filter:blur(10px) saturate(1.15);
+  backdrop-filter:url(#tabGlass) blur(1.2px) saturate(1.1);
+  border:1px solid rgba(255,255,255,.13);
+  box-shadow:0 12px 32px rgba(0,0,0,.38), inset 0 1px 0 rgba(255,255,255,.06);
   touch-action:none;
 }
 #tabbar::before{content:""; position:absolute; inset:0; border-radius:inherit; z-index:0; pointer-events:none;
-  background:linear-gradient(180deg,rgba(255,255,255,.13) 0%,rgba(255,255,255,.05) 48%,rgba(255,255,255,.02) 100%);}
-@media (prefers-color-scheme: dark){
-  #tabbar{background:rgba(10,10,12,.34); border-color:rgba(255,255,255,.13);
-    -webkit-backdrop-filter:blur(10px) saturate(1.15);
-    backdrop-filter:blur(10px) saturate(1.15);
-    backdrop-filter:url(#tabGlass) blur(1.2px) saturate(1.1);
-    box-shadow:0 12px 32px rgba(0,0,0,.38), inset 0 1px 0 rgba(255,255,255,.06);}
-  #tabbar::before{background:linear-gradient(180deg,rgba(255,255,255,.03) 0%,rgba(255,255,255,.01) 55%,rgba(255,255,255,0) 100%);}
-}
+  background:linear-gradient(180deg,rgba(255,255,255,.03) 0%,rgba(255,255,255,.01) 55%,rgba(255,255,255,0) 100%);}
 .tabbtn{flex:1; position:relative; z-index:1; border:none; background:transparent; border-radius:26px; padding:7px 2px 6px; display:flex; flex-direction:column; align-items:center; gap:3px; font-size:10.5px; font-weight:800; letter-spacing:.01em; color:var(--ink2); cursor:pointer; min-height:52px; transition:color .3s ease; -webkit-tap-highlight-color:transparent;}
 .tabbtn svg{width:24px; height:24px; transition:transform .4s cubic-bezier(.3,1.35,.4,1);}
 .tabbtn span{transition:transform .3s ease;}
@@ -227,9 +222,8 @@ html.ddrag #app,html.ddrag #bg,html.ddrag #bgShade,html.ddrag #tabbar,html.ddrag
 .tabbtn[aria-selected="true"] svg{transform:scale(1.13);}
 /* 選択ハイライト: バーの中を滑るピル */
 .tab-ind{position:absolute; left:0; top:0; z-index:0; width:0; height:0; border-radius:26px; opacity:0; pointer-events:none;
-  background:rgba(120,120,128,.22);
+  background:rgba(255,255,255,.16);
   transition:transform .55s cubic-bezier(.32,.9,.25,1),width .55s cubic-bezier(.32,.9,.25,1),height .55s cubic-bezier(.32,.9,.25,1),opacity .3s ease,background-color .2s ease;}
-@media (prefers-color-scheme: dark){ .tab-ind{background:rgba(255,255,255,.16);} }
 .tab-ind.noanim{transition:none !important;}
 /* シャボン玉から通常ハイライトへの復帰専用の速いスライド */
 .tab-ind.snap{transition:transform .18s cubic-bezier(.32,.9,.25,1),width .18s cubic-bezier(.32,.9,.25,1),height .18s cubic-bezier(.32,.9,.25,1),opacity .15s ease,background-color .15s ease;}
@@ -237,15 +231,11 @@ html.ddrag #app,html.ddrag #bg,html.ddrag #bgShade,html.ddrag #tabbar,html.ddrag
 .tab-ind-in{position:absolute; inset:0; border-radius:26px; background:transparent; border:1.5px solid transparent;
   transition:transform .22s ease,background .22s ease,border-color .22s ease,box-shadow .22s ease;}
 /* シャボン玉: 拡大鏡（枠は最小限・内側は均一なごく薄い無彩色・一回り大きい） */
-.tab-ind.bubble .tab-ind-in{background:rgba(120,120,128,.06); border:1px solid rgba(60,60,67,.18);
-  box-shadow:inset 0 0 0 1px rgba(255,255,255,.08),inset 0 0 6px rgba(120,120,128,.07);
+.tab-ind.bubble .tab-ind-in{background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.16);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.04),inset 0 0 6px rgba(255,255,255,.03);
   transform:scale(1.14);
   -webkit-backdrop-filter:blur(1.5px) brightness(1.04) saturate(1.05);
   backdrop-filter:blur(1.5px) brightness(1.04) saturate(1.05);}
-@media (prefers-color-scheme: dark){
-  .tab-ind.bubble .tab-ind-in{background:rgba(255,255,255,.03); border-color:rgba(255,255,255,.16);
-    box-shadow:inset 0 0 0 1px rgba(255,255,255,.04),inset 0 0 6px rgba(255,255,255,.03);}
-}
 html.lens-ok .tab-ind.bubble .tab-ind-in{
   -webkit-backdrop-filter:blur(1.5px) brightness(1.04) saturate(1.05);
   backdrop-filter:url(#bubbleLens) brightness(1.03) saturate(1.04);}
@@ -253,19 +243,15 @@ html.lens-ok .tab-ind.bubble .tab-ind-in{
   box-shadow:inset 0 0 7px rgba(128,128,128,.16),inset 0 1px 2px rgba(255,255,255,.08),inset 0 -1px 2px rgba(0,0,0,.05); pointer-events:none;}
 html.lens-ok .tab-ind.bubble .tab-ind-in::after{box-shadow:inset 0 0 5px rgba(128,128,128,.08);}
 /* バブルの内側に入ったタブ: アイコンを明るく＋拡大 */
-.tabbtn.lens-in{color:var(--ink);}
-.tabbtn.lens-in svg{transform:scale(1.32);}
+.tabbtn.lens-in{color:#ffffff;}
+.tabbtn.lens-in svg{transform:scale(1.32); filter:brightness(1.3);}
 .tabbtn.lens-in span{transform:scale(1.18);}
-@media (prefers-color-scheme: dark){
-  .tabbtn.lens-in{color:#ffffff;}
-  .tabbtn.lens-in svg{filter:brightness(1.3);}
-}
 @media (prefers-reduced-motion: reduce){
   .tab-ind{transition:none;}
   .tabbtn,.tabbtn svg,.tab-ind-in{transition:none;}
 }
 .fab{
-  position:fixed; right:16px; bottom:calc(90px + env(safe-area-inset-bottom)); z-index:39;
+  position:fixed; right:16px; bottom:calc(82px + env(safe-area-inset-bottom)); z-index:39;
   width:54px; height:54px; border-radius:50%; background:#141416; color:#fff;
   border:1px solid rgba(255,255,255,.18); box-shadow:0 12px 26px rgba(0,0,0,.32);
   display:none; align-items:center; justify-content:center;
@@ -281,13 +267,15 @@ html.lens-ok .tab-ind.bubble .tab-ind-in::after{box-shadow:inset 0 0 5px rgba(12
   position:fixed; left:12px; top:calc(10px + env(safe-area-inset-top)); z-index:55;
   width:50px; height:50px; min-height:50px; border-radius:50%;
   display:flex; align-items:center; justify-content:center; color:#fff;
-  background:rgba(30,30,38,.24);
-  -webkit-backdrop-filter:blur(8px) saturate(1.2) brightness(1.02); backdrop-filter:blur(8px) saturate(1.2) brightness(1.02);
-  border:1px solid rgba(255,255,255,.20);
-  box-shadow:0 8px 18px rgba(0,0,0,.20), inset 0 1px 0 rgba(255,255,255,.12), inset 0 0 6px rgba(255,255,255,.02);
+  /* すりガラスは弱く: ぼかしと地の色をさらに下げ、後ろのヒーロー文字（NC3）が透けて見えるようにする。
+     輪郭は枠線と影で保ち、アイコンには落影を付けて判別できる状態を維持する */
+  background:rgba(30,30,38,.09);
+  -webkit-backdrop-filter:blur(2.5px) saturate(1.15) brightness(1.03); backdrop-filter:blur(2.5px) saturate(1.15) brightness(1.03);
+  border:1px solid rgba(255,255,255,.30);
+  box-shadow:0 6px 14px rgba(0,0,0,.14), inset 0 1px 0 rgba(255,255,255,.10);
   transition:transform .28s cubic-bezier(.32,.72,.24,1); transform:translateX(var(--push));
 }
-#menuBtn svg{width:25px; height:25px;}
+#menuBtn svg{width:25px; height:25px; filter:drop-shadow(0 1px 3px rgba(0,0,0,.5));}
 #menuBtn:active{transform:translateX(var(--push)) scale(.93);}
 
 /* ---------- drawer ---------- */
@@ -421,10 +409,52 @@ html.lens-ok .tab-ind.bubble .tab-ind-in::after{box-shadow:inset 0 0 5px rgba(12
 #confirmBox h2{font-size:16.5px; margin:0 0 6px;}
 #confirmBox p{font-size:13px; color:var(--ink2); margin:0 0 16px; line-height:1.55;}
 #toast{
-  position:fixed; left:50%; transform:translate(-50%,16px); bottom:calc(92px + env(safe-area-inset-bottom)); z-index:80;
+  position:fixed; left:50%; transform:translate(-50%,16px); bottom:calc(84px + env(safe-area-inset-bottom)); z-index:80;
   background:rgba(20,20,22,.88); color:#fff; font-size:13px; font-weight:600; padding:11px 16px; border-radius:999px;
   opacity:0; pointer-events:none; transition:all .25s; max-width:calc(100vw - 40px); text-align:center;
 }
 #toast.on{opacity:1; transform:translate(-50%,0);}
 .hiddenFile{display:none;}
-@media (min-width:760px){ .view{padding-top:calc(22px + env(safe-area-inset-top));} }
+@media (min-width:760px){ .view{padding-top:calc(38px + env(safe-area-inset-top));} }
+
+/* ---------- ライトテーマ（html[data-theme="light"]） ----------
+   既定（data-theme="dark"／属性なし）は従来のダークの見た目そのまま。
+   ライトでは面・文字・枠の変数を明色側へ差し替え、色が直書きされた面もここで上書きする。
+   背景画像は同じファイルのまま、#bg の brightness と #bgShade の白ベールで
+   「多少明るく」見せるだけにする（画像自体は差し替えない）。
+   ヒーローは写真＋濃色帯の構成のまま両テーマ共通とし、文字の可読性を保つ */
+html[data-theme="light"]{
+  --ink:#1a1b21; --ink2:rgba(26,27,33,.62); --ink3:rgba(26,27,33,.44);
+  --glass:rgba(252,252,253,.48); --glass2:rgba(252,252,253,.34);
+  --stroke:rgba(23,24,34,.17); --hair:rgba(23,24,34,.11);
+  --field:rgba(23,24,34,.05);
+  --onink:#f7f7f9;
+  --danger:#d92d20;
+  --scrim:rgba(24,26,36,.30);
+  --sheet:rgba(250,250,252,.62);
+  --drawer:rgba(248,248,250,.60);
+  color-scheme:light;
+}
+html[data-theme="light"],html[data-theme="light"] body{background:#e9ebef;}
+html[data-theme="light"] #bg{background-color:#dfe3e9; filter:brightness(1.28) saturate(1.05);}
+html[data-theme="light"] #bgShade{background:linear-gradient(180deg,rgba(250,251,252,.14),rgba(250,251,252,.30));}
+html[data-theme="light"] .glass{box-shadow:0 10px 26px rgba(31,36,52,.10), inset 0 1px 0 rgba(255,255,255,.55), inset 0 0 12px rgba(255,255,255,.22);}
+html[data-theme="light"] .odoInputRow input{border-color:rgba(23,24,34,.20); background:rgba(255,255,255,.42);}
+html[data-theme="light"] .odoInputRow input::placeholder{color:rgba(26,27,33,.36);}
+html[data-theme="light"] .odoInputRow input:focus{border-color:rgba(23,24,34,.45);}
+html[data-theme="light"] .gpsAddRow,html[data-theme="light"] .odoFoldHead{border-color:rgba(23,24,34,.13); background:rgba(255,255,255,.34);}
+html[data-theme="light"] .gaugeAddBtn{background:rgba(255,255,255,.38);}
+html[data-theme="light"] .gaugeCell:active{background:rgba(23,24,34,.05);}
+html[data-theme="light"] .dsecHead:active{background:rgba(23,24,34,.05);}
+html[data-theme="light"] .fab{background:#f7f7f9; color:#1a1b21; border-color:rgba(23,24,34,.14); box-shadow:0 12px 26px rgba(31,36,52,.18);}
+html[data-theme="light"] #tabbar{background:rgba(246,246,249,.26); border-color:rgba(255,255,255,.42);
+  -webkit-backdrop-filter:blur(10px) saturate(1.25) brightness(1.01);
+  backdrop-filter:blur(10px) saturate(1.25) brightness(1.01);
+  backdrop-filter:url(#tabGlass) blur(1.2px) saturate(1.2) brightness(1.01);
+  box-shadow:0 12px 30px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.20), inset 0 0 8px rgba(255,255,255,.03);}
+html[data-theme="light"] #tabbar::before{background:linear-gradient(180deg,rgba(255,255,255,.13) 0%,rgba(255,255,255,.05) 48%,rgba(255,255,255,.02) 100%);}
+html[data-theme="light"] .tab-ind{background:rgba(120,120,128,.22);}
+html[data-theme="light"] .tab-ind.bubble .tab-ind-in{background:rgba(120,120,128,.06); border-color:rgba(60,60,67,.18);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.08),inset 0 0 6px rgba(120,120,128,.07);}
+html[data-theme="light"] .tabbtn.lens-in{color:var(--ink);}
+html[data-theme="light"] .tabbtn.lens-in svg{filter:none;}

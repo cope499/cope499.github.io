@@ -30,7 +30,7 @@ var CIRC=301.6, JP={latMin:31,latMax:45.6,lngMin:129,lngMax:146};
 
 /* ================= state ================= */
 var S={
-  settings:{carName:"NCロードスター",odometer:0,odoSet:false,gpsAdd:true,heroKicker:"ROADSTER",heroModel:"NC3",heroBadge:"RS",heroYear:"2013",specChips:"後期 NC3,RS,ホワイト,黒幌",accent:"mono",bg:"car",hero:"car",mapTheme:"light",snapUrl:"",intervals:{},indicatorBase:{},shakenDate:""},
+  settings:{carName:"NCロードスター",odometer:0,odoSet:false,gpsAdd:true,heroKicker:"ROADSTER",heroModel:"NC3",heroBadge:"RS",heroYear:"2013",specChips:"後期 NC3,RS,ホワイト,黒幌",accent:"mono",bg:"car",hero:"car",theme:"dark",mapTheme:"dark",snapUrl:"",intervals:{},indicatorBase:{},shakenDate:""},
   customBg:null, customHero:null,
   maint:[], drives:[],
   tab:"home", drawerOpen:false, sheetOpen:null,
@@ -90,6 +90,13 @@ function heroModelHTML(m){
   return esc(String(m||""));
 }
 function applyTheme(){
+  /* アプリテーマ（ライト／ダーク）: 既定はダーク。html の data-theme で CSS 変数と各面の色を切り替える。
+     地図テーマはアプリテーマに連動させ、theme-color メタも合わせる */
+  var th=S.settings.theme==="light"?"light":"dark";
+  document.documentElement.setAttribute("data-theme",th);
+  S.settings.mapTheme=th;
+  var tcm=document.querySelector('meta[name="theme-color"]');
+  if(tcm)tcm.setAttribute("content",th==="light"?"#eceef1":"#0b0d16");
   document.documentElement.style.setProperty("--accent",accentHex());
   $("bg").style.backgroundImage="url('"+themeSrc("bg")+"')";
   $("heroImg").src=themeSrc("hero");
@@ -106,8 +113,8 @@ function applyTheme(){
   var ga=!!S.settings.gpsAdd;
   [$("tglGpsAdd"),$("tglGpsAddDrawer")].forEach(function(t){if(t){t.classList.toggle("on",ga);t.setAttribute("aria-checked",String(ga));}});
   $("mapBox").classList.toggle("dark",S.settings.mapTheme==="dark");
-  var seg=$("mapThemeSeg").children;
-  for(var i=0;i<seg.length;i++)seg[i].classList.toggle("sel",seg[i].getAttribute("data-mt")===S.settings.mapTheme);
+  var tseg=$("themeSeg");
+  if(tseg){var tch=tseg.children; for(var ti=0;ti<tch.length;ti++)tch[ti].classList.toggle("sel",tch[ti].getAttribute("data-th")===th);}
   var sw=$("accentSwatches").children;
   for(var j=0;j<sw.length;j++)sw[j].classList.toggle("sel",sw[j].getAttribute("data-ac")===S.settings.accent);
   markThumbSel("bgGrid",S.settings.bg); markThumbSel("heroGrid",S.settings.hero);
@@ -1320,9 +1327,9 @@ function wire(){
   [["setHeroKicker","heroKicker"],["setHeroModel","heroModel"],["setHeroBadge","heroBadge"],["setHeroYear","heroYear"],["setSpecChips","specChips"]].forEach(function(pair){
     $(pair[0]).addEventListener("change",function(){S.settings[pair[1]]=this.value.trim();saveSettings();applyTheme();});
   });
-  $("mapThemeSeg").querySelectorAll("button").forEach(function(b){
+  $("themeSeg").querySelectorAll("button").forEach(function(b){
     b.addEventListener("click",function(){
-      S.settings.mapTheme=b.getAttribute("data-mt"); saveSettings(); applyTheme(); refreshLeafBase(); drawFallbackMap();
+      S.settings.theme=b.getAttribute("data-th"); saveSettings(); applyTheme(); refreshLeafBase(); drawFallbackMap();
     });
   });
   $("setSnapUrl").addEventListener("change",function(){
@@ -1355,7 +1362,7 @@ function wire(){
     if(this.getAttribute("data-arm")){ 
       clearStore("maint");clearStore("drives");kvSet("settings",null);kvSet("customBg",null);kvSet("customHero",null);
       S.maint=[];S.drives=[];S.customBg=null;S.customHero=null;
-      S.settings={carName:"NCロードスター",odometer:0,odoSet:false,gpsAdd:true,heroKicker:"ROADSTER",heroModel:"NC3",heroBadge:"RS",heroYear:"2013",specChips:"後期 NC3,RS,ホワイト,黒幌",accent:"mono",bg:"car",hero:"car",mapTheme:"light",snapUrl:"",intervals:{},indicatorBase:{},shakenDate:""};
+      S.settings={carName:"NCロードスター",odometer:0,odoSet:false,gpsAdd:true,heroKicker:"ROADSTER",heroModel:"NC3",heroBadge:"RS",heroYear:"2013",specChips:"後期 NC3,RS,ホワイト,黒幌",accent:"mono",bg:"car",hero:"car",theme:"dark",mapTheme:"dark",snapUrl:"",intervals:{},indicatorBase:{},shakenDate:""};
       buildSettingsUI();applyTheme();renderHome();renderMaintList();renderDriveList();drawFallbackMap();
       this.removeAttribute("data-arm");this.textContent="すべてのデータを削除";toast("削除しました");
     }else{this.setAttribute("data-arm","1");this.textContent="もう一度押すと削除します";
@@ -1386,6 +1393,7 @@ function init(){
     if(!S.settings.intervals||typeof S.settings.intervals!=="object")S.settings.intervals={};
     if(!S.settings.indicatorBase||typeof S.settings.indicatorBase!=="object")S.settings.indicatorBase={};
     if(typeof S.settings.shakenDate!=="string")S.settings.shakenDate="";
+    if(S.settings.theme!=="light"&&S.settings.theme!=="dark")S.settings.theme="dark";
     if(S.settings.gpsAdd===undefined)S.settings.gpsAdd=true;
     if(r[0]&&r[0].odoSet===undefined&&S.settings.odometer>0)S.settings.odoSet=true;
     S.customBg=r[1]||null; S.customHero=r[2]||null;
