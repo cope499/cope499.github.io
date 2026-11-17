@@ -161,6 +161,11 @@ html.ddrag #app,html.ddrag #bg,html.ddrag #bgShade,html.ddrag #tabbar,html.ddrag
 .thumb{width:46px; height:46px; border-radius:12px; object-fit:cover; flex:none; background:rgba(128,128,128,.2);}
 .empty{padding:26px 16px; text-align:center; color:var(--ink2); font-size:13.5px;}
 .listCard{padding:0; overflow:hidden;}
+/* 背景に直置きだった見出し（最近／購入履歴／走行履歴）はカードの中へ移し、カード上部の見出し行として表示する。
+   見出しを背景の上に浮かせないことで、背景画像の明暗に左右されず読めるようにする */
+.cardSection{padding:0; overflow:hidden;}
+.cardSecTitle{margin:0; padding:14px 14px 10px; font-size:14px;}
+.listInner{padding:0; min-width:0;}
 
 /* ---------- history: distance chart + purchase list ---------- */
 .distCard{padding:16px;}
@@ -226,6 +231,9 @@ html[data-theme="light"] #distSeg button.sel:active{background:#000; color:#fff;
 .mapBox.dark .leaflet-control-attribution{color:rgba(205,205,212,.5); text-shadow:0 1px 2px rgba(0,0,0,.65);}
 .mapChip{position:absolute; left:10px; top:10px; z-index:3; font-size:11.5px; font-weight:600; padding:7px 11px; border-radius:999px; background:var(--glass); -webkit-backdrop-filter:blur(6px) saturate(1.2); backdrop-filter:blur(6px) saturate(1.2); border:1px solid var(--stroke); color:var(--ink);}
 .recPanel{padding:16px;}
+/* 待機中（記録開始ボタンだけの状態）ではカードの面を外し、ボタンだけを表示する。
+   記録中（状態行・数値行が出る状態）では従来どおりカードに戻る。切替は updateRecUI が .bare で行う */
+.recPanel.bare{background:transparent; border-color:transparent; box-shadow:none; -webkit-backdrop-filter:none; backdrop-filter:none; padding:0;}
 .recTop{display:flex; align-items:center; gap:10px;}
 .recDot{width:11px; height:11px; border-radius:50%; background:rgba(128,128,128,.55); flex:none;}
 .recDot.on{background:var(--accent); animation:pulse 1.3s ease-in-out infinite;}

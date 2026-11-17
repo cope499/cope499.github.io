@@ -30,7 +30,7 @@ var CIRC=301.6, JP={latMin:31,latMax:45.6,lngMin:129,lngMax:146};
 
 /* ================= state ================= */
 var S={
-  settings:{carName:"NCロードスター",odometer:0,odoSet:false,gpsAdd:true,heroKicker:"ROADSTER",heroModel:"NC3",heroBadge:"RS",heroYear:"2013",specChips:"後期 NC3,RS,ホワイト,黒幌",accent:"mono",bg:"car",hero:"car",theme:"dark",mapTheme:"dark",snapUrl:"",intervals:{},indicatorBase:{},shakenDate:""},
+  settings:{carName:"NCロードスター",odometer:0,odoSet:false,gpsAdd:true,autoRec:false,heroKicker:"ROADSTER",heroModel:"NC3",heroBadge:"RS",heroYear:"2013",specChips:"後期 NC3,RS,ホワイト,黒幌",accent:"mono",bg:"car",hero:"car",theme:"dark",mapTheme:"dark",snapUrl:"",intervals:{},indicatorBase:{},shakenDate:""},
   customBg:null, customHero:null,
   maint:[], drives:[], purchases:[],
   tab:"home", settingsPage:null, drawerOpen:false, sheetOpen:null,
@@ -138,6 +138,13 @@ function applyTheme(){
 }
 function markThumbSel(gridId,val){var g=$(gridId);if(!g)return;var b=g.children;for(var i=0;i<b.length;i++)b[i].classList.toggle("sel",b[i].getAttribute("data-v")===val);}
 function saveSettings(){return kvSet("settings",S.settings);}
+/* 自動記録開始トグル（設定「記録・データ」）: 既定はオフ。オンのときだけ起動時に startRec する */
+function syncAutoRecToggle(){
+  var t=$("tglAutoRec"); if(!t)return;
+  var on=!!S.settings.autoRec;
+  t.classList.toggle("on",on);
+  t.setAttribute("aria-pressed",String(on));
+}
 function buildThumbGrid(gridId,kind){
   var g=$(gridId); g.innerHTML="";
   THEMES.forEach(function(t){
@@ -175,6 +182,7 @@ function buildSettingsUI(){
   $("setHeroYear").value=S.settings.heroYear||"";
   $("setSpecChips").value=S.settings.specChips||"";
   $("setSnapUrl").value=S.settings.snapUrl||"";
+  syncAutoRecToggle();
   buildIntervalSettings();
 }
 /* ================= 交換間隔の設定 =================
@@ -610,15 +618,17 @@ document.addEventListener("touchmove",function(e){
 },{passive:false});
 document.addEventListener("contextmenu",function(e){if(!e.target.closest("input,textarea,select"))e.preventDefault();});
 
-/* 左端スワイプでドロワーを指追従開閉 + タブスワイプ
-   開く: 左端24px以内から始まる右向き横ドラッグだけが対象（縦スクロール・シート操作と競合させない）。
+/* 画面のどこからでも右スワイプでドロワーを指追従開閉 + タブスワイプ
+   開く: メイン画面では開始位置を問わず、右向きで横成分が縦成分を十分上回るドラッグが対象
+   （縦スクロール・シート操作と競合させないため、横が支配的な動きでのみ発火させる）。
    閉じる: 開いている間は画面の全域が対象。ドロワー内の入力欄・トグル類の上、タブバーの上、
    右に少し見えているメイン画面（ホーム／整備記録／走行どのタブでも、カードやボタンの上を含む）から
    始めても横ドラッグで閉じられる。除外は確認系ダイアログの上だけ。
    追跡は document の capture フェーズで受け、個別要素がタッチを飲んでも候補が消えないようにする。
    タップだけ（横移動なし）なら候補は有効化されず、入力フォーカスやボタンのタップは従来通り働く。
-   開始判定は最初の実移動イベントで即決する: 横成分が縦成分をわずかでも上回る（縦が横を大きく
-   上回らない）動きが見えた瞬間に追従を始め、明確に縦方向が主体のときだけ通常スクロールに任せる。
+   開始判定: 閉じる側は最初の実移動イベントで即決する（横成分が縦成分をわずかでも上回れば追従を始め、
+   明確に縦方向が主体のときだけ通常スクロールに任せる）。開く側は開始位置を問わない分、
+   横移動18px超かつ横が縦の1.6倍超のときだけ発火させ、縦スクロールとは競合させない。
    候補ができた touchstart の時点でドロワーの描画準備（プリレンダー＋レイアウト確定）を済ませ、
    活性化した最初のフレームから判定分も含めた指の実位置へ直接置くので、初動に待ちも追いつきも出ない。
    どちらも指に追従し、離した位置（と flick の向き）で全開／全閉へスナップする。 */
@@ -690,7 +700,10 @@ document.addEventListener("touchstart",function(e){
     drawerDrag={mode:"close",startX:tsX,startY:tsY,baseTx:0,tx:0,active:false,lastX:tsX,lastT:Date.now(),vx:0};
   }else{
     if(e.target.closest("input,textarea,select"))return;
-    if(tsX<=24&&!tsOnTab)drawerDrag={mode:"open",startX:tsX,startY:tsY,baseTx:-drawerTravel(),tx:-drawerTravel(),active:false,lastX:tsX,lastT:Date.now(),vx:0};
+    if(e.target.closest("#dialogWrap,#confirmWrap"))return;
+    /* メイン画面では開始位置を問わない: どこから始めても候補にする（タブバーの上だけはタブ操作専用）。
+       実際に開くかどうかは touchmove 側で「横が縦を十分上回る」場合にだけ決める */
+    if(!tsOnTab)drawerDrag={mode:"open",startX:tsX,startY:tsY,baseTx:-drawerTravel(),tx:-drawerTravel(),active:false,lastX:tsX,lastT:Date.now(),vx:0};
   }
   /* 候補ができたら指が動き出す前に描画準備を済ませる（初動対策） */
   if(drawerDrag)prepDrawerDrag();
@@ -701,11 +714,21 @@ document.addEventListener("touchmove",function(e){
   var dx=t.clientX-drawerDrag.startX, dy=t.clientY-drawerDrag.startY;
   if(!drawerDrag.active){
     var adx=Math.abs(dx), ady=Math.abs(dy);
-    if(adx===0&&ady===0)return; /* まだ指が動いていないときだけ待つ。最初の実移動イベントで即決し、数イベント様子を見る待ちは入れない */
-    if(ady>adx*1.15){drawerDrag=null;clearDrawerPrep();return;} /* 明確に縦方向が主のときだけ通常スクロールに任せる。横が縦を少しでも上回れば横ドラッグと判定し、斜め気味でも縦が横を大きく上回らなければ追従を始める */
-    if(drawerDrag.mode==="open"&&dx<=0){drawerDrag=null;clearDrawerPrep();return;}
-    /* 閉じる側は左右どちらの横動きでも追従を開始する（右向きは全開位置でクランプされる） */
-    activateDrawerDrag(dx);
+    if(drawerDrag.mode==="open"){
+      /* 開く側は画面のどこからでも始まるため、縦スクロールと競合させないよう厳しめに判定する:
+         縦が横に近い／上回る動きは早めに通常スクロールへ渡し、発火は右向きで
+         横移動が18pxを超え、かつ横が縦の1.6倍を上回るときだけにする */
+      if(adx<4&&ady<4)return;
+      if(ady>=10&&ady>adx*0.9){drawerDrag=null;clearDrawerPrep();return;}
+      if(dx<=0){if(adx>=10){drawerDrag=null;clearDrawerPrep();}return;}
+      if(adx<18||adx<ady*1.6)return;
+      activateDrawerDrag(dx);
+    }else{
+      if(adx===0&&ady===0)return; /* まだ指が動いていないときだけ待つ。最初の実移動イベントで即決し、数イベント様子を見る待ちは入れない */
+      if(ady>adx*1.15){drawerDrag=null;clearDrawerPrep();return;} /* 明確に縦方向が主のときだけ通常スクロールに任せる。横が縦を少しでも上回れば横ドラッグと判定し、斜め気味でも縦が横を大きく上回らなければ追従を始める */
+      /* 閉じる側は左右どちらの横動きでも追従を開始する（右向きは全開位置でクランプされる） */
+      activateDrawerDrag(dx);
+    }
   }
   if(!drawerDrag||!drawerDrag.active)return;
   e.preventDefault();
@@ -1163,6 +1186,8 @@ function updateRecUI(){
   $("recBtnsIdle").style.display=S.rec.active?"none":"flex";
   $("recBtnsRun").style.display=S.rec.active?"flex":"none";
   $("recNote").classList.toggle("on",S.rec.active);
+  /* 待機中は記録開始ボタンだけになるので、囲むカードを外してボタンだけの表示にする */
+  var rp=$("recPanel"); if(rp)rp.classList.toggle("bare",!S.rec.active);
 }
 function persistRec(finished){
   var rec={id:S.rec.id,startedAt:S.rec.startedAt0,endedAt:finished?Date.now():null,
@@ -1637,6 +1662,11 @@ function wire(){
       S.settings.theme=b.getAttribute("data-th"); saveSettings(); applyTheme(); refreshLeafBase(); refreshTrackWeights(); drawFallbackMap();
     });
   });
+  $("tglAutoRec").addEventListener("click",function(){
+    S.settings.autoRec=!S.settings.autoRec;
+    saveSettings(); syncAutoRecToggle();
+    toast(S.settings.autoRec?"自動で記録開始をオンにしました":"自動で記録開始をオフにしました");
+  });
   $("setSnapUrl").addEventListener("change",function(){
     S.settings.snapUrl=this.value.trim(); saveSettings();
     snapCache={}; snapState={};
@@ -1667,7 +1697,7 @@ function wire(){
     if(this.getAttribute("data-arm")){ 
       clearStore("maint");clearStore("drives");clearStore("purchases");kvSet("settings",null);kvSet("customBg",null);kvSet("customHero",null);
       S.maint=[];S.drives=[];S.purchases=[];S.customBg=null;S.customHero=null;
-      S.settings={carName:"NCロードスター",odometer:0,odoSet:false,gpsAdd:true,heroKicker:"ROADSTER",heroModel:"NC3",heroBadge:"RS",heroYear:"2013",specChips:"後期 NC3,RS,ホワイト,黒幌",accent:"mono",bg:"car",hero:"car",theme:"dark",mapTheme:"dark",snapUrl:"",intervals:{},indicatorBase:{},shakenDate:""};
+      S.settings={carName:"NCロードスター",odometer:0,odoSet:false,gpsAdd:true,autoRec:false,heroKicker:"ROADSTER",heroModel:"NC3",heroBadge:"RS",heroYear:"2013",specChips:"後期 NC3,RS,ホワイト,黒幌",accent:"mono",bg:"car",hero:"car",theme:"dark",mapTheme:"dark",snapUrl:"",intervals:{},indicatorBase:{},shakenDate:""};
       buildSettingsUI();applyTheme();renderHome();renderMaintList();renderDriveList();drawFallbackMap();
       this.removeAttribute("data-arm");this.textContent="すべてのデータを削除";toast("削除しました");
     }else{this.setAttribute("data-arm","1");this.textContent="もう一度押すと削除します";
@@ -1700,6 +1730,7 @@ function init(){
     if(typeof S.settings.shakenDate!=="string")S.settings.shakenDate="";
     if(S.settings.theme!=="light"&&S.settings.theme!=="dark")S.settings.theme="dark";
     S.settings.gpsAdd=true; /* GPS加算は常時オン固定。旧設定でオフになっていても常に加算する */
+    if(typeof S.settings.autoRec!=="boolean")S.settings.autoRec=false; /* 自動記録開始は既定オフ。未保存ならオフとして扱う */
     if(r[0]&&r[0].odoSet===undefined&&S.settings.odometer>0)S.settings.odoSet=true;
     S.customBg=r[1]||null; S.customHero=r[2]||null;
     S.maint=r[3]||[]; S.drives=r[4]||[]; S.purchases=r[5]||[];
@@ -1713,6 +1744,9 @@ function init(){
       $("dlgText").textContent=fmtDateTime(pending.startedAt)+" 開始 ・ "+fmtKm(pending.distance||0)+" の走行が未完了です。";
       $("dialogWrap").classList.add("on");
     }
+    /* 設定「アプリを開いたら自動で記録開始」がオンのときだけ、起動時に記録を開始する（既定オフ）。
+       未完了走行の確認ダイアログが出ているときは自動開始しない */
+    if(S.settings.autoRec&&!pending&&!S.rec.active)startRec();
   });
 }
 document.addEventListener("DOMContentLoaded",init);

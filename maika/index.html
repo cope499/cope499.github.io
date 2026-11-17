@@ -12,8 +12,8 @@
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="apple-mobile-web-app-title" content="マイカー管理" />
-<meta name="application-name" content="マイカー管理" />
+<meta name="apple-mobile-web-app-title" content="MOTIVE" />
+<meta name="application-name" content="MOTIVE" />
 <link rel="manifest" href="assets/manifest.webmanifest" />
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
 <link rel="apple-touch-startup-image" href="assets/startup-1206x2622.png" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
@@ -28,7 +28,7 @@
 <link rel="apple-touch-startup-image" href="assets/startup-750x1334.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
 <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png" />
 <link rel="icon" href="data:," />
-<title>マイカー管理</title>
+<title>MOTIVE</title>
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
@@ -84,9 +84,9 @@
           <div class="stat"><b id="statMaint">0</b><span>整備</span></div>
         </div>
 
-        <div>
-          <div class="secTitle">最近</div>
-          <div class="glass listCard" id="recentBox" style="margin-top:8px;"></div>
+        <div class="glass cardSection">
+          <div class="secTitle cardSecTitle">最近</div>
+          <div class="listInner" id="recentBox"></div>
         </div>
       </div>
     </section>
@@ -111,9 +111,9 @@
           <div id="distChart"></div>
           <div class="distTotal" id="distTotal"></div>
         </div>
-        <div>
-          <div class="secTitle" style="margin-top:4px;">購入履歴</div>
-          <div class="glass listCard" id="purchaseList" style="margin-top:8px;"></div>
+        <div class="glass cardSection">
+          <div class="secTitle cardSecTitle">購入履歴</div>
+          <div class="listInner" id="purchaseList"></div>
         </div>
       </div>
     </section>
@@ -126,7 +126,7 @@
           <div id="leafMap"></div>
           <div class="mapChip" id="mapChip">軌跡プレビュー</div>
         </div>
-        <div class="glass recPanel">
+        <div class="glass recPanel bare" id="recPanel">
           <div class="recTop" id="recTop" style="display:none;">
             <span class="recDot" id="recDot"></span>
             <span class="recState" id="recState">記録中</span>
@@ -146,9 +146,9 @@
           </div>
           <div class="recNote" id="recNote">記録中はこの画面を開いたままにしてください。</div>
         </div>
-        <div>
-          <div class="secTitle">走行履歴</div>
-          <div class="glass listCard" id="driveList" style="margin-top:8px;"></div>
+        <div class="glass cardSection">
+          <div class="secTitle cardSecTitle">走行履歴</div>
+          <div class="listInner" id="driveList"></div>
         </div>
       </div>
     </section>
@@ -205,6 +205,11 @@
         </div>
 
         <div class="settingsPage" id="spage-record">
+          <div class="glass ssec">
+            <h3>走行記録</h3>
+            <div class="toggleRow"><span>アプリを開いたら自動で記録開始</span><button type="button" class="tgl" id="tglAutoRec" aria-label="アプリを開いたら自動で記録開始" aria-pressed="false"></button></div>
+            <div class="recNote on">オンにすると、アプリを開いたときに走行のGPS記録を自動で開始します。既定はオフです。</div>
+          </div>
           <div class="glass ssec">
             <h3>軌跡の吸着（Valhalla）</h3>
             <div class="field"><label>吸着サーバーURL</label><input id="setSnapUrl" type="url" inputmode="url" autocomplete="off" placeholder="http://example:8002" /></div>
