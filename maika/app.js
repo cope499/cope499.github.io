@@ -30,7 +30,7 @@ var CIRC=301.6, JP={latMin:31,latMax:45.6,lngMin:129,lngMax:146};
 
 /* ================= state ================= */
 var S={
-  settings:{carName:"NCロードスター",odometer:0,odoSet:false,gpsAdd:true,autoRec:false,heroKicker:"ROADSTER",heroModel:"NC3",heroBadge:"RS",heroYear:"2013",specChips:"後期 NC3,RS,ホワイト,黒幌",accent:"mono",bg:"car",hero:"car",theme:"dark",mapTheme:"dark",snapUrl:"",intervals:{},indicatorBase:{},shakenDate:""},
+  settings:{carName:"",odometer:0,odoSet:false,gpsAdd:true,autoRec:false,heroKicker:"",heroModel:"",heroBadge:"",heroYear:"",specChips:"",accent:"mono",bg:"car",hero:"car",theme:"dark",mapTheme:"dark",snapUrl:"",intervals:{},indicatorBase:{},shakenDate:""},
   customBg:null, customHero:null,
   maint:[], drives:[], purchases:[],
   tab:"home", settingsPage:null, drawerOpen:false, sheetOpen:null,
@@ -124,7 +124,7 @@ function applyTheme(){
   $("heroKicker").textContent=hk; $("heroKicker").style.display=hk?"":"none";
   var hm=String(S.settings.heroModel||"");
   $("heroModel").innerHTML=heroModelHTML(hm); $("heroModel").style.display=hm?"":"none";
-  /* ヒーロー右上のRSバッジは撤去済み（設定項目 heroBadge 自体は残す） */
+  /* ヒーロー右上のグレードバッジは撤去済み（設定項目 heroBadge 自体は残す） */
   $("heroYear").textContent=S.settings.heroYear||"";
   var specs=String(S.settings.specChips||"").split(/[,、]/).map(function(s){return s.trim();}).filter(Boolean);
   $("specChips").textContent=specs.join(" / ");
@@ -1753,7 +1753,7 @@ function wire(){
     if(this.getAttribute("data-arm")){ 
       clearStore("maint");clearStore("drives");clearStore("purchases");kvSet("settings",null);kvSet("customBg",null);kvSet("customHero",null);
       S.maint=[];S.drives=[];S.purchases=[];S.customBg=null;S.customHero=null;
-      S.settings={carName:"NCロードスター",odometer:0,odoSet:false,gpsAdd:true,autoRec:false,heroKicker:"ROADSTER",heroModel:"NC3",heroBadge:"RS",heroYear:"2013",specChips:"後期 NC3,RS,ホワイト,黒幌",accent:"mono",bg:"car",hero:"car",theme:"dark",mapTheme:"dark",snapUrl:"",intervals:{},indicatorBase:{},shakenDate:""};
+      S.settings={carName:"",odometer:0,odoSet:false,gpsAdd:true,autoRec:false,heroKicker:"",heroModel:"",heroBadge:"",heroYear:"",specChips:"",accent:"mono",bg:"car",hero:"car",theme:"dark",mapTheme:"dark",snapUrl:"",intervals:{},indicatorBase:{},shakenDate:""};
       buildSettingsUI();applyTheme();renderHome();renderMaintList();renderDriveList();drawFallbackMap();
       this.removeAttribute("data-arm");this.textContent="すべてのデータを削除";toast("削除しました");
     }else{this.setAttribute("data-arm","1");this.textContent="もう一度押すと削除します";
