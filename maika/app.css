@@ -170,14 +170,19 @@ html.ddrag #app,html.ddrag #bg,html.ddrag #bgShade,html.ddrag #tabbar,html.ddrag
 /* ---------- history: distance chart + purchase list ---------- */
 .distCard{padding:16px;}
 .distCard .seg{margin-top:12px;}
+/* 走行距離グラフ: 基準の選択UIは置かず、グラフ自体を横スクロールして過去を見る。
+   表示域の高さは表示種別（日／週／月／年）によらず固定し、種別を切り替えても
+   カードの大きさが変わらないようにする */
 #distChart{margin-top:14px;}
-#distChart svg{display:block; width:100%; height:auto;}
+#distChart .distScroll{overflow-x:auto; overflow-y:hidden; height:148px; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; touch-action:pan-x pan-y; scrollbar-width:none; -ms-overflow-style:none;}
+#distChart .distScroll::-webkit-scrollbar{display:none; width:0; height:0;}
+#distChart svg{display:block; height:148px;}
 .chBar{fill:var(--accent);}
 .chBar.past{opacity:.42;}
 .chBase{stroke:var(--hair); stroke-width:1;}
 .chVal{font-size:9.5px; fill:var(--ink2); text-anchor:middle; font-variant-numeric:tabular-nums;}
 .chLab{font-size:9.5px; fill:var(--ink2); text-anchor:middle;}
-.distTotal{margin-top:10px; font-size:12.5px; color:var(--ink2); text-align:right; font-variant-numeric:tabular-nums;}
+.distTotal{margin-top:10px; min-height:19px; font-size:12.5px; line-height:1.5; color:var(--ink2); text-align:right; font-variant-numeric:tabular-nums;}
 .buyTag{display:inline-block; font-size:10.5px; font-weight:700; color:var(--ink2); border:1px solid var(--hair); border-radius:999px; padding:1px 7px; margin-left:7px; vertical-align:2px;}
 /* 履歴タブのセグメント（グラフ期間／交換・購入切替）: 薄く見えないよう輪郭とコントラストを強める。
    ダークでは濃い地＋明るい枠に白ピル（濃色文字）、ライトでは白地＋濃い枠に黒ピル（白文字）で、
@@ -198,16 +203,7 @@ html[data-theme="light"] #distSeg button.sel:active{background:#000; color:#fff;
 @media (hover:hover) and (pointer:fine){
   html[data-theme="light"] #distSeg button:not(.sel):hover{background:rgba(23,24,34,.12); color:#1a1b21;}
 }
-/* グラフの基準選択（日=カレンダー／月=ドロップダウン）: iOS風の入力面 */
-.distPick{display:flex; align-items:center; gap:8px; margin-top:10px;}
-.distPickLabel{font-size:12.5px; font-weight:700; color:var(--ink2); flex:none;}
-.distPick input[type="date"],.distPick select{flex:1; min-width:0; min-height:42px; border-radius:12px; border:1px solid var(--stroke); background:var(--field); padding:8px 12px; font-size:15px; color:var(--ink); outline:none; font-variant-numeric:tabular-nums;}
-.distPick input[type="date"]{-webkit-appearance:none; appearance:none; text-align:left;}
-.distPick input[type="date"]::-webkit-date-and-time-value{text-align:left; margin:0;}
-.distPick input[type="date"]::-webkit-calendar-picker-indicator{margin-left:auto; flex:none;}
-.distPick input[type="date"]:focus,.distPick select:focus{border-color:var(--accent);}
-.distResetBtn{flex:none; min-height:42px; padding:0 14px; border-radius:999px; border:1px solid var(--stroke); background:var(--glass); font-size:13px; font-weight:700; color:var(--ink); -webkit-backdrop-filter:blur(6px) saturate(1.2); backdrop-filter:blur(6px) saturate(1.2);}
-.distResetBtn:active{opacity:.75;}
+
 
 /* ---------- drive / map ---------- */
 .mapBox{position:relative; height:44dvh; min-height:280px; border-radius:22px; overflow:hidden; border:1px solid var(--stroke); box-shadow:0 10px 30px rgba(0,0,0,.16); background:#e8ebee;}
@@ -311,8 +307,12 @@ html.lens-ok .tab-ind.bubble .tab-ind-in::after{box-shadow:inset 0 0 5px rgba(12
 }
 .fab{
   position:fixed; right:16px; bottom:calc(82px + env(safe-area-inset-bottom)); z-index:39;
-  width:54px; height:54px; border-radius:50%; background:#141416; color:#fff;
-  border:1px solid rgba(255,255,255,.18); box-shadow:0 12px 26px rgba(0,0,0,.32);
+  width:54px; height:54px; border-radius:50%; color:var(--ink);
+  /* 購入履歴の追加ボタンも他の面と同じすりガラス半透明にする: 地色は --glass、ぼかし 10px */
+  background:var(--glass);
+  -webkit-backdrop-filter:blur(10px) saturate(1.25) brightness(1.02); backdrop-filter:blur(10px) saturate(1.25) brightness(1.02);
+  border:1px solid var(--stroke);
+  box-shadow:0 10px 26px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.10), inset 0 0 12px rgba(255,255,255,.02);
   display:none; align-items:center; justify-content:center;
   transition:transform .28s cubic-bezier(.32,.72,.24,1); transform:translateX(var(--push));
 }
@@ -445,7 +445,10 @@ html[data-theme="light"] .dNavBtn:active{background:rgba(23,24,34,.11);}
 .dNavBtn .dIco svg{width:23px; height:23px;}
 
 /* ---------- 設定ページ（メイン画面に出る。背景はドロワーと同じ地色） ---------- */
-#view-settings{background:var(--drawer); -webkit-backdrop-filter:blur(12px) saturate(1.25) brightness(1.02); backdrop-filter:blur(12px) saturate(1.25) brightness(1.02);}
+#view-settings{background:var(--drawer); -webkit-backdrop-filter:blur(12px) saturate(1.25) brightness(1.02); backdrop-filter:blur(12px) saturate(1.25) brightness(1.02); will-change:transform;}
+/* 設定ページの右スワイプ戻り: ドラッグ中／スナップアニメーション中は CSS transition を
+   止め、JS（rAF）が指の位置・イージングに合わせて transform を直接書く */
+html.settings-drag #view-settings{transition:none !important;}
 .settingsHead{display:flex; align-items:center; gap:12px;}
 /* 戻るボタン: 左上のサイドバーを開く丸ボタン（#menuBtn）と同一のすりガラス仕様・同一サイズ。
    地色・枠・影・ぼかしは #menuBtn と揃え、テーマ変数（--glass / --stroke）でダーク／ライトに連動する */
@@ -562,7 +565,7 @@ html[data-theme="light"] .odoFoldHead{border-color:rgba(23,24,34,.13); backgroun
 html[data-theme="light"] .gaugeAddBtn{background:rgba(255,255,255,.38);}
 html[data-theme="light"] .gaugeCell:active{background:rgba(23,24,34,.05);}
 html[data-theme="light"] .dsecHead:active{background:rgba(23,24,34,.05);}
-html[data-theme="light"] .fab{background:#f7f7f9; color:#1a1b21; border-color:rgba(23,24,34,.14); box-shadow:0 12px 26px rgba(31,36,52,.18);}
+html[data-theme="light"] .fab{background:var(--glass); color:var(--ink); border-color:var(--stroke); box-shadow:0 10px 26px rgba(31,36,52,.10), inset 0 1px 0 rgba(255,255,255,.55), inset 0 0 12px rgba(255,255,255,.22);}
 html[data-theme="light"] #tabbar{background:rgba(246,246,249,.36); border-color:rgba(255,255,255,.42);
   -webkit-backdrop-filter:blur(10px) saturate(1.25) brightness(1.01);
   backdrop-filter:blur(10px) saturate(1.25) brightness(1.01);

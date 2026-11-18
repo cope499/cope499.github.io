@@ -58,13 +58,13 @@
         </div>
 
         <div class="glass odoCard">
-          <div class="odoLabel">現在のオドメーター</div>
+          <div class="odoLabel">走行距離</div>
           <div class="odoBig"><b id="odoVal">—</b><span>km</span></div>
           <div class="odoState" id="odoState">未入力</div>
-          <button class="odoFoldHead" id="btnOdoFold" aria-expanded="false"><span>手入力で更新</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+          <button class="odoFoldHead" id="btnOdoFold" aria-expanded="false"><span>手動で入力</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
           <div class="odoFoldBody" id="odoFoldBody">
             <div class="odoInputRow">
-              <input id="odoQuickInput" type="number" inputmode="numeric" min="0" placeholder="現在の走行距離を入力" aria-label="オドメーター手入力" />
+              <input id="odoQuickInput" type="number" inputmode="numeric" min="0" placeholder="走行距離を入力" aria-label="走行距離を手動で入力" />
               <button class="odoUpdateBtn" id="btnOdoQuick">更新</button>
             </div>
           </div>
@@ -101,12 +101,6 @@
             <button type="button" data-p="week">週</button>
             <button type="button" data-p="month">月</button>
             <button type="button" data-p="year">年</button>
-          </div>
-          <div class="distPick" id="distPickRow" style="display:none;">
-            <span class="distPickLabel" id="distPickLabel">基準日</span>
-            <input type="date" id="distDateInput" aria-label="グラフの基準日を選択" />
-            <select id="distMonthSelect" aria-label="グラフの基準月を選択" style="display:none;"></select>
-            <button type="button" class="distResetBtn" id="distResetBtn" style="display:none;">最新に戻す</button>
           </div>
           <div id="distChart"></div>
           <div class="distTotal" id="distTotal"></div>
@@ -170,7 +164,7 @@
             <div class="field"><label>年式</label><input id="setHeroYear" type="text" placeholder="2013" /></div>
             <div class="field"><label>スペック（カンマ区切り）</label><input id="setSpecChips" type="text" placeholder="後期 NC3,RS,ホワイト,黒幌" /></div>
             <div class="field"><label>キッカー文字</label><input id="setHeroKicker" type="text" placeholder="ROADSTER" /></div>
-            <div class="field"><label>オドメーター（km）</label><input id="setOdo" type="number" inputmode="numeric" min="0" /></div>
+            <div class="field"><label>走行距離（km）</label><input id="setOdo" type="number" inputmode="numeric" min="0" /></div>
           </div>
           <div class="glass ssec">
             <h3>交換間隔</h3>
@@ -196,7 +190,7 @@
           <div class="glass ssec">
             <h3>デバッグ</h3>
             <div class="field"><label>今日走った距離（km）</label><input id="setDebugKm" type="number" inputmode="decimal" min="0" step="0.1" placeholder="例）32.5" /></div>
-            <div class="recBtns" style="margin-top:10px;"><button class="btn small" id="btnDebugAdd" style="flex:1;">オドメーターに加算</button></div>
+            <div class="recBtns" style="margin-top:10px;"><button class="btn small" id="btnDebugAdd" style="flex:1;">走行距離に加算</button></div>
           </div>
         </div>
 
@@ -230,8 +224,8 @@
             <div class="guideText">「ドライブ」タブで <b>記録開始</b> を押すとGPS記録が始まります。走り終わったら <b>終了して保存</b> で履歴に残ります。記録中はこの画面を開いたままにしてください。保存した走行は履歴から軌跡を地図で確認でき、走った距離は「履歴」タブの日別グラフにも自動で入ります。途中でアプリが閉じてしまった場合も、そこまで保存された距離はその日の分としてグラフに集計されます。</div>
           </div>
           <div class="glass ssec">
-            <h3>オドメーター</h3>
-            <div class="guideText">走行を保存すると、GPSで測った距離がオドメーターに加算されます。GPSの計測には誤差があるため、実際のメーターとズレることがあります。ズレていた場合は、ホームの <b>手入力で更新</b> から正しい距離を入力して修正できます。</div>
+            <h3>走行距離</h3>
+            <div class="guideText">走行を保存すると、GPSで測った距離が走行距離に加算されます。GPSの計測には誤差があるため、実際のメーターとズレることがあります。ズレていた場合は、ホームの <b>手動で入力</b> から正しい距離を入力して修正できます。</div>
           </div>
           <div class="glass ssec">
             <h3>整備インジケーター</h3>
@@ -239,7 +233,7 @@
           </div>
           <div class="glass ssec">
             <h3>履歴と購入の記録</h3>
-            <div class="guideText">「履歴」タブの上部には、走行記録から集計した走行距離のグラフが日／週／月／年で切り替えて表示されます。日はカレンダーで基準日を、月はドロップダウンで基準月を選べます。その下の <b>購入履歴</b> には、買ったものと交換で購入したものが時系列で一緒に並びます。右下の＋ボタンからは、買ったものを自由に入力して購入記録として登録できます（購入の登録ではインジケーターはリセットされません）。交換だけを整備の項目で見たいときは、メニューの <b>交換履歴</b> から一覧を開けます。一覧の項目をタップすると編集・削除ができます。</div>
+            <div class="guideText">「履歴」タブの上部には、走行記録から集計した走行距離のグラフが日／週／月／年で切り替えて表示されます。グラフは横にスクロールでき、過去の分もそのまま遡って見られます。その下の <b>購入履歴</b> には、買ったものと交換で購入したものが時系列で一緒に並びます。右下の＋ボタンからは、買ったものを自由に入力して購入記録として登録できます（購入の登録ではインジケーターはリセットされません）。交換だけを整備の項目で見たいときは、メニューの <b>交換履歴</b> から一覧を開けます。一覧の項目をタップすると編集・削除ができます。</div>
           </div>
           <div class="glass ssec">
             <h3>見た目と車両情報</h3>
@@ -306,10 +300,10 @@
 <!-- odometer sheet -->
 <div class="sheetWrap" id="sheetOdo"><div class="bk"></div><div class="sheet">
   <div class="grab"></div>
-  <div class="shead"><b>オドメーター</b><button data-close>閉じる</button></div>
+  <div class="shead"><b>走行距離</b><button data-close>閉じる</button></div>
   <div class="sheetScroll">
-    <div class="field"><label>現在の走行距離（km）</label><input id="odoInput" type="number" inputmode="numeric" min="0" /></div>
-    <div class="recNote on">走行を保存すると、GPSで測った距離がオドメーターに加算されます。</div>
+    <div class="field"><label>走行距離（km）</label><input id="odoInput" type="number" inputmode="numeric" min="0" /></div>
+    <div class="recNote on">走行を保存すると、GPSで測った距離が走行距離に加算されます。</div>
     <div class="sheetBtns"><button class="btn primary" id="btnOdoSave">保存</button></div>
   </div>
 </div></div>

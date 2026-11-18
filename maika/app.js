@@ -34,7 +34,7 @@ var S={
   customBg:null, customHero:null,
   maint:[], drives:[], purchases:[],
   tab:"home", settingsPage:null, drawerOpen:false, sheetOpen:null,
-  editingMaint:null, editingDrive:null, editingPurchase:null, distPeriod:"day", distAnchorDate:"", distAnchorMonth:"", drivePhotoDraft:undefined, maintSnap:"", indicatorTarget:null, maintFromIndicator:false,
+  editingMaint:null, editingDrive:null, editingPurchase:null, distPeriod:"day", drivePhotoDraft:undefined, maintSnap:"", indicatorTarget:null, maintFromIndicator:false,
   rec:{active:false,id:null,watchId:null,startedAt:0,elapsedBase:0,timer:null,sections:[],distance:0,points:0,forceNew:true,lastSave:0,wakeLock:null,lastPosAt:0}
 };
 function $(id){return document.getElementById(id);}
@@ -243,7 +243,7 @@ function openSettingsPage(page){
   document.documentElement.classList.add("settings-open");
   closeDrawer();
   ["home","maint","drive"].forEach(function(t){$("view-"+t).classList.remove("on");});
-  var sv=$("view-settings"); if(sv){sv.classList.add("on"); sv.scrollTop=0;}
+  var sv=$("view-settings"); if(sv){sv.classList.add("on"); sv.scrollTop=0; sv.style.transform="";}
   Object.keys(SETTINGS_PAGES).forEach(function(k){
     var el=$("spage-"+k); if(el)el.classList.toggle("on",k===page);
   });
@@ -254,7 +254,8 @@ function openSettingsPage(page){
 function closeSettingsPage(){
   S.settingsPage=null;
   document.documentElement.classList.remove("settings-open");
-  var sv=$("view-settings"); if(sv)sv.classList.remove("on");
+  document.documentElement.classList.remove("settings-drag");
+  var sv=$("view-settings"); if(sv){sv.classList.remove("on"); sv.style.transform="";}
 }
 /* 「＋」（購入を記録）ボタンは、購入履歴が常時表示される履歴タブでは常に出す。
    他タブ・設定ページ表示中は出さない */
@@ -661,6 +662,79 @@ function setDrawerDragPos(tx){
   drawerDrag.tx=tx;
   applyDrawerTx(tx);
 }
+/* ===== 設定ページの右スワイプ戻り（指追従） =====
+   設定ページ表示中、右向きの横ドラッグで設定ページ自体が指に追従して右へ滑り、
+   下に元のタブ画面が見える。離した位置と flick の向きで、最後まで滑って戻るか
+   その場へスナップバックするかを決める。アニメーションはドロワーと同じ
+   bezEase を rAF で回し、指を離した位置から滑らかに続ける */
+var settingsDrag=null, settingsAnim=null;
+function settingsRevealUnderlying(){
+  var v=$("view-"+(S.tab||"home")); if(v)v.classList.add("on");
+}
+function settingsHideUnderlying(){
+  /* スナップバックで設定ページに戻ったときだけ、下に見せていた元のタブを畳む */
+  var v=$("view-"+(S.tab||"home")); if(v)v.classList.remove("on");
+}
+function setSettingsTx(dx){
+  var sv=$("view-settings"); if(!sv)return;
+  dx=Math.max(0,Math.min(window.innerWidth||360,dx));
+  if(settingsDrag)settingsDrag.tx=dx;
+  sv.style.transform="translateX("+dx+"px)";
+}
+function finishSettingsAnim(goBack){
+  var sv=$("view-settings"); if(!sv)return;
+  document.documentElement.classList.remove("settings-drag");
+  sv.style.transform="";
+  if(goBack){switchTab(S.tab||"home");}
+  else{settingsHideUnderlying();}
+}
+function animateSettingsTo(goBack,fromDx){
+  var sv=$("view-settings"); if(!sv)return;
+  if(settingsAnim)cancelAnimationFrame(settingsAnim.raf);
+  var W=window.innerWidth||360;
+  var target=goBack?W:0;
+  var from=(typeof fromDx==="number")?fromDx:0;
+  var reduced=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if(reduced){settingsAnim=null;finishSettingsAnim(goBack);return;}
+  document.documentElement.classList.add("settings-drag");
+  var dur=Math.max(110,Math.min(300,Math.round(300*Math.abs(target-from)/W)));
+  var t0=performance.now();
+  sv.style.transform="translateX("+from+"px)";
+  function frame(now){
+    var t=Math.min(1,(now-t0)/dur), e=bezEase(t);
+    sv.style.transform="translateX("+(from+(target-from)*e)+"px)";
+    if(t<1){settingsAnim={raf:requestAnimationFrame(frame)};}
+    else{settingsAnim=null;finishSettingsAnim(goBack);}
+  }
+  settingsAnim={raf:requestAnimationFrame(frame)};
+}
+function activateSettingsDrag(dx){
+  if(!settingsDrag||settingsDrag.active)return;
+  settingsDrag.active=true;
+  if(settingsAnim){cancelAnimationFrame(settingsAnim.raf);settingsAnim=null;}
+  document.documentElement.classList.add("settings-drag");
+  settingsRevealUnderlying();
+  /* 活性化した最初のフレームから、判定までに指が進んだ分も含めた実位置へ直接置く */
+  setSettingsTx(dx);
+}
+function finishSettingsDrag(goBack){
+  var from=settingsDrag?settingsDrag.tx:0;
+  settingsDrag=null;
+  window.__ddEnd=Date.now(); /* ドラッグ直後のクリック（戻るボタン等）を誤作動させない。既存のクリック打ち消しが __ddEnd を見る */
+  animateSettingsTo(goBack,from);
+}
+function endSettingsDrag(cancelled){
+  if(!settingsDrag)return false;
+  if(!settingsDrag.active){settingsDrag=null;return false;}
+  var drag=settingsDrag, W=window.innerWidth||360;
+  var goBack;
+  if(cancelled)goBack=drag.tx>=W*0.5;
+  else if(drag.vx>0.28)goBack=true;
+  else if(drag.vx<-0.28)goBack=false;
+  else goBack=drag.tx>=Math.min(120,W*0.32);
+  finishSettingsDrag(goBack);
+  return true;
+}
 function activateDrawerDrag(dx){
   if(!drawerDrag||drawerDrag.active)return;
   drawerDrag.active=true;
@@ -685,11 +759,16 @@ function finishDrawerDrag(open){
 document.addEventListener("touchstart",function(e){
   if(e.touches.length!==1)return; var t=e.touches[0];
   tsX=t.clientX; tsY=t.clientY; tsT=Date.now(); tsOnMap=!!e.target.closest("#mapBox"); tsOnTab=!!e.target.closest("#tabbar");
-  drawerDrag=null;
+  drawerDrag=null; settingsDrag=null;
   if(anySheetOpen())return;
-  /* 設定ページ表示中はドロワー開閉の候補を一切作らない: 左端からの右ドラッグでも
-     サイドバーは出さず、touchend 側の設定ページを閉じる右スワイプ判定に渡す */
-  if(S.settingsPage)return;
+  /* 設定ページ表示中はドロワー開閉の候補を作らず、代わりに「指追従で戻る」候補を作る:
+     左端からでも画面のどこからでも、右向きの横ドラッグで設定ページが指に追従する。
+     ここでは候補を作るだけで何も横取りしないので、タップや縦スクロールは従来通り働く */
+  if(S.settingsPage){
+    if(e.target.closest("#dialogWrap,#confirmWrap"))return;
+    settingsDrag={startX:tsX,startY:tsY,tx:0,active:false,lastX:tsX,lastT:Date.now(),vx:0};
+    return;
+  }
   if(S.drawerOpen){
     /* 開いている間は開始位置を問わない: ドロワー内の入力欄・トグル・ボタンの上でも、タブバーの上でも、
        右にずれて見えているメイン画面（スクリム越しのカードやボタン）の上でも、メニューボタン上でも
@@ -700,6 +779,7 @@ document.addEventListener("touchstart",function(e){
     drawerDrag={mode:"close",startX:tsX,startY:tsY,baseTx:0,tx:0,active:false,lastX:tsX,lastT:Date.now(),vx:0};
   }else{
     if(e.target.closest("input,textarea,select"))return;
+    if(e.target.closest("#distChart"))return; /* グラフの横スクロールをドロワー開閉ドラッグに横取りさせない */
     if(e.target.closest("#dialogWrap,#confirmWrap"))return;
     /* メイン画面では開始位置を問わない: どこから始めても候補にする（タブバーの上だけはタブ操作専用）。
        実際に開くかどうかは touchmove 側で「横が縦を十分上回る」場合にだけ決める */
@@ -709,8 +789,29 @@ document.addEventListener("touchstart",function(e){
   if(drawerDrag)prepDrawerDrag();
 },{passive:true,capture:true});
 document.addEventListener("touchmove",function(e){
-  if(!drawerDrag||e.touches.length!==1)return;
+  if(e.touches.length!==1)return;
   var t=e.touches[0]; if(!t)return;
+  /* 設定ページ表示中はドロワーではなく設定ページ自体を指に追従させる:
+     右向きで横が縦を上回るドラッグでのみ活性化し、縦スクロールとは競合させない。
+     活性化後は判定までに進んだ分も含めた実位置へ直接置き、以降は毎フレーム指に追従する */
+  if(settingsDrag){
+    var sdx=t.clientX-settingsDrag.startX, sdy=t.clientY-settingsDrag.startY;
+    if(!settingsDrag.active){
+      var sadx=Math.abs(sdx), sady=Math.abs(sdy);
+      if(sadx<4&&sady<4)return;
+      if(sady>=10&&sady>sadx*0.9){settingsDrag=null;return;}
+      if(sdx<=0){if(sadx>=10)settingsDrag=null;return;}
+      if(sadx<14||sadx<sady*1.4)return;
+      activateSettingsDrag(sdx);
+    }
+    if(!settingsDrag||!settingsDrag.active)return;
+    e.preventDefault();
+    var snow=Date.now(), sdt=snow-settingsDrag.lastT;
+    if(sdt>=8){var sinst=(t.clientX-settingsDrag.lastX)/sdt; if(isFinite(sinst))settingsDrag.vx=settingsDrag.vx*0.55+sinst*0.45; settingsDrag.lastX=t.clientX; settingsDrag.lastT=snow;}
+    setSettingsTx(sdx);
+    return;
+  }
+  if(!drawerDrag)return;
   var dx=t.clientX-drawerDrag.startX, dy=t.clientY-drawerDrag.startY;
   if(!drawerDrag.active){
     var adx=Math.abs(dx), ady=Math.abs(dy);
@@ -748,13 +849,14 @@ function endDrawerDrag(cancelled){
   finishDrawerDrag(open);
   return true;
 }
-document.addEventListener("touchcancel",function(){endDrawerDrag(true);},{passive:true,capture:true});
+document.addEventListener("touchcancel",function(){if(endSettingsDrag(true))return; endDrawerDrag(true);},{passive:true,capture:true});
 /* ドラッグを離した直後に発生するクリック（ドロワー内のトグル・ボタン、スクリム、メニューボタン等）を
    誤作動させない: 追従ドラッグが有効だった指離しから450ms以内のクリックは丸ごと打ち消す */
 document.addEventListener("click",function(e){
   if(window.__ddEnd&&Date.now()-window.__ddEnd<450){e.preventDefault();e.stopPropagation();}
 },true);
 document.addEventListener("touchend",function(e){
+  if(endSettingsDrag(false))return;
   if(endDrawerDrag(false))return;
   var t=e.changedTouches[0]; if(!t)return;
   var dx=t.clientX-tsX, dy=t.clientY-tsY;
@@ -815,7 +917,7 @@ function renderHome(){
   }
   $("heroCarName").textContent=S.settings.carName||"";
   var qi=$("odoQuickInput");
-  if(qi)qi.placeholder=S.settings.odoSet?fmtInt(S.settings.odometer):"現在の走行距離を入力";
+  if(qi)qi.placeholder=S.settings.odoSet?fmtInt(S.settings.odometer):"走行距離を入力";
   var st=maintStatus();
   var grid=$("gaugeGrid"); grid.innerHTML="";
   st.forEach(function(it){
@@ -914,61 +1016,33 @@ function renderExchangeList(){
    残った走行も、保存済みの距離はその日の分として集計に入れる */
 function fmtKmVal(v){var r=Math.round(v*10)/10;return (r%1===0)?String(Math.round(r)):String(r);}
 function pad2(n){return (n<10?"0":"")+n;}
-function localDateStr(d){return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate());}
-function localMonthStr(d){return d.getFullYear()+"-"+pad2(d.getMonth()+1);}
-function parseAnchorDate(){
-  if(!S.distAnchorDate)return null;
-  var d=new Date(S.distAnchorDate+"T00:00:00");
-  return isNaN(d.getTime())?null:d;
-}
-function parseAnchorMonth(){
-  if(!S.distAnchorMonth)return null;
-  var m=/^(\d{4})-(\d{2})$/.exec(S.distAnchorMonth);
-  if(!m)return null;
-  return {y:parseInt(m[1],10),mo:parseInt(m[2],10)-1};
-}
-function buildDistMonthOptions(){
-  var sel=$("distMonthSelect"); if(!sel)return;
-  var now=new Date(), curTotal=now.getFullYear()*12+now.getMonth();
-  var earliestTotal=curTotal;
-  S.drives.forEach(function(d){var dt=new Date(d.startedAt); if(!isNaN(dt.getTime())){var t=dt.getFullYear()*12+dt.getMonth(); if(t<earliestTotal)earliestTotal=t;}});
-  var startTotal=Math.min(curTotal-35,earliestTotal);
-  var want=S.distAnchorMonth||localMonthStr(now);
-  sel.innerHTML="";
-  var found=false;
-  for(var t=curTotal;t>=startTotal;t--){
-    var y=Math.floor(t/12), mo=t%12, val=y+"-"+pad2(mo+1);
-    var o=document.createElement("option"); o.value=val; o.textContent=y+"年"+(mo+1)+"月";
-    if(val===want)found=true;
-    sel.appendChild(o);
-  }
-  if(!found){
-    var parts=want.split("-"), o2=document.createElement("option");
-    o2.value=want; o2.textContent=parts[0]+"年"+parseInt(parts[1],10)+"月";
-    sel.insertBefore(o2,sel.firstChild);
-  }
-  sel.value=want;
-}
 function distBuckets(period){
   var drives=S.drives.filter(function(d){return (d.distance||0)>0&&!(d.status==="recording"&&S.rec.active&&d.id===S.rec.id);});
   function sumRange(a,b){var s=0;drives.forEach(function(d){if(d.startedAt>=a&&d.startedAt<b)s+=(d.distance||0);});return s/1000;}
   var out=[],today=new Date(); today.setHours(0,0,0,0);
   var t0=today.getTime(), DAY=86400000, i, a;
+  /* 過去分は基準選択ではなく横スクロールで辿るため、表示本数は多めに用意する。
+     最も古い記録まで届くよう記録の範囲に合わせて伸ばし、上限で頭打ちにする */
+  var earliest=drives.length?Math.min.apply(null,drives.map(function(d){return d.startedAt;})):t0;
   if(period==="week"){
     var mon=t0-((today.getDay()+6)%7)*DAY; /* 週は月曜始まり */
-    for(i=7;i>=0;i--){a=mon-i*7*DAY;var dw=new Date(a);out.push({label:(dw.getMonth()+1)+"/"+dw.getDate(),km:sumRange(a,a+7*DAY),cur:i===0});}
+    var eMon=earliest-((new Date(earliest).getDay()+6)%7)*DAY;
+    var nW=Math.max(52,Math.min(156,Math.floor((mon-eMon)/(7*DAY))+1));
+    for(i=nW-1;i>=0;i--){a=mon-i*7*DAY;var dw=new Date(a);out.push({label:(dw.getMonth()+1)+"/"+dw.getDate(),km:sumRange(a,a+7*DAY),cur:i===0});}
   }else if(period==="month"){
-    /* 基準月（ドロップダウンで選択、未選択時は今月）を含む直近12か月 */
-    var am=parseAnchorMonth(), by=am?am.y:today.getFullYear(), bm=am?am.mo:today.getMonth();
-    for(i=11;i>=0;i--){var m0=new Date(by,bm-i,1),m1=new Date(by,bm-i+1,1);out.push({label:(m0.getMonth()+1)+"月",km:sumRange(m0.getTime(),m1.getTime()),cur:i===0});}
+    var eD=new Date(earliest);
+    var nM=Math.max(36,Math.min(72,(today.getFullYear()-eD.getFullYear())*12+(today.getMonth()-eD.getMonth())+1));
+    var by=today.getFullYear(), bm=today.getMonth();
+    for(i=nM-1;i>=0;i--){var m0=new Date(by,bm-i,1),m1=new Date(by,bm-i+1,1);out.push({label:(m0.getMonth()+1)+"月",km:sumRange(m0.getTime(),m1.getTime()),cur:i===0});}
   }else if(period==="year"){
-    var y0=today.getFullYear(), earliest=y0;
-    drives.forEach(function(d){var y=new Date(d.startedAt).getFullYear(); if(y<earliest)earliest=y;});
-    var from=Math.min(y0-4,earliest);
+    var y0=today.getFullYear(), earliestY=y0;
+    drives.forEach(function(d){var y=new Date(d.startedAt).getFullYear(); if(y<earliestY)earliestY=y;});
+    var from=Math.min(y0-4,earliestY);
     for(var y=from;y<=y0;y++){out.push({label:String(y),km:sumRange(new Date(y,0,1).getTime(),new Date(y+1,0,1).getTime()),cur:y===y0});}
-  }else{ /* day: 基準日（カレンダーで選択、未選択時は今日）を含む直近14日 */
-    var ad=parseAnchorDate(), base=ad?ad.getTime():t0;
-    for(i=13;i>=0;i--){a=base-i*DAY;var dd=new Date(a);out.push({label:String(dd.getDate()),km:sumRange(a,a+DAY),cur:i===0});}
+  }else{ /* day: 今日までの日別。月初だけ月/日で示し、スクロール中も月が分かるようにする */
+    var eDay=new Date(earliest); eDay.setHours(0,0,0,0);
+    var nD=Math.max(90,Math.min(730,Math.floor((t0-eDay.getTime())/DAY)+1));
+    for(i=nD-1;i>=0;i--){a=t0-i*DAY;var dd=new Date(a);out.push({label:dd.getDate()===1?(dd.getMonth()+1)+"/1":String(dd.getDate()),km:sumRange(a,a+DAY),cur:i===0});}
   }
   return out;
 }
@@ -976,27 +1050,15 @@ function renderDistChart(){
   var box=$("distChart"); if(!box)return;
   var seg=$("distSeg");
   if(seg){var bs=seg.querySelectorAll("button");for(var bi=0;bi<bs.length;bi++)bs[bi].classList.toggle("sel",bs[bi].getAttribute("data-p")===S.distPeriod);}
-  /* 基準選択UI: 日=カレンダー、月=ドロップダウン。週・年では出さない */
-  var pickRow=$("distPickRow"), dIn=$("distDateInput"), mSel=$("distMonthSelect"), pLab=$("distPickLabel"), rBtn=$("distResetBtn");
-  var isDay=S.distPeriod==="day", isMonth=S.distPeriod==="month";
-  if(pickRow)pickRow.style.display=(isDay||isMonth)?"flex":"none";
-  if(dIn)dIn.style.display=isDay?"":"none";
-  if(mSel)mSel.style.display=isMonth?"":"none";
-  if(pLab)pLab.textContent=isMonth?"基準月":"基準日";
-  var nowD=new Date();
-  if(isDay&&dIn){dIn.value=S.distAnchorDate||localDateStr(nowD); dIn.max=localDateStr(nowD);}
-  if(isMonth)buildDistMonthOptions();
-  if(rBtn){
-    var custom=false;
-    if(isDay)custom=!!S.distAnchorDate&&S.distAnchorDate!==localDateStr(nowD);
-    if(isMonth)custom=!!S.distAnchorMonth&&S.distAnchorMonth!==localMonthStr(nowD);
-    rBtn.style.display=custom?"":"none";
-  }
   var data=distBuckets(S.distPeriod);
   var max=0,total=0;
   data.forEach(function(d){if(d.km>max)max=d.km;total+=d.km;});
-  var W=320,H=148,padT=16,padB=18,ch=H-padT-padB,n=data.length,slot=W/n,bw=Math.max(6,Math.min(26,slot*0.56));
-  var svg='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="走行距離グラフ">';
+  /* 1本あたりの幅は種別ごとに固定し、全体の幅は本数ぶんだけ広げる（横スクロールで見る）。
+     高さは種別によらず 148 で固定するので、カードの大きさは切り替えても変わらない */
+  var H=148,padT=16,padB=18,ch=H-padT-padB,n=data.length;
+  var slot={day:36,week:44,month:44,year:56}[S.distPeriod]||40;
+  var W=Math.max(1,slot*n), bw=Math.max(10,Math.min(26,slot*0.56));
+  var svg='<svg viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" role="img" aria-label="走行距離グラフ">';
   data.forEach(function(d,i){
     var h=max>0?(d.km/max)*ch:0;
     if(d.km>0&&h<2)h=2;
@@ -1006,14 +1068,15 @@ function renderDistChart(){
     svg+='<text class="chLab" x="'+((i+0.5)*slot).toFixed(1)+'" y="'+(H-4)+'">'+esc(d.label)+"</text>";
   });
   svg+='<line class="chBase" x1="0" y1="'+(padT+ch)+'" x2="'+W+'" y2="'+(padT+ch)+'"/></svg>';
-  box.innerHTML=svg;
+  box.innerHTML='<div class="distScroll" aria-label="走行距離グラフ（横スクロールで過去を表示）">'+svg+"</div>";
+  /* 初期表示は最新の端（右端）に合わせる */
+  var sc=box.querySelector(".distScroll");
+  if(sc)sc.scrollLeft=sc.scrollWidth;
   var tot=$("distTotal");
   if(tot){
     if(total<=0)tot.textContent="この期間の走行記録はありません";
     else{
-      var per={day:"直近14日",week:"直近8週",month:"直近12か月",year:"表示期間"}[S.distPeriod]||"";
-      if(S.distPeriod==="day"&&S.distAnchorDate){var ad2=parseAnchorDate(); if(ad2)per=fmtDate(ad2.getTime())+"までの14日";}
-      if(S.distPeriod==="month"&&S.distAnchorMonth){var am2=parseAnchorMonth(); if(am2)per=am2.y+"年"+(am2.mo+1)+"月までの12か月";}
+      var per={day:"過去"+n+"日",week:"過去"+n+"週",month:"過去"+n+"か月",year:"表示期間"}[S.distPeriod]||"表示期間";
       tot.textContent=per+"の合計 "+fmtKmVal(total)+" km";
     }
   }
@@ -1128,7 +1191,7 @@ function openIndicatorSheet(it){
     if(it.has)html+=row("残り",it.daysLeft>=0?fmtInt(it.daysLeft)+" 日":fmtInt(-it.daysLeft)+" 日 超過");
     $("indShakenDate").value=S.settings.shakenDate||"";
   }else{
-    html=row("現在のオドメーター",S.settings.odoSet?fmtInt(S.settings.odometer)+" km":"未入力")
+    html=row("走行距離",S.settings.odoSet?fmtInt(S.settings.odometer)+" km":"未入力")
       +row("前回交換",it.has?fmtDate(it.lastDate)+" ・ "+fmtInt(it.lastOdo)+" km":"未登録")
       +row("交換間隔",fmtInt(it.interval)+" km");
     if(it.has)html+=row("前回から",fmtInt(it.elapsed)+" km");
@@ -1300,22 +1363,23 @@ function drawFallbackMap(){
   ctx.strokeStyle=dark?"rgba(255,255,255,.06)":"rgba(20,30,40,.06)"; ctx.lineWidth=1;
   for(var gx=0;gx<w;gx+=w/8){ctx.beginPath();ctx.moveTo(gx,0);ctx.lineTo(gx,h);ctx.stroke();}
   for(var gy=0;gy<h;gy+=h/8){ctx.beginPath();ctx.moveTo(0,gy);ctx.lineTo(w,gy);ctx.stroke();}
-  /* フォールバック地図は日本全国表示＝最も縮小した状態に相当するため、
-     縮小側の下限より太めに描く。芯線はテーマ連動（ダーク=白／ライト=黒系）で、
-     縁取りは逆色の細い下地に留めて目立たせすぎない。出発点・終端・曲がり角の
-     マークは付けず、線だけを描く */
+  /* フォールバック地図は日本全国表示＝最も縮小した状態に相当する。以前は
+     縮小側の下限より太めに描いていたが、縮小しすぎたときに太く見えすぎるため、
+     Leaflet 側の上限引き下げに合わせて芯線・縁取りとも少し細くした。芯線は
+     テーマ連動（ダーク=白／ライト=黒系）で、縁取りは逆色の細い下地に留めて
+     目立たせすぎない。出発点・終端・曲がり角のマークは付けず、線だけを描く */
   var dpr=window.devicePixelRatio||1;
   var coreCol=dark?"#ffffff":"#14151c";
   var casingCol=dark?"#000000":"#ffffff";
   ctx.lineJoin="round"; ctx.lineCap="round";
   var secsFb=allSections();
-  ctx.strokeStyle=casingCol; ctx.lineWidth=dpr*6.4; ctx.globalAlpha=.38;
+  ctx.strokeStyle=casingCol; ctx.lineWidth=dpr*5.7; ctx.globalAlpha=.38;
   secsFb.forEach(function(s){
     ctx.beginPath();
     s.forEach(function(p,i){var q=proj(p.lat,p.lng,w,h); if(i===0)ctx.moveTo(q.x,q.y); else ctx.lineTo(q.x,q.y);});
     ctx.stroke();
   });
-  ctx.strokeStyle=coreCol; ctx.lineWidth=dpr*5; ctx.globalAlpha=1;
+  ctx.strokeStyle=coreCol; ctx.lineWidth=dpr*4.3; ctx.globalAlpha=1;
   secsFb.forEach(function(s){
     ctx.beginPath();
     s.forEach(function(p,i){var q=proj(p.lat,p.lng,w,h); if(i===0)ctx.moveTo(q.x,q.y); else ctx.lineTo(q.x,q.y);});
@@ -1336,14 +1400,16 @@ function leafDark(){return S.settings.mapTheme==="dark";}
    固定ピクセル幅にはしない。拡大するほど画面上では細く、縮小するほど太くなるよう
    ズームから太さを決め、拡大時に線が街を埋めないようにする。
    ただし縮小側で細くなりすぎて消えないよう下限を、拡大側で太くなりすぎないよう
-   上限を設けてクランプする（例: 履歴 z5≒8.2px / z10≒6.4px / z15≒4.0px / z18≒3.2px）。
+   上限を設けてクランプする（例: 履歴 z5≒7.3px / z10≒6.4px / z15≒4.0px / z18≒3.2px）。
+   上限は以前より少し下げてある: 途中（z10前後）の太さはそのままで、日本全国まで
+   縮小したときにだけ効く上限が細くなり、縮小しすぎたときに線が太く見えすぎない。
    ライブ線は履歴より少しだけ太くする。芯線の色はテーマ連動（ダーク=白／
    ライト=黒系）。縁取りは芯線と同化しないよう逆色（ダーク=黒／ライト=白）の
    細い下地に留め、薄くして目立たせすぎない。出発点・終端・曲がり角のマークは
    付けず、線だけを描く */
 function trackCoreWeight(z,live){
   var w=11.2-0.48*z+(live?0.7:0);
-  var min=live?3.6:3.2, max=live?9.0:8.2;
+  var min=live?3.6:3.2, max=live?8.0:7.3;
   return Math.max(min,Math.min(max,w));
 }
 function trackCasingWeight(z,live){return trackCoreWeight(z,live)+1.4;}
@@ -1582,24 +1648,14 @@ function wire(){
   if(dseg)dseg.querySelectorAll("button").forEach(function(b){
     b.addEventListener("click",function(){S.distPeriod=b.getAttribute("data-p");renderDistChart();});
   });
-  var dDateIn=$("distDateInput");
-  if(dDateIn)dDateIn.addEventListener("change",function(){S.distAnchorDate=this.value||"";renderDistChart();});
-  var dMonthSel=$("distMonthSelect");
-  if(dMonthSel)dMonthSel.addEventListener("change",function(){S.distAnchorMonth=this.value||"";renderDistChart();});
-  var dReset=$("distResetBtn");
-  if(dReset)dReset.addEventListener("click",function(){
-    if(S.distPeriod==="day")S.distAnchorDate="";
-    if(S.distPeriod==="month")S.distAnchorMonth="";
-    renderDistChart();
-  });
   $("btnGaugeAdd").addEventListener("click",function(){openMaintSheet(null);});
   $("btnOdoSave").addEventListener("click",function(){
     var v=parseInt($("odoInput").value,10); if(isNaN(v)||v<0){toast("数値を入力してください");return;}
     S.settings.odometer=v; S.settings.odoSet=true; $("setOdo").value=v; saveSettings(); closeSheet(); renderHome(); toast("保存しました");
   });
   $("btnOdoQuick").addEventListener("click",function(){
-    var v=parseInt($("odoQuickInput").value,10); if(isNaN(v)||v<0){toast("オドメーターの数値を入力してください");return;}
-    S.settings.odometer=v; S.settings.odoSet=true; $("setOdo").value=v; $("odoQuickInput").value=""; saveSettings(); renderHome(); toast("オドメーターを更新しました");
+    var v=parseInt($("odoQuickInput").value,10); if(isNaN(v)||v<0){toast("走行距離を入力してください");return;}
+    S.settings.odometer=v; S.settings.odoSet=true; $("setOdo").value=v; $("odoQuickInput").value=""; saveSettings(); renderHome(); toast("走行距離を更新しました");
   });
   $("btnOdoFold").addEventListener("click",function(){
     var body=$("odoFoldBody"), open=body.classList.toggle("open");
@@ -1679,7 +1735,7 @@ function wire(){
     S.settings.odometer=Math.round(((S.settings.odometer||0)+v)*10)/10;
     S.settings.odoSet=true; saveSettings();
     $("setOdo").value=S.settings.odometer; $("setDebugKm").value="";
-    renderHome(); toast(v+" km をオドメーターに加算しました");
+    renderHome(); toast(v+" km を走行距離に加算しました");
   });
   $("btnBgUpload").addEventListener("click",function(){$("fileBg").click();});
   $("btnHeroUpload").addEventListener("click",function(){$("fileHero").click();});
